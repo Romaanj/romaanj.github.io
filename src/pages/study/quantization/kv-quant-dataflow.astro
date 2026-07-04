@@ -1,0 +1,1262 @@
+---
+import Base from '../../../layouts/Base.astro';
+
+// ------------------------------------------------------------------
+// Running example (all public/textbook arithmetic):
+// Llama-2-7B-shaped decoder — 32 layers, MHA, 32 KV heads x 128 dim, FP16.
+// Quantization: asymmetric INT4, group-wise (toy 8-value group for the
+// worked math; g = 128 for the storage arithmetic).
+// ------------------------------------------------------------------
+
+const heads = Array.from({ length: 32 }, (_, h) => h);
+
+// asymmetric INT4 over the toy group: min = -0.28, max = 0.87
+// s = 1.15 / 15 = 0.0766667, z = round(0.28 / s) = 4
+const s = 1.15 / 15;
+const z = 4;
+
+// x-position on the number line: domain [-0.36, 0.90] -> px [60, 900]
+const X = (v: number) => 60 + (v + 0.36) * (840 / 1.26);
+
+const levels = Array.from({ length: 16 }, (_, q) => ({ q, v: (q - z) * s }));
+
+const group = [
+  { c: 'c0', x: 0.42,  xd: '0.42',  scaled: '5.478',  rnd: '5',  q: 9,  bits: '1001', deq: '0.3833',  err: '−0.0367' },
+  { c: 'c1', x: -0.13, xd: '−0.13', scaled: '−1.696', rnd: '−2', q: 2,  bits: '0010', deq: '−0.1533', err: '−0.0233' },
+  { c: 'c2', x: 0.87,  xd: '0.87',  scaled: '11.348', rnd: '11', q: 15, bits: '1111', deq: '0.8433',  err: '−0.0267' },
+  { c: 'c3', x: 0.05,  xd: '0.05',  scaled: '0.652',  rnd: '1',  q: 5,  bits: '0101', deq: '0.0767',  err: '+0.0267' },
+  { c: 'c4', x: -0.28, xd: '−0.28', scaled: '−3.652', rnd: '−4', q: 0,  bits: '0000', deq: '−0.3067', err: '−0.0267' },
+  { c: 'c5', x: 0.61,  xd: '0.61',  scaled: '7.957',  rnd: '8',  q: 12, bits: '1100', deq: '0.6133',  err: '+0.0033' },
+  { c: 'c6', x: 0.17,  xd: '0.17',  scaled: '2.217',  rnd: '2',  q: 6,  bits: '0110', deq: '0.1533',  err: '−0.0167' },
+  { c: 'c7', x: -0.02, xd: '−0.02', scaled: '−0.261', rnd: '0',  q: 4,  bits: '0100', deq: '0.0000',  err: '+0.0200' },
+];
+
+const packedBytes = [
+  { hex: '0x29', bits: '0010 1001', hi: 'c1 · q=2',  lo: 'c0 · q=9'  },
+  { hex: '0x5F', bits: '0101 1111', hi: 'c3 · q=5',  lo: 'c2 · q=15' },
+  { hex: '0xC0', bits: '1100 0000', hi: 'c5 · q=12', lo: 'c4 · q=0'  },
+  { hex: '0x46', bits: '0100 0110', hi: 'c7 · q=4',  lo: 'c6 · q=6'  },
+];
+---
+
+<Base
+  title="KV-Cache Quantization, Byte by Byte — Junwon Lee"
+  description="An interactive tear-down of KV-cache quantization: real FP16 tensors, real INT4 scale/zero arithmetic, nibble packing, and the HBM read path that makes it fast."
+>
+  <!-- ============ hero ============ -->
+  <section class="section">
+    <div class="container">
+      <p class="eyebrow">Study · Quantization</p>
+      <h1>What actually happens when you quantize a KV cache</h1>
+      <p class="lede">
+        Not the cartoon version. A step-through of the real dataflow — actual tensor shapes,
+        actual scale/zero arithmetic on an 8-value group, actual bytes packed into HBM, and the
+        roofline arithmetic that explains why 4× fewer bytes is (almost) 4× faster decode
+        attention. Every number on this page can be recomputed by hand.
+      </p>
+      <div class="hero-tags">
+        <span class="tag accent">asymmetric INT4</span>
+        <span class="tag">group-wise</span>
+        <span class="tag">Llama-2-7B-shaped config</span>
+        <span class="tag">memory-bound decode</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ explorer ============ -->
+  <section class="section-tight">
+    <div class="container">
+      <div class="viz-frame kvq" id="kvq-explorer">
+
+        <!-- controls (shown only with JS) -->
+        <div class="kvq-controls">
+          <button class="btn ghost" id="kvq-prev" type="button" aria-label="Previous step">← Prev</button>
+          <div class="kvq-pips" role="tablist" aria-label="Steps">
+            <button class="kvq-pip" type="button" role="tab" data-step="0">1 · Arrive</button>
+            <button class="kvq-pip" type="button" role="tab" data-step="1">2 · Group</button>
+            <button class="kvq-pip" type="button" role="tab" data-step="2">3 · Scale</button>
+            <button class="kvq-pip" type="button" role="tab" data-step="3">4 · Snap</button>
+            <button class="kvq-pip" type="button" role="tab" data-step="4">5 · Pack</button>
+            <button class="kvq-pip" type="button" role="tab" data-step="5">6 · Read</button>
+            <button class="kvq-pip" type="button" role="tab" data-step="6">7 · Break</button>
+          </div>
+          <button class="btn" id="kvq-next" type="button" aria-label="Next step">Next →</button>
+          <button class="btn ghost" id="kvq-play" type="button">Play</button>
+        </div>
+
+        <!-- narration bar (shown only with JS) -->
+        <div class="kvq-caption" aria-live="polite">
+          <span class="kvq-step-num" id="kvq-step-num">Step 1 / 7</span>
+          <span id="kvq-caption-text"></span>
+        </div>
+
+        <div class="kvq-stage">
+
+          <!-- ======== PANEL 0 · arrival ======== -->
+          <section class="kvq-panel" data-panel="0">
+            <h3 class="kvq-panel-title"><span class="kvq-stepchip">1</span>One decode step, two tensors</h3>
+            <div class="kvq-cols">
+              <div class="kvq-scroll">
+                <svg class="kvq-svg" viewBox="0 0 960 332" style="min-width: 720px" role="img"
+                     aria-label="A decoded token producing K and V tensors of shape 32 heads by 128 dims per layer">
+                  <defs>
+                    <marker id="kvq-arr0" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+                      <path d="M0,0 L8,4 L0,8 z" fill="var(--text-tertiary)"></path>
+                    </marker>
+                  </defs>
+
+                  <!-- token chip -->
+                  <rect x="20" y="125" width="150" height="82" rx="10" fill="var(--surface-warm)" stroke="var(--line-strong)"></rect>
+                  <text x="95" y="152" text-anchor="middle" class="t-small t-tert">decoded token</text>
+                  <text x="95" y="176" text-anchor="middle" class="t-mono t-big">t = 4097</text>
+                  <text x="95" y="196" text-anchor="middle" class="t-small t-tert">one decode step</text>
+
+                  <line x1="172" y1="150" x2="238" y2="98"  stroke="var(--text-tertiary)" stroke-dasharray="4 4" marker-end="url(#kvq-arr0)"></line>
+                  <line x1="172" y1="182" x2="238" y2="238" stroke="var(--text-tertiary)" stroke-dasharray="4 4" marker-end="url(#kvq-arr0)"></line>
+
+                  <!-- K grid -->
+                  <g transform="translate(250, 26)">
+                    <text x="0" y="12" class="t-label">K · shape [32 heads × 128 dim] · FP16 · 8,192 B</text>
+                    {heads.map((h) => (
+                      <rect
+                        x={(h % 8) * 44}
+                        y={24 + Math.floor(h / 8) * 24}
+                        width="40" height="20" rx="3"
+                        fill={h === 3 ? 'var(--accent)' : 'var(--accent-soft)'}
+                        stroke="var(--line-strong)"
+                        class="kvq-headcell"
+                        data-tip={`K · head ${h} · [128] × FP16 (2 B) = 256 B`}
+                      ></rect>
+                    ))}
+                    <text x="356" y="76" class="t-small t-tert">32 KV heads</text>
+                  </g>
+
+                  <!-- V grid -->
+                  <g transform="translate(250, 200)">
+                    <text x="0" y="12" class="t-label">V · shape [32 heads × 128 dim] · FP16 · 8,192 B</text>
+                    {heads.map((h) => (
+                      <rect
+                        x={(h % 8) * 44}
+                        y={24 + Math.floor(h / 8) * 24}
+                        width="40" height="20" rx="3"
+                        fill="#e6e9df"
+                        stroke="var(--line-strong)"
+                        class="kvq-headcell"
+                        data-tip={`V · head ${h} · [128] × FP16 (2 B) = 256 B`}
+                      ></rect>
+                    ))}
+                    <text x="356" y="76" class="t-small t-tert">32 KV heads</text>
+                  </g>
+
+                  <!-- zoom callout on K head 3 -->
+                  <line x1="424" y1="52" x2="618" y2="56"  stroke="var(--accent)" stroke-dasharray="3 4"></line>
+                  <line x1="424" y1="72" x2="618" y2="116" stroke="var(--accent)" stroke-dasharray="3 4"></line>
+                  <rect x="620" y="48" width="316" height="72" rx="9" fill="var(--surface)" stroke="var(--accent)"></rect>
+                  <text x="778" y="72" text-anchor="middle" class="t-mono t-mid">K[3, :] — one head&apos;s key row</text>
+                  <text x="778" y="92" text-anchor="middle" class="t-small">128 dims × 2 B = 256 B</text>
+                  <text x="778" y="110" text-anchor="middle" class="t-small t-accent">next step zooms into channels 0–7</text>
+
+                  <text x="620" y="180" class="t-small t-tert">Every decode step appends one K row and one V row</text>
+                  <text x="620" y="198" class="t-small t-tert">per head, per layer — the cache only ever grows.</text>
+                </svg>
+              </div>
+
+              <aside class="kvq-aside">
+                <h4>The bill, per token</h4>
+                <ul class="kvq-ledger">
+                  <li><span>K, one layer</span><code>32 × 128 × 2 B = 8,192 B</code></li>
+                  <li><span>K + V, one layer</span><code>16,384 B = 16 KiB</code></li>
+                  <li><span>× 32 layers</span><code>512 KiB per token</code></li>
+                  <li><span>× 4,096 tokens</span><code>2.0 GiB per sequence</code></li>
+                  <li><span>× batch 8</span><code>16 GiB — before weights</code></li>
+                </ul>
+                <details class="kvq-more">
+                  <summary>Why a cache at all? And what about GQA?</summary>
+                  <p>
+                    Attention at step t needs K and V of every earlier token. Recomputing them
+                    would cost a full forward pass per step, so we cache — trading FLOPs for
+                    memory, which then becomes the thing to compress. Grouped-query models shrink
+                    the head count (Llama-3-8B keeps 8 KV heads, not 32), dividing every number in
+                    this ledger by 4 — but the pipeline on this page is identical.
+                  </p>
+                </details>
+              </aside>
+            </div>
+          </section>
+
+          <!-- ======== PANEL 1 · the group ======== -->
+          <section class="kvq-panel" data-panel="1">
+            <h3 class="kvq-panel-title"><span class="kvq-stepchip">2</span>Zoom in: one quantization group</h3>
+            <p class="kvq-note">
+              Quantizers never see the whole tensor — they work on small <strong>groups</strong> that share
+              one scale and one zero-point. Below: the first 8 channels of <code>K[3, :]</code>, real FP16
+              values. (8 is a toy size so the math fits on screen; production kernels use g = 32–128.
+              Step 5 does the storage arithmetic at g = 128.)
+            </p>
+            <div class="kvq-scroll">
+              <div class="kvq-vals">
+                {group.map((g) => (
+                  <div
+                    class:list={['kvq-val', { 'is-max': g.c === 'c2', 'is-min': g.c === 'c4' }]}
+                    data-tip={`${g.c} · FP16 · 2 bytes`}
+                  >
+                    <span class="idx">{g.c}</span>
+                    <span class="num">{g.xd}</span>
+                    <span class="b">2 B</span>
+                    {g.c === 'c2' && <span class="mm">max</span>}
+                    {g.c === 'c4' && <span class="mm">min</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <p class="kvq-note">
+              Group total in FP16: <code>8 × 2 B = 16 B</code>. The goal of the next three steps is to
+              rewrite these 16 bytes as <strong>4 bytes of codes</strong> plus a small shared header —
+              while keeping every value within half a grid step of where it started.
+            </p>
+          </section>
+
+          <!-- ======== PANEL 2 · scale & zero ======== -->
+          <section class="kvq-panel" data-panel="2">
+            <h3 class="kvq-panel-title"><span class="kvq-stepchip">3</span>Two numbers summarize the group</h3>
+            <div class="kvq-math-grid">
+              <div class="kvq-math">
+                <span class="k">1 · scan</span>
+                <code>min = −0.28 <em>(c4)</em></code>
+                <code>max = &nbsp;0.87 <em>(c2)</em></code>
+                <code>range = 1.15</code>
+                <p>One pass over the 8 values.</p>
+              </div>
+              <div class="kvq-math">
+                <span class="k">2 · scale</span>
+                <code>s = range / (2⁴ − 1)</code>
+                <code>&nbsp;&nbsp;= 1.15 / 15</code>
+                <code>&nbsp;&nbsp;= <strong>0.07667</strong></code>
+                <p>The width of one grid step: 16 codes ⇒ 15 steps between them.</p>
+              </div>
+              <div class="kvq-math">
+                <span class="k">3 · zero-point</span>
+                <code>z = round(−min / s)</code>
+                <code>&nbsp;&nbsp;= round(3.652)</code>
+                <code>&nbsp;&nbsp;= <strong>4</strong></code>
+                <p>The integer code that decodes to ≈ 0.0 — this is what makes it <em>asymmetric</em>.</p>
+              </div>
+            </div>
+            <div class="kvq-formula">
+              <span>quantize</span><code>q = clamp( round(x / s) + z, 0, 15 )</code>
+              <span>dequantize</span><code>x̂ = (q − z) × s</code>
+            </div>
+            <details class="kvq-more">
+              <summary>Why asymmetric? A concrete comparison</summary>
+              <p>
+                A symmetric INT4 quantizer centers its grid at zero and must cover
+                <code>max(|min|, |max|) = 0.87</code> on <em>both</em> sides:
+                <code>s = 0.87 / 7 = 0.124</code>. This group is skewed positive
+                (max = 0.87 vs |min| = 0.28), so the asymmetric grid&apos;s step of 0.0767 is
+                <strong>38% finer</strong> for the same 4 bits — the zero-point simply slides the grid
+                to hug [min, max]. KV activations are routinely skewed, which is why asymmetric is
+                the default for cache quantization.
+              </p>
+            </details>
+          </section>
+
+          <!-- ======== PANEL 3 · snap to grid ======== -->
+          <section class="kvq-panel" data-panel="3">
+            <h3 class="kvq-panel-title"><span class="kvq-stepchip">4</span>Snap every value to the 16-level grid</h3>
+            <div class="kvq-scroll">
+              <svg class="kvq-svg" viewBox="0 0 940 220" style="min-width: 720px" role="img"
+                   aria-label="Number line with 16 quantization levels; 8 FP16 values snap to their nearest level">
+                <defs>
+                  <marker id="kvq-arr3" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+                    <path d="M0,0 L7,3.5 L0,7 z" fill="var(--accent)"></path>
+                  </marker>
+                </defs>
+
+                <text x="60" y="24" class="t-small t-tert">FP16 values (hover for exact rounding error)</text>
+                <text x="900" y="24" text-anchor="end" class="t-small t-tert">grid: x̂(q) = (q − 4) × 0.07667</text>
+
+                <!-- original values + snap arrows -->
+                {group.map((g, i) => (
+                  <g class="kvq-dotg" style={`animation-delay:${i * 90}ms`}>
+                    <line
+                      x1={X(g.x).toFixed(1)} y1="98"
+                      x2={X((g.q - z) * s).toFixed(1)} y2="138"
+                      stroke="var(--accent)" stroke-dasharray="3 3" opacity="0.55"
+                      marker-end="url(#kvq-arr3)"
+                    ></line>
+                    <circle
+                      cx={X(g.x).toFixed(1)} cy="90" r="7"
+                      fill="var(--accent)" stroke="var(--surface)" stroke-width="1.5"
+                      data-tip={`${g.c}: ${g.xd} → q=${g.q} → ${g.deq}  (err ${g.err})`}
+                    ></circle>
+                    <text x={X(g.x).toFixed(1)} y="74" text-anchor="middle" class="t-small t-tert">{g.c}</text>
+                  </g>
+                ))}
+
+                <!-- baseline + 16 levels -->
+                <line x1="60" y1="150" x2="900" y2="150" stroke="var(--line-strong)" stroke-width="2"></line>
+                {levels.map((l) => (
+                  <g>
+                    <line
+                      x1={X(l.v).toFixed(1)} y1="142" x2={X(l.v).toFixed(1)} y2="158"
+                      stroke={l.q === 4 ? 'var(--swatch-sky)' : 'var(--line-strong)'}
+                      stroke-width={l.q === 4 ? 3 : 2}
+                    ></line>
+                    <text x={X(l.v).toFixed(1)} y="175" text-anchor="middle" class="t-tick">{l.q}</text>
+                  </g>
+                ))}
+                <text x={X(-0.3067).toFixed(1)} y="196" text-anchor="middle" class="t-small t-tert">−0.307</text>
+                <text x={X(0).toFixed(1)} y="196" text-anchor="middle" class="t-small" fill="var(--swatch-sky)">z = 4 → 0.0</text>
+                <text x={X(0.8433).toFixed(1)} y="196" text-anchor="middle" class="t-small t-tert">0.843</text>
+                <text x="900" y="215" text-anchor="end" class="t-small t-tert">codes q = 0 … 15</text>
+              </svg>
+            </div>
+
+            <div class="kvq-scroll">
+              <table class="kvq-table">
+                <thead>
+                  <tr>
+                    <th>ch</th><th>x (FP16)</th><th>x / s</th><th>round</th><th>+z → q</th>
+                    <th>bits</th><th>x̂ = (q−z)·s</th><th>error</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {group.map((g) => (
+                    <tr>
+                      <td>{g.c}</td><td>{g.xd}</td><td>{g.scaled}</td><td>{g.rnd}</td>
+                      <td class="q">{g.q}</td><td class="bits">{g.bits}</td><td>{g.deq}</td><td>{g.err}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div class="kvq-badges">
+              <span class="tag accent">max |error| = 0.0367 ≤ s/2 = 0.0383 ✓</span>
+              <span class="tag">mean |error| = 0.0225</span>
+              <span class="tag">round-to-nearest ⇒ error is bounded, not random</span>
+            </div>
+          </section>
+
+          <!-- ======== PANEL 4 · packing ======== -->
+          <section class="kvq-panel" data-panel="4">
+            <h3 class="kvq-panel-title"><span class="kvq-stepchip">5</span>Pack nibbles, pay the header, count the bytes</h3>
+
+            <p class="kvq-note">Two 4-bit codes share one byte — even channel in the low nibble, odd in the high nibble.</p>
+            <div class="kvq-scroll">
+              <div class="kvq-pack">
+                <div class="kvq-nibrow">
+                  {group.map((g, i) => (
+                    <span class:list={['kvq-nib', { hi: i % 2 === 1 }]} data-tip={`${g.c} → q=${g.q} → ${g.bits}`}>
+                      {g.bits}
+                    </span>
+                  ))}
+                </div>
+                <div class="kvq-bracerow" aria-hidden="true"><span>⌄</span><span>⌄</span><span>⌄</span><span>⌄</span></div>
+                <div class="kvq-byterow">
+                  {packedBytes.map((b) => (
+                    <span class="kvq-byte" data-tip={`hi: ${b.hi} · lo: ${b.lo}`}>
+                      <strong>{b.hex}</strong>
+                      <em>{b.bits}</em>
+                    </span>
+                  ))}
+                </div>
+                <p class="kvq-note center">8 values · 16 B of FP16 → <strong>4 B of codes</strong></p>
+              </div>
+            </div>
+
+            <p class="kvq-note">
+              On HBM, each group also stores its header. One 128-channel group (the production size
+              used below) as a logical record — widths not to scale; real kernels usually keep
+              scales/zeros in separate contiguous arrays for coalesced loads:
+            </p>
+            <div class="kvq-record" role="img" aria-label="Storage record: 64 bytes of packed codes, 2 bytes scale, 2 bytes zero-point">
+              <span class="rec-codes">packed INT4 codes · 128 × 0.5 B = 64 B</span>
+              <span class="rec-scale" data-tip="scale s, stored FP16">s · 2 B</span>
+              <span class="rec-zero" data-tip="zero-point z (many kernels pack this to 4 bits too)">z · 2 B</span>
+            </div>
+            <p class="kvq-note">68 B where FP16 needed 256 B → <strong>3.76×</strong>, i.e. <strong>4.25 effective bits</strong> per value.</p>
+
+            <div class="kvq-cols even">
+              <div class="kvq-scroll">
+                <table class="kvq-table">
+                  <thead><tr><th>per token (K+V, 32 layers)</th><th>FP16</th><th>INT4, g=128</th></tr></thead>
+                  <tbody>
+                    <tr><td>element data</td><td>524,288 B</td><td>131,072 B</td></tr>
+                    <tr><td>scales + zeros (2,048 groups × 4 B)</td><td>—</td><td>8,192 B</td></tr>
+                    <tr><td><strong>total per token</strong></td><td><strong>512 KiB</strong></td><td><strong>136 KiB</strong></td></tr>
+                    <tr><td>4,096-token sequence</td><td>2.0 GiB</td><td>544 MiB</td></tr>
+                    <tr><td>bits per value</td><td>16.0</td><td>4.25 → <strong>3.76×</strong></td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="kvq-scroll">
+                <table class="kvq-table">
+                  <thead><tr><th>group size g</th><th>header per value</th><th>effective bits</th><th>ratio</th></tr></thead>
+                  <tbody>
+                    <tr><td>32</td><td>1.00 bit</td><td>5.00</td><td>3.20×</td></tr>
+                    <tr><td>64</td><td>0.50 bit</td><td>4.50</td><td>3.56×</td></tr>
+                    <tr><td>128</td><td>0.25 bit</td><td>4.25</td><td>3.76×</td></tr>
+                    <tr><td>whole tensor</td><td>≈ 0</td><td>4.00</td><td>4.00× <em>(worst error)</em></td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <details class="kvq-more">
+              <summary>The group-size dial</summary>
+              <p>
+                Smaller groups hug their local min/max, so the step s shrinks and rounding error
+                falls — but every group pays the 4-byte header, so effective bits rise. g = 64–128
+                is the usual sweet spot for the KV cache: the header cost drops to 0.25–0.5 bits
+                per value while each group still spans only a narrow slice of the distribution.
+              </p>
+            </details>
+          </section>
+
+          <!-- ======== PANEL 5 · read path ======== -->
+          <section class="kvq-panel" data-panel="5">
+            <h3 class="kvq-panel-title"><span class="kvq-stepchip">6</span>Decode: the cache streams back, and bytes are the bill</h3>
+            <div class="kvq-scroll">
+              <svg class="kvq-svg" viewBox="0 0 960 384" style="min-width: 760px" role="img"
+                   aria-label="Animation of KV bytes streaming from HBM through L2 into an SM where dequantization and FP16 dot products happen">
+
+                <!-- HBM -->
+                <rect x="20" y="60" width="160" height="220" rx="12" fill="var(--surface-dark)"></rect>
+                <text x="100" y="100" text-anchor="middle" class="t-serif" fill="var(--text-on-dark)">HBM</text>
+                <text x="100" y="124" text-anchor="middle" class="t-small" fill="var(--text-on-dark-secondary)">DRAM · ~1.55 TB/s</text>
+                <text x="100" y="252" text-anchor="middle" class="t-small" fill="var(--text-on-dark-secondary)">whole KV cache</text>
+                <text x="100" y="268" text-anchor="middle" class="t-small" fill="var(--text-on-dark-secondary)">lives here</text>
+
+                <!-- L2 -->
+                <rect x="430" y="80" width="110" height="180" rx="10" fill="var(--surface-warm)" stroke="var(--line-strong)"></rect>
+                <text x="485" y="165" text-anchor="middle" class="t-mid">L2</text>
+                <text x="485" y="184" text-anchor="middle" class="t-small t-tert">40 MB</text>
+
+                <!-- SM -->
+                <rect x="650" y="50" width="270" height="240" rx="12" fill="var(--surface)" stroke="var(--line-strong)"></rect>
+                <text x="665" y="74" class="t-small t-tert">one SM (× 108)</text>
+                <rect x="665" y="84" width="240" height="40" rx="8" fill="var(--surface-warm)" stroke="var(--line)"></rect>
+                <text x="785" y="109" text-anchor="middle" class="t-small">registers / shared memory</text>
+                <rect x="665" y="134" width="240" height="46" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"
+                      data-tip="1 FMA per element ≈ 2.1 GFLOP per step ≈ 27 µs on CUDA cores — vs the ~1 ms of DRAM time it saves"></rect>
+                <text x="785" y="154" text-anchor="middle" class="t-small t-accent">dequant in-register</text>
+                <text x="785" y="171" text-anchor="middle" class="t-mono t-small">x̂ = (q − z) × s</text>
+                <rect x="665" y="190" width="240" height="46" rx="8" fill="var(--surface-warm)" stroke="var(--line)"></rect>
+                <text x="785" y="210" text-anchor="middle" class="t-small">FP16/BF16 dot products</text>
+                <text x="785" y="227" text-anchor="middle" class="t-mono t-small">softmax(q·Kᵀ)·V accumulates</text>
+
+                <!-- conveyors -->
+                <line x1="182" y1="120" x2="660" y2="120" stroke="var(--line)" stroke-dasharray="2 5"></line>
+                <line x1="182" y1="220" x2="660" y2="220" stroke="var(--line)" stroke-dasharray="2 5"></line>
+                <text x="195" y="100" class="t-small t-tert">FP16 cache · 512 KiB per token</text>
+                <text x="195" y="200" class="t-small t-accent">INT4 cache · 136 KiB per token (codes + scales)</text>
+
+                <!-- FP16 packets -->
+                <g>
+                  <rect class="kvq-pkt" x="188" y="111" width="40" height="18" rx="4" fill="#9b998f" style="animation-delay:0s"></rect>
+                  <rect class="kvq-pkt" x="188" y="111" width="40" height="18" rx="4" fill="#9b998f" style="animation-delay:-0.5s"></rect>
+                  <rect class="kvq-pkt" x="188" y="111" width="40" height="18" rx="4" fill="#9b998f" style="animation-delay:-1s"></rect>
+                  <rect class="kvq-pkt" x="188" y="111" width="40" height="18" rx="4" fill="#9b998f" style="animation-delay:-1.5s"></rect>
+                  <rect class="kvq-pkt" x="188" y="111" width="40" height="18" rx="4" fill="#9b998f" style="animation-delay:-2s"></rect>
+                  <rect class="kvq-pkt" x="188" y="111" width="40" height="18" rx="4" fill="#9b998f" style="animation-delay:-2.5s"></rect>
+                </g>
+                <!-- INT4 packets: codes + tiny scale/zero chip -->
+                <g>
+                  <rect class="kvq-pkt" x="188" y="211" width="40" height="18" rx="4" fill="var(--accent)" style="animation-delay:0s"></rect>
+                  <rect class="kvq-pkt" x="188" y="211" width="12" height="18" rx="3" fill="var(--swatch-olive)" style="animation-delay:-1.35s"
+                        data-tip="scale + zero-point headers — 6% of the traffic at g=128"></rect>
+                  <rect class="kvq-pkt" x="188" y="211" width="40" height="18" rx="4" fill="var(--accent)" style="animation-delay:-1.5s"></rect>
+                </g>
+
+                <!-- timing bars -->
+                <text x="188" y="316" class="t-small t-tert">time to stream the whole cache once (4,096 ctx · A100 @ 1.55 TB/s):</text>
+                <rect x="188" y="326" width="450" height="14" rx="4" fill="#9b998f"></rect>
+                <text x="646" y="338" class="t-small">FP16 · 2.0 GiB · <tspan class="t-mono">1.39 ms</tspan></text>
+                <rect x="188" y="348" width="120" height="14" rx="4" fill="var(--accent)"></rect>
+                <text x="316" y="360" class="t-small t-accent">INT4 · 544 MiB · <tspan class="t-mono">0.37 ms</tspan> → 3.8× less</text>
+              </svg>
+            </div>
+
+            <div class="kvq-cols">
+              <div class="kvq-aside wide">
+                <h4>The roofline receipt (per decode step, 4,096 ctx, batch 1)</h4>
+                <ul class="kvq-ledger">
+                  <li><span>bytes read, FP16</span><code>4,096 × 512 KiB = 2.0 GiB</code></li>
+                  <li><span>bytes read, INT4 + headers</span><code>4,096 × 136 KiB = 544 MiB</code></li>
+                  <li><span>stream time @ 1.55 TB/s</span><code>1.39 ms → 0.37 ms</code></li>
+                  <li><span>extra dequant work</span><code>1.07 G elems × 1 FMA ≈ 2.1 GFLOP</code></li>
+                  <li><span>…which costs</span><code>≈ 27 µs on CUDA cores (≈ 7 µs fused)</code></li>
+                  <li><span>arithmetic intensity</span><code>1 → ≈ 7.5 FLOP/B · ridge ≈ 200 FLOP/B</code></li>
+                </ul>
+              </div>
+              <aside class="kvq-aside">
+                <h4>Why this wins</h4>
+                <p class="kvq-note">
+                  Decode attention does ~2 FLOPs per cached element but reads 2 bytes for it —
+                  intensity ≈ 1 FLOP/B on a machine whose break-even is ≈ 200. The GPU idles on
+                  DRAM. Quantization attacks the only term that matters: <strong>bytes</strong>.
+                  Even after adding a dequant FMA per element we sit at ≈ 7.5 FLOP/B — still deep
+                  in memory-bound territory, so runtime ≈ bytes ÷ bandwidth, and 3.76× fewer bytes
+                  ≈ 3.8× faster cache reads. The dequant &ldquo;cost&rdquo; is ~30 µs hiding under a
+                  millisecond of saved DRAM time.
+                </p>
+              </aside>
+            </div>
+          </section>
+
+          <!-- ======== PANEL 6 · failure modes ======== -->
+          <section class="kvq-panel" data-panel="6">
+            <h3 class="kvq-panel-title"><span class="kvq-stepchip">7</span>Where the clean picture breaks</h3>
+            <div class="kvq-failgrid">
+
+              <details class="kvq-fail" open>
+                <summary><span class="tag accent">K outliers</span> A few key channels run ~10× hot</summary>
+                <div class="fail-body">
+                  <p>
+                    Keys have persistent outlier channels — a structure tied to rotary position
+                    embeddings and &ldquo;massive activation&rdquo; channels (documented in KVQuant and the
+                    massive-activations literature). One hot channel inside a group inflates the range,
+                    and the scale is range/15. Toy group with one outlier:
+                  </p>
+                  <p class="kvq-mono-block">
+                    [0.03, −0.05, 0.02, −0.01, 0.04, 0.01, −0.02, <strong>4.80</strong>]<br />
+                    s = 4.85 / 15 = 0.323 · z = 0<br />
+                    every normal value: round(x / 0.323) = 0 → decodes to exactly 0.0
+                  </p>
+                  <p>Seven of eight channels are erased. The outlier is fine; everything near it dies.</p>
+                  <svg class="kvq-svg mini" viewBox="0 0 280 120" role="img" aria-label="Heatmap of K with two hot channel columns">
+                    <rect x="20" y="10" width="240" height="84" rx="6" fill="var(--surface-warm)"></rect>
+                    <rect x="60" y="10" width="20" height="84" fill="var(--accent)"></rect>
+                    <rect x="180" y="10" width="20" height="84" fill="var(--accent-strong)"></rect>
+                    <text x="140" y="112" text-anchor="middle" class="t-small t-tert">channels → (hot columns persist across tokens ↓)</text>
+                  </svg>
+                </div>
+              </details>
+
+              <details class="kvq-fail">
+                <summary><span class="tag accent">axis choice</span> K per-channel, V per-token</summary>
+                <div class="fail-body">
+                  <p>
+                    Because K&apos;s outliers align along <em>channels</em>, group K per-channel: each group
+                    collects one channel across consecutive tokens, so a hot channel shares a scale only
+                    with itself. V shows no persistent channel structure, so per-token grouping (one
+                    group inside each token&apos;s 128-dim vector) works and keeps the append-only streaming
+                    layout trivial — this K/V asymmetry is the central observation of KIVI. The cost of
+                    per-channel K: you must buffer a few tokens before a channel-group fills, so
+                    systems keep a small FP16 residual window of the newest tokens anyway.
+                  </p>
+                </div>
+              </details>
+
+              <details class="kvq-fail">
+                <summary><span class="tag accent">2-bit cliff</span> 4 levels is where uniform grids die</summary>
+                <div class="fail-body">
+                  <p>
+                    At 2 bits a group has 4 codes → 3 steps; round-to-nearest noise per value is ~4×
+                    the INT4 case, and accuracy falls off a cliff rather than degrading gracefully —
+                    long-context retrieval and multi-step reasoning go first. Working 2-bit systems are
+                    never &ldquo;the same recipe, smaller grid&rdquo;: they add non-uniform (quantile/learned)
+                    levels, isolate outliers into a sparse FP16 side-band (KVQuant), tighten groups, and
+                    keep a recent-token FP16 window (KIVI). Textbook INT4 is nearly free; 2-bit is a
+                    research area.
+                  </p>
+                </div>
+              </details>
+
+              <details class="kvq-fail">
+                <summary><span class="tag accent">sinks</span> The first tokens are load-bearing</summary>
+                <div class="fail-body">
+                  <p>
+                    Softmax needs somewhere to park attention mass, and it picks the first few
+                    positions — the &ldquo;attention sink&rdquo; effect (StreamingLLM). Their K vectors are
+                    also outlier-heavy. Quantizing them aggressively damages every future step&apos;s
+                    attention distribution, so implementations routinely keep the first handful of
+                    tokens (and the newest 32–128) in FP16. The overhead is constant while the cache
+                    grows linearly — at 4,096 tokens, a 128-token FP16 window costs 3% of the cache
+                    for most of the accuracy back.
+                  </p>
+                </div>
+              </details>
+
+            </div>
+          </section>
+        </div>
+
+        <!-- shared tooltip -->
+        <div class="kvq-tip" id="kvq-tip" hidden></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ prose ============ -->
+  <section class="section-tight">
+    <div class="container">
+      <div class="prose">
+        <h2>Reading the diagram</h2>
+        <p>
+          The running configuration is a Llama-2-7B-shaped decoder: 32 layers, multi-head attention
+          with 32 KV heads of dimension 128, FP16 weights and activations. Every byte count above
+          follows from those four numbers. (Grouped-query models divide the cache by the head-count
+          ratio — 4× for Llama-3-8B — but change nothing structural.)
+        </p>
+
+        <h3>1 — Arrival</h3>
+        <p>
+          Each decode step emits one key row and one value row per head, per layer:
+          2 × 32 × 128 × 2 B = 16 KiB per layer, 512 KiB per token over 32 layers. The cache is
+          append-only and linear in context length: a single 4,096-token sequence holds 2 GiB, and a
+          batch of 8 holds 16 GiB — on a 40 GB A100 the cache, not the weights, is what caps batch
+          size. That is the entire motivation in one sentence.
+        </p>
+
+        <h3>2–4 — The quantization math</h3>
+        <p>
+          Group-wise asymmetric INT4 stores, per group, 4-bit codes plus one FP16 scale and one
+          zero-point. The scale is <code>s = (max − min) / 15</code> — the grid step; the zero-point
+          <code>z = round(−min / s)</code> is the code that decodes to zero. Encoding is
+          <code>q = clamp(round(x/s) + z, 0, 15)</code>, decoding is <code>x̂ = (q − z) · s</code>.
+          Two properties do all the work: round-to-nearest bounds every element&apos;s error by
+          <code>s/2</code> (0.038 in the worked group — check the table), and the asymmetric grid
+          hugs [min, max] so a skewed group wastes no codes. Nothing is learned; two reduction passes
+          and a rounding, cheap enough to run inline as tokens are generated.
+        </p>
+
+        <h3>5 — Packing</h3>
+        <p>
+          Two codes per byte (low nibble = even channel), so 128 values pack into 64 B; the header
+          adds 4 B. 68 B versus 256 B in FP16 is 3.76×, or 4.25 effective bits per value — the
+          honest number to quote, since the scale/zero overhead is real traffic and real capacity.
+          Group size is a dial: g = 32 costs a full extra bit per value but quantizes tighter
+          slices; g = 128 pays 0.25 bit. Per token, the model&apos;s cache line shrinks from
+          512 KiB to 136 KiB.
+        </p>
+
+        <h3>6 — Why it&apos;s fast, not just small</h3>
+        <p>
+          Decode attention must read the K and V of every cached token to produce one new token:
+          ~2 FLOPs per cached element against 2 bytes read. That is an arithmetic intensity of
+          ~1 FLOP/B on hardware that breaks even near 200 — the definition of memory-bound, so
+          runtime is bytes ÷ bandwidth and nothing else. Quantization cuts the bytes 3.76×; the
+          added dequant is one fused multiply-add per element (~2.1 GFLOP per step at 4K context,
+          ~30 µs) executed in registers while the next block streams in. You trade a millisecond of
+          DRAM stall for microseconds of arithmetic. The same logic explains why weight-only
+          quantization speeds up decode at batch 1: whenever the roofline says memory, compression
+          is a latency optimization wearing a capacity costume.
+        </p>
+
+        <h3>7 — The caveats that define the field</h3>
+        <p>
+          The textbook recipe survives contact with K&apos;s outlier channels only if the grouping
+          axis respects them (per-channel K, per-token V), survives long contexts only if sink and
+          recent tokens keep full precision, and does not survive 2 bits without non-uniform levels
+          or outlier side-bands. Those three caveats are, roughly, the table of contents of the
+          post-2023 KV-quantization literature (KIVI, KVQuant, and their descendants).
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ going deeper ============ -->
+  <section class="section-tight">
+    <div class="container">
+      <p class="eyebrow">Going deeper</p>
+      <h2>Primary sources</h2>
+      <div class="card-grid" style="margin-top: 1.4rem">
+        <a class="card" href="https://arxiv.org/abs/2402.02750" target="_blank" rel="noopener">
+          <span class="card-kicker">arXiv 2402.02750</span>
+          <h3>KIVI — Liu et al., 2024</h3>
+          <p>Tuning-free 2-bit KV quantization; source of the per-channel-K / per-token-V asymmetry and the FP16 residual window.</p>
+          <span class="card-meta">the axis-choice paper</span>
+        </a>
+        <a class="card" href="https://arxiv.org/abs/2401.18079" target="_blank" rel="noopener">
+          <span class="card-kicker">arXiv 2401.18079</span>
+          <h3>KVQuant — Hooper et al., 2024</h3>
+          <p>Non-uniform quantization levels plus sparse outlier isolation; what it takes to push below 3 bits at long context.</p>
+          <span class="card-meta">the sub-4-bit playbook</span>
+        </a>
+        <a class="card" href="https://arxiv.org/abs/2309.17453" target="_blank" rel="noopener">
+          <span class="card-kicker">arXiv 2309.17453</span>
+          <h3>StreamingLLM — Xiao et al., 2023</h3>
+          <p>Attention sinks: why the first tokens absorb attention mass and must be treated gently by any cache compression.</p>
+          <span class="card-meta">why sinks are load-bearing</span>
+        </a>
+        <a class="card" href="https://arxiv.org/abs/2211.05102" target="_blank" rel="noopener">
+          <span class="card-kicker">arXiv 2211.05102</span>
+          <h3>Pope et al., 2022</h3>
+          <p>Efficiently Scaling Transformer Inference — the memory-bound decode arithmetic this whole page rests on.</p>
+          <span class="card-meta">the roofline foundation</span>
+        </a>
+      </div>
+      <p style="margin-top: 2rem"><a class="arrow-link" href="/study/">Back to all study notes</a></p>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .hero-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 1.4rem;
+  }
+
+  /* ---------- explorer chrome ---------- */
+  .kvq { position: relative; }
+
+  .kvq-controls {
+    display: none;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 1rem;
+  }
+  .kvq.js .kvq-controls { display: flex; }
+  .kvq-controls .btn { font-size: 0.85rem; padding: 0.5em 1.1em; }
+
+  .kvq-pips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    flex: 1;
+    justify-content: center;
+    min-width: 200px;
+  }
+  .kvq-pip {
+    font-family: var(--font-sans);
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    padding: 0.3em 0.8em;
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s var(--ease-out);
+  }
+  .kvq-pip:hover { border-color: var(--accent); color: var(--accent-strong); }
+  .kvq-pip.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+
+  .kvq-caption {
+    display: none;
+    align-items: baseline;
+    gap: 0.9rem;
+    background: var(--surface-warm);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-m);
+    padding: 0.85rem 1.2rem;
+    margin-bottom: 1.4rem;
+    font-size: 0.95rem;
+    line-height: 1.55;
+    min-height: 4.6em;
+  }
+  .kvq.js .kvq-caption { display: flex; }
+  .kvq-step-num {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--accent-strong);
+    white-space: nowrap;
+    letter-spacing: 0.06em;
+  }
+
+  /* ---------- panels ---------- */
+  .kvq-panel { margin-bottom: 3rem; }
+  .kvq-panel:last-child { margin-bottom: 0; }
+  .kvq.js .kvq-panel { display: none; margin-bottom: 0; }
+  .kvq.js .kvq-panel.active { display: block; animation: kvqFade 0.35s var(--ease-out); }
+
+  @keyframes kvqFade {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  .kvq-panel-title {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    font-size: 1.25rem;
+    margin-bottom: 1.1rem;
+  }
+  .kvq.js .kvq-panel-title .kvq-stepchip { display: none; } /* redundant with pips when JS is on */
+  .kvq-stepchip {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    font-weight: 700;
+    width: 1.7em;
+    height: 1.7em;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    flex: none;
+  }
+
+  .kvq-cols {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 300px;
+    gap: 1.4rem;
+    align-items: start;
+  }
+  .kvq-cols.even { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  @media (max-width: 820px) {
+    .kvq-cols, .kvq-cols.even { grid-template-columns: 1fr; }
+  }
+
+  .kvq-scroll { overflow-x: auto; }
+
+  /* ---------- SVG text helpers ---------- */
+  .kvq-svg { width: 100%; height: auto; display: block; }
+  .kvq-svg.mini { max-width: 320px; margin-top: 0.8rem; }
+  .kvq-svg text { font-family: var(--font-sans); fill: var(--text); }
+  .kvq-svg .t-small { font-size: 12px; }
+  .kvq-svg .t-mid { font-size: 15px; font-weight: 600; }
+  .kvq-svg .t-big { font-size: 19px; font-weight: 600; }
+  .kvq-svg .t-label { font-size: 12.5px; font-weight: 600; letter-spacing: 0.02em; }
+  .kvq-svg .t-tert { fill: var(--text-tertiary); }
+  .kvq-svg .t-accent { fill: var(--accent-strong); }
+  .kvq-svg .t-mono, .kvq-svg .t-mono tspan { font-family: var(--font-mono); }
+  .kvq-svg .t-serif { font-family: var(--font-serif); font-size: 24px; }
+  .kvq-svg .t-tick { font-size: 10px; font-family: var(--font-mono); fill: var(--text-tertiary); }
+
+  .kvq-headcell { transition: fill 0.15s; cursor: help; }
+  .kvq-headcell:hover { fill: var(--accent-strong); }
+
+  /* snap-dot entrance */
+  .kvq.js .kvq-panel.active .kvq-dotg { animation: kvqDrop 0.5s var(--ease-out) both; }
+  @keyframes kvqDrop {
+    from { opacity: 0; transform: translateY(-14px); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  /* ---------- ledger aside ---------- */
+  .kvq-aside {
+    background: var(--surface-warm);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-m);
+    padding: 1.1rem 1.2rem;
+  }
+  .kvq-aside.wide { background: var(--surface); border-style: dashed; }
+  .kvq-aside h4 {
+    margin: 0 0 0.7rem;
+    font-family: var(--font-sans);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+  }
+  .kvq-ledger {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    font-size: 0.86rem;
+  }
+  .kvq-ledger li {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.42em 0;
+    border-bottom: 1px dashed var(--line);
+    align-items: baseline;
+  }
+  .kvq-ledger li:last-child { border-bottom: none; }
+  .kvq-ledger span { color: var(--text-secondary); }
+  .kvq-ledger code {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    white-space: nowrap;
+    color: var(--text);
+  }
+
+  /* ---------- notes / expandables ---------- */
+  .kvq-note {
+    font-size: 0.95rem;
+    color: var(--text-secondary);
+    max-width: 62em;
+    margin: 0.9rem 0;
+  }
+  .kvq-note.center { text-align: center; margin-top: 0.6rem; }
+  .kvq-note code {
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+    background: var(--surface-warm);
+    border-radius: 5px;
+    padding: 0.12em 0.35em;
+  }
+  .kvq-mono-block {
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    background: var(--surface-warm);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-s);
+    padding: 0.8rem 1rem;
+    line-height: 1.8;
+    overflow-x: auto;
+  }
+
+  .kvq-more {
+    margin-top: 1rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-m);
+    background: var(--surface);
+  }
+  .kvq-more summary {
+    cursor: pointer;
+    padding: 0.75rem 1.1rem;
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--accent-strong);
+    list-style: none;
+  }
+  .kvq-more summary::before { content: '+ '; font-family: var(--font-mono); }
+  .kvq-more[open] summary::before { content: '− '; }
+  .kvq-more summary::-webkit-details-marker { display: none; }
+  .kvq-more p { padding: 0 1.1rem 0.9rem; margin: 0; font-size: 0.92rem; color: var(--text-secondary); }
+
+  /* ---------- value cells (panel 2) ---------- */
+  .kvq-vals {
+    display: flex;
+    gap: 0.55rem;
+    padding: 0.3rem 0.15rem 1.4rem;
+    min-width: 620px;
+  }
+  .kvq-val {
+    position: relative;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.15rem;
+    background: var(--surface);
+    border: 1.5px solid var(--line-strong);
+    border-radius: var(--radius-s);
+    padding: 0.7rem 0.4rem 0.55rem;
+    cursor: help;
+    transition: transform 0.2s var(--ease-out), border-color 0.2s;
+  }
+  .kvq-val:hover { transform: translateY(-3px); border-color: var(--accent); }
+  .kvq-val .idx { font-family: var(--font-mono); font-size: 0.68rem; color: var(--text-tertiary); }
+  .kvq-val .num { font-family: var(--font-mono); font-size: 1.05rem; font-weight: 700; }
+  .kvq-val .b { font-size: 0.66rem; color: var(--text-tertiary); letter-spacing: 0.08em; }
+  .kvq-val.is-max { border-color: var(--accent-strong); background: var(--accent-soft); }
+  .kvq-val.is-min { border-color: var(--swatch-sky); background: #eaf1f8; }
+  .kvq-val .mm {
+    position: absolute;
+    bottom: -1.35em;
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+  .kvq-val.is-max .mm { color: var(--accent-strong); }
+  .kvq-val.is-min .mm { color: var(--swatch-sky); }
+
+  /* ---------- math cards (panel 3) ---------- */
+  .kvq-math-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1rem;
+  }
+  .kvq-math {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-m);
+    padding: 1rem 1.2rem;
+    box-shadow: var(--shadow-card);
+  }
+  .kvq-math .k {
+    display: block;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent-strong);
+    margin-bottom: 0.5rem;
+  }
+  .kvq-math code {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 0.88rem;
+    line-height: 1.75;
+  }
+  .kvq-math code em { color: var(--text-tertiary); font-style: normal; font-size: 0.8em; }
+  .kvq-math code strong { color: var(--accent-strong); }
+  .kvq-math p { margin: 0.55rem 0 0; font-size: 0.82rem; color: var(--text-secondary); }
+
+  .kvq-formula {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.6rem 1rem;
+    margin-top: 1.1rem;
+    background: var(--surface-dark);
+    color: var(--text-on-dark);
+    border-radius: var(--radius-m);
+    padding: 0.9rem 1.3rem;
+  }
+  .kvq-formula span {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-on-dark-secondary);
+  }
+  .kvq-formula code {
+    font-family: var(--font-mono);
+    font-size: 0.92rem;
+    color: #f5c8b4;
+  }
+
+  /* ---------- table ---------- */
+  .kvq-table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 560px;
+    font-size: 0.86rem;
+    margin: 0.8rem 0;
+  }
+  .kvq-table th, .kvq-table td {
+    border: 1px solid var(--line);
+    padding: 0.42em 0.75em;
+    text-align: left;
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    white-space: nowrap;
+  }
+  .kvq-table th {
+    background: var(--surface-warm);
+    font-family: var(--font-sans);
+    font-weight: 600;
+  }
+  .kvq-table td.q { color: var(--accent-strong); font-weight: 700; }
+  .kvq-table td.bits { letter-spacing: 0.15em; }
+  .kvq-table td em { color: var(--text-tertiary); font-style: normal; font-size: 0.85em; }
+
+  .kvq-badges { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.4rem; }
+
+  /* ---------- packing (panel 5) ---------- */
+  .kvq-pack { min-width: 640px; padding: 0.4rem 0; }
+  .kvq-nibrow, .kvq-byterow { display: flex; gap: 0.45rem; }
+  .kvq-nib {
+    flex: 1;
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: 0.9rem;
+    letter-spacing: 0.18em;
+    background: var(--accent-soft);
+    border: 1px solid var(--accent);
+    color: var(--accent-strong);
+    border-radius: 7px;
+    padding: 0.45em 0;
+    cursor: help;
+  }
+  .kvq-nib.hi { background: var(--surface-warm); border-color: var(--line-strong); color: var(--text); }
+  .kvq-bracerow {
+    display: flex;
+    margin: 0.1rem 0;
+    color: var(--text-tertiary);
+  }
+  .kvq-bracerow span { flex: 1; text-align: center; font-size: 1.1rem; line-height: 1; }
+  .kvq-byte {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.1rem;
+    background: var(--surface-dark);
+    color: var(--text-on-dark);
+    border-radius: 8px;
+    padding: 0.5em 0;
+    cursor: help;
+  }
+  .kvq-byte strong { font-family: var(--font-mono); font-size: 1rem; color: #f5c8b4; }
+  .kvq-byte em { font-family: var(--font-mono); font-style: normal; font-size: 0.72rem; color: var(--text-on-dark-secondary); letter-spacing: 0.14em; }
+
+  .kvq-record {
+    display: flex;
+    gap: 3px;
+    margin: 0.6rem 0 0.4rem;
+    border-radius: var(--radius-s);
+    overflow: hidden;
+    font-family: var(--font-mono);
+    font-size: 0.76rem;
+    text-align: center;
+    min-height: 2.6em;
+  }
+  .kvq-record span { display: flex; align-items: center; justify-content: center; padding: 0.5em 0.4em; }
+  .kvq-record .rec-codes { flex: 8; background: var(--accent-soft); color: var(--accent-strong); border: 1px solid var(--accent); border-radius: 7px 0 0 7px; }
+  .kvq-record .rec-scale { flex: 1.2; background: #e6e9df; border: 1px solid var(--swatch-olive); cursor: help; }
+  .kvq-record .rec-zero { flex: 1.2; background: #eaf1f8; border: 1px solid var(--swatch-sky); border-radius: 0 7px 7px 0; cursor: help; }
+
+  /* ---------- read-path animation (panel 6) ---------- */
+  .kvq-pkt { animation: kvqFlow 3s linear infinite; }
+  @keyframes kvqFlow {
+    0%   { transform: translateX(0); opacity: 1; }
+    88%  { opacity: 1; }
+    100% { transform: translateX(450px); opacity: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .kvq-pkt { animation: none; transform: translateX(180px); }
+    .kvq.js .kvq-panel.active, .kvq.js .kvq-panel.active .kvq-dotg { animation: none; }
+  }
+
+  /* ---------- failure cards (panel 7) ---------- */
+  .kvq-failgrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1rem;
+  }
+  .kvq-fail {
+    border: 1px solid var(--line);
+    border-radius: var(--radius-m);
+    background: var(--surface);
+    box-shadow: var(--shadow-card);
+    align-self: start;
+  }
+  .kvq-fail summary {
+    cursor: pointer;
+    padding: 0.9rem 1.1rem;
+    font-weight: 600;
+    font-size: 0.95rem;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    list-style: none;
+  }
+  .kvq-fail summary::-webkit-details-marker { display: none; }
+  .kvq-fail summary:hover { color: var(--accent-strong); }
+  .kvq-fail .fail-body { padding: 0 1.1rem 1rem; }
+  .kvq-fail .fail-body p { font-size: 0.9rem; color: var(--text-secondary); margin: 0 0 0.8em; }
+
+  /* ---------- tooltip ---------- */
+  .kvq-tip {
+    position: absolute;
+    z-index: 30;
+    max-width: 300px;
+    background: var(--surface-dark);
+    color: var(--text-on-dark);
+    font-family: var(--font-mono);
+    font-size: 0.74rem;
+    line-height: 1.5;
+    padding: 0.5em 0.8em;
+    border-radius: 8px;
+    pointer-events: none;
+    box-shadow: var(--shadow-card-hover);
+  }
+</style>
+
+<script>
+  const root = document.getElementById('kvq-explorer');
+
+  const captions = [
+    'A new token has just been decoded. Its key and value tensors — [32 heads × 128 dim] in FP16, per layer — are appended to the cache: 16 KiB per layer, 512 KiB per token across all 32 layers. Hover any head cell for its exact size.',
+    'Quantization never sees the whole tensor. It works group-by-group. Here are 8 real FP16 channel values from one key row — the group we are about to compress from 16 bytes to 4.',
+    'One pass finds min = −0.28 and max = 0.87. Two numbers fall out: the scale s = 0.07667 (width of one grid step) and the zero-point z = 4 (the integer code that decodes to 0.0).',
+    'Every value snaps to the nearest of 16 grid levels: q = round(x/s) + z. Hover the dots — each rounding error is bounded by half a step, s/2 = 0.0383. The table shows the full arithmetic per element.',
+    'Two 4-bit codes share each byte, low nibble first. 16 bytes of FP16 became 4 bytes of codes plus a shared scale and zero-point — 3.76× smaller at group size 128, i.e. 4.25 effective bits per value.',
+    'Decode-time attention must re-read every cached token. Packed codes and scales stream HBM → L2 → SM; dequant is one FMA per element in registers; dot products stay FP16. Attention is memory-bound, so 3.76× fewer bytes ≈ 3.8× faster cache reads.',
+    'Where the clean picture breaks: outlier channels in K wreck shared scales, the grouping axis must differ for K and V, the first tokens are load-bearing, and uniform grids fall off a cliff at 2 bits. Click each card.',
+  ];
+
+  if (root) {
+    root.classList.add('js');
+
+    const panels = Array.from(root.querySelectorAll('.kvq-panel'));
+    const pips = Array.from(root.querySelectorAll('.kvq-pip'));
+    const prevBtn = document.getElementById('kvq-prev');
+    const nextBtn = document.getElementById('kvq-next');
+    const playBtn = document.getElementById('kvq-play');
+    const capText = document.getElementById('kvq-caption-text');
+    const stepNum = document.getElementById('kvq-step-num');
+
+    let current = 0;
+    let timer = null;
+
+    function show(n) {
+      current = ((n % panels.length) + panels.length) % panels.length;
+      panels.forEach((p, i) => p.classList.toggle('active', i === current));
+      pips.forEach((p, i) => {
+        p.classList.toggle('active', i === current);
+        p.setAttribute('aria-selected', i === current ? 'true' : 'false');
+      });
+      if (capText) capText.textContent = captions[current] || '';
+      if (stepNum) stepNum.textContent = 'Step ' + (current + 1) + ' / ' + panels.length;
+    }
+
+    function stopPlay() {
+      if (timer !== null) {
+        clearInterval(timer);
+        timer = null;
+        if (playBtn) playBtn.textContent = 'Play';
+      }
+    }
+
+    if (prevBtn) prevBtn.addEventListener('click', () => { stopPlay(); show(current - 1); });
+    if (nextBtn) nextBtn.addEventListener('click', () => { stopPlay(); show(current + 1); });
+    pips.forEach((p) =>
+      p.addEventListener('click', () => {
+        stopPlay();
+        show(parseInt(p.getAttribute('data-step') || '0', 10));
+      })
+    );
+
+    if (playBtn)
+      playBtn.addEventListener('click', () => {
+        if (timer !== null) {
+          stopPlay();
+        } else {
+          playBtn.textContent = 'Pause';
+          show(current + 1 === panels.length ? 0 : current); // restart from 0 if at end
+          timer = setInterval(() => {
+            if (current === panels.length - 1) stopPlay();
+            else show(current + 1);
+          }, 7000);
+        }
+      });
+
+    document.addEventListener('keydown', (e) => {
+      const t = e.target;
+      const tag = t && t.tagName ? t.tagName.toLowerCase() : '';
+      if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+      const r = root.getBoundingClientRect();
+      const visible = r.top < window.innerHeight && r.bottom > 0;
+      if (!visible) return;
+      if (e.key === 'ArrowRight') { stopPlay(); show(current + 1); }
+      if (e.key === 'ArrowLeft') { stopPlay(); show(current - 1); }
+    });
+
+    // ---------- shared tooltip ----------
+    const tip = document.getElementById('kvq-tip');
+    if (tip) {
+      const place = (e) => {
+        const r = root.getBoundingClientRect();
+        let x = e.clientX - r.left + 14;
+        let y = e.clientY - r.top + 16;
+        const maxX = r.width - tip.offsetWidth - 10;
+        if (x > maxX) x = Math.max(6, maxX);
+        tip.style.left = x + 'px';
+        tip.style.top = y + 'px';
+      };
+      root.querySelectorAll('[data-tip]').forEach((el) => {
+        el.addEventListener('mouseenter', (e) => {
+          tip.textContent = el.getAttribute('data-tip') || '';
+          tip.hidden = false;
+          place(e);
+        });
+        el.addEventListener('mousemove', place);
+        el.addEventListener('mouseleave', () => { tip.hidden = true; });
+      });
+    }
+
+    show(0);
+  }
+</script>

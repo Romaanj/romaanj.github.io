@@ -1,0 +1,946 @@
+---
+import Base from '../../../layouts/Base.astro';
+
+// Block-causal mask matrix: 12 positions = 3 blocks of 4.
+// Cell (q, k) is visible when block(k) <= block(q); within-block is bidirectional.
+const N = 12;
+const BLK = 4;
+const maskRows = Array.from({ length: N }, (_, q) => ({
+  q,
+  cells: Array.from({ length: N }, (_, k) => {
+    const bq = Math.floor(q / BLK);
+    const bk = Math.floor(k / BLK);
+    return { k, cls: bk < bq ? 'm-past' : bk === bq ? 'm-intra' : 'm-off' };
+  }),
+}));
+---
+
+<Base
+  title="SDAR block-diffusion anatomy — Junwon Lee"
+  description="Interactive anatomy of an SDAR-style block-diffusion language model: the transformer stack, block-causal attention, and confidence-based parallel decoding with an exact, append-only KV cache."
+>
+  <div class="sdar-page">
+    <section class="section">
+      <div class="container">
+        <p class="eyebrow">Study · Model anatomy</p>
+        <h1>Inside SDAR: a block-diffusion LM, tensor by tensor</h1>
+        <p class="lede">
+          SDAR-style models keep the ordinary decoder transformer — same weights, same shapes —
+          and change only how it reads and writes text: autoregressive <em>across</em> blocks,
+          parallel diffusion-denoising <em>inside</em> each block (블록 단위로). Walk the stack,
+          open a layer, then step through decoding and watch the KV cache grow.
+        </p>
+
+        <div class="jump-row">
+          <a class="tag" href="#stack-view">1 · Model stack</a>
+          <a class="tag" href="#layer-view">2 · Layer internals</a>
+          <a class="tag" href="#decode-view">3 · Decoding timeline</a>
+        </div>
+
+        <div class="config-note">
+          <span class="config-lead">Config assumed on this page — the public SDAR-1.7B setup
+          (a Qwen3-1.7B backbone adapted to block diffusion):</span>
+          <span class="tag accent">d_model 2,048</span>
+          <span class="tag">28 layers</span>
+          <span class="tag">16 Q heads / 8 KV heads (GQA)</span>
+          <span class="tag">head_dim 128</span>
+          <span class="tag">FFN 6,144 (SwiGLU)</span>
+          <span class="tag">vocab 151,936</span>
+          <span class="tag accent">block length 4</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 1 · MODEL STACK ============ -->
+    <section class="section-tight" id="stack-view">
+      <div class="container">
+        <h2 class="viz-h">1 · The model stack</h2>
+        <p class="viz-sub">Hover any box for exact parameter counts and bytes. Click a
+          transformer block to open its internals.</p>
+
+        <div class="viz-frame">
+          <div class="sdar-scroll">
+          <svg viewBox="0 0 740 640" role="img" aria-label="SDAR model stack: tokens, embedding, 28 transformer blocks, LM head, block-diffusion decoding loop" style="width:100%; height:auto; min-width:720px;">
+            <defs>
+              <marker id="arrS" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0,0 L10,5 L0,10 z" fill="#87857c"></path>
+              </marker>
+              <marker id="arrSa" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0,0 L10,5 L0,10 z" fill="#c15f3c"></path>
+              </marker>
+            </defs>
+
+            <!-- input tokens -->
+            <g data-tip="At decode time the sequence is: committed tokens (clean) + the active block's [MASK] placeholders. Length L integers, one id per position.">
+              <rect class="sbox" x="120" y="14" width="320" height="48" rx="10"></rect>
+              <text class="stitle" x="280" y="34" text-anchor="middle">input token ids — [L]</text>
+              <text class="ssub" x="280" y="52" text-anchor="middle">“The capital of France is” + 4 × [MASK]</text>
+            </g>
+            <line class="flowline" x1="280" y1="62" x2="280" y2="76" marker-end="url(#arrS)"></line>
+
+            <!-- embedding -->
+            <g data-tip="Lookup: each id selects a 2,048-dim row. 151,936 × 2,048 = 311,164,928 params ≈ 622 MB in BF16. Tied: the same matrix is reused (transposed) as the LM head.">
+              <rect class="sbox" x="120" y="78" width="320" height="56" rx="10"></rect>
+              <text class="stitle" x="280" y="100" text-anchor="middle">token embedding E</text>
+              <text class="smono" x="280" y="122" text-anchor="middle">[151,936 × 2,048] · 311.2 M params · tied with LM head</text>
+            </g>
+            <line class="flowline" x1="280" y1="134" x2="280" y2="148" marker-end="url(#arrS)"></line>
+
+            <!-- transformer blocks -->
+            <a href="#layer-view" class="blk-link" aria-label="Open transformer block internals">
+              <g class="clickable" data-tip="Per layer: Q 4.19 M + K 2.10 M + V 2.10 M + O 4.19 M + SwiGLU MLP 37.75 M + norms ≈ 50.33 M params ≈ 100.7 MB BF16. Click to open.">
+                <rect class="sbox sbox-blk" x="120" y="150" width="320" height="56" rx="10"></rect>
+                <text class="stitle" x="280" y="172" text-anchor="middle">transformer block 1</text>
+                <text class="ssub" x="280" y="192" text-anchor="middle">attn 12.58 M · MLP 37.75 M · click to open ↓</text>
+              </g>
+            </a>
+            <line class="flowline-thin" x1="280" y1="206" x2="280" y2="216"></line>
+            <a href="#layer-view" class="blk-link" aria-label="Open transformer block internals">
+              <g class="clickable" data-tip="Identical shape every layer. Only the weights differ.">
+                <rect class="sbox sbox-blk" x="120" y="216" width="320" height="56" rx="10"></rect>
+                <text class="stitle" x="280" y="238" text-anchor="middle">transformer block 2</text>
+                <text class="ssub" x="280" y="258" text-anchor="middle">attn 12.58 M · MLP 37.75 M</text>
+              </g>
+            </a>
+            <line class="flowline-dash" x1="280" y1="272" x2="280" y2="316"></line>
+            <rect x="164" y="284" width="232" height="20" fill="#ffffff"></rect>
+            <text class="ssub" x="280" y="298" text-anchor="middle">⋯ blocks 3 – 27 (24 more, identical) ⋯</text>
+            <a href="#layer-view" class="blk-link" aria-label="Open transformer block internals">
+              <g class="clickable" data-tip="28 layers total: 28 × 50.33 M = 1,409 M backbone params ≈ 2.82 GB BF16.">
+                <rect class="sbox sbox-blk" x="120" y="316" width="320" height="56" rx="10"></rect>
+                <text class="stitle" x="280" y="338" text-anchor="middle">transformer block 28</text>
+                <text class="ssub" x="280" y="358" text-anchor="middle">attn 12.58 M · MLP 37.75 M</text>
+              </g>
+            </a>
+            <line class="flowline" x1="280" y1="372" x2="280" y2="388" marker-end="url(#arrS)"></line>
+
+            <!-- final norm -->
+            <g data-tip="Final RMSNorm before the output projection: 2,048 params.">
+              <rect class="sbox sbox-warm" x="120" y="390" width="320" height="36" rx="9"></rect>
+              <text class="stitle" x="280" y="413" text-anchor="middle">final RMSNorm — 2,048 params</text>
+            </g>
+            <line class="flowline" x1="280" y1="426" x2="280" y2="440" marker-end="url(#arrS)"></line>
+
+            <!-- LM head -->
+            <g data-tip="Weight tying: the head is Eᵀ, so it adds zero new parameters. Output: one 151,936-way distribution per position — including every masked position at once.">
+              <rect class="sbox" x="120" y="442" width="320" height="56" rx="10"></rect>
+              <text class="stitle" x="280" y="464" text-anchor="middle">LM head — Eᵀ [2,048 × 151,936] (tied)</text>
+              <text class="smono" x="280" y="486" text-anchor="middle">logits [L × 151,936]</text>
+            </g>
+            <line class="flowline" x1="280" y1="498" x2="280" y2="512" marker-end="url(#arrS)"></line>
+
+            <!-- sampler -->
+            <g data-tip="Not a weight — a loop. Each denoising pass commits the masked positions whose confidence clears a threshold; when the block is complete, its K/V are appended to the cache and the next block of masks opens.">
+              <rect class="sbox sbox-accent" x="120" y="514" width="320" height="72" rx="12"></rect>
+              <text class="stitle taccent" x="280" y="537" text-anchor="middle">block-diffusion decoding loop</text>
+              <text class="ssub" x="280" y="556" text-anchor="middle">confidence-based unmasking inside the active block</text>
+              <text class="ssub" x="280" y="573" text-anchor="middle">finalized block → K/V appended to cache</text>
+            </g>
+
+            <!-- feedback loop, left side -->
+            <path class="loopline" d="M120,550 H52 Q40,550 40,538 V52 Q40,40 52,40 H110" marker-end="url(#arrSa)"></path>
+            <text class="ssub taccent" x="28" y="300" transform="rotate(-90 28 300)" text-anchor="middle">committed tokens re-enter as context</text>
+
+            <!-- right annotation -->
+            <path d="M496,150 H488 V372 H496" fill="none" stroke="#d1cfc5" stroke-width="1.5"></path>
+            <text class="anno" x="506" y="196">
+              <tspan x="506" dy="0">Backbone = a standard dense</tspan>
+              <tspan x="506" dy="17">decoder transformer — the same</tspan>
+              <tspan x="506" dy="17">shape of weights an AR LM uses.</tspan>
+              <tspan x="506" dy="17">SDAR initializes from Qwen3 and</tspan>
+              <tspan x="506" dy="17">continues training with a block-</tspan>
+              <tspan x="506" dy="17">diffusion objective; only the mask</tspan>
+              <tspan x="506" dy="17">and the decoding loop change.</tspan>
+            </text>
+
+            <text class="smono" x="280" y="622" text-anchor="middle">28 layers × 50.33 M + 311.2 M embedding ≈ 1.72 B params ≈ 3.4 GB BF16</text>
+          </svg>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 2 · LAYER INTERNALS ============ -->
+    <section class="section-tight" id="layer-view">
+      <div class="container">
+        <h2 class="viz-h">2 · Inside one transformer block</h2>
+        <p class="viz-sub">Left: the dataflow with every weight matrix and its shape. Right: the
+          block-causal attention mask — hover a row to see exactly which K/V positions that query
+          may read.</p>
+
+        <div class="viz-frame">
+          <div class="layer-grid">
+            <!-- dataflow -->
+            <div class="flow-col">
+              <div class="sdar-scroll">
+              <svg viewBox="0 0 460 960" role="img" aria-label="Transformer layer dataflow: RMSNorm, QKV projections with GQA, block-causal attention, output projection, SwiGLU MLP" style="width:100%; height:auto; min-width:460px;">
+                <defs>
+                  <marker id="arrF" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+                    <path d="M0,0 L10,5 L0,10 z" fill="#87857c"></path>
+                  </marker>
+                </defs>
+
+                <!-- input -->
+                <g data-tip="Hidden states entering the layer. At decode time L = cached context is NOT re-run; only the active block's positions flow through as queries.">
+                  <rect class="sbox" x="110" y="20" width="240" height="44" rx="9"></rect>
+                  <text class="stitle" x="230" y="38" text-anchor="middle">X — hidden states</text>
+                  <text class="smono" x="230" y="56" text-anchor="middle">[L × 2,048] BF16</text>
+                </g>
+                <line class="flowline" x1="230" y1="64" x2="230" y2="86" marker-end="url(#arrF)"></line>
+
+                <!-- norm 1 -->
+                <g data-tip="Pre-norm RMSNorm: 2,048 scale params. x / rms(x) · g">
+                  <rect class="sbox sbox-warm" x="110" y="88" width="240" height="36" rx="9"></rect>
+                  <text class="stitle" x="230" y="111" text-anchor="middle">RMSNorm (2,048 params)</text>
+                </g>
+
+                <!-- branch to QKV -->
+                <path class="flowline-thin" d="M230,124 V140 H76 V166" fill="none"></path>
+                <line class="flowline-thin" x1="230" y1="140" x2="230" y2="166"></line>
+                <path class="flowline-thin" d="M230,140 H384 V166" fill="none"></path>
+
+                <g data-tip="W_Q: 2,048 × 2,048 = 4,194,304 params ≈ 8.4 MB BF16. Reshaped to 16 heads × 128 dims.">
+                  <rect class="sbox" x="10" y="168" width="132" height="64" rx="9"></rect>
+                  <text class="stitle sm" x="76" y="188" text-anchor="middle">W_Q · 2048→2048</text>
+                  <text class="smono" x="76" y="206" text-anchor="middle">16 heads × 128</text>
+                  <text class="smono" x="76" y="222" text-anchor="middle">4.19 M</text>
+                </g>
+                <g data-tip="W_K: 2,048 × 1,024 = 2,097,152 params ≈ 4.2 MB BF16. GQA: only 8 KV heads.">
+                  <rect class="sbox" x="164" y="168" width="132" height="64" rx="9"></rect>
+                  <text class="stitle sm" x="230" y="188" text-anchor="middle">W_K · 2048→1024</text>
+                  <text class="smono" x="230" y="206" text-anchor="middle">8 KV heads × 128</text>
+                  <text class="smono" x="230" y="222" text-anchor="middle">2.10 M</text>
+                </g>
+                <g data-tip="W_V: 2,048 × 1,024 = 2,097,152 params ≈ 4.2 MB BF16. K and V are what the cache stores.">
+                  <rect class="sbox" x="318" y="168" width="132" height="64" rx="9"></rect>
+                  <text class="stitle sm" x="384" y="188" text-anchor="middle">W_V · 2048→1024</text>
+                  <text class="smono" x="384" y="206" text-anchor="middle">8 KV heads × 128</text>
+                  <text class="smono" x="384" y="222" text-anchor="middle">2.10 M</text>
+                </g>
+
+                <line class="flowline-thin" x1="76" y1="232" x2="76" y2="256"></line>
+                <line class="flowline-thin" x1="230" y1="232" x2="230" y2="256"></line>
+
+                <!-- qk norm + rope -->
+                <g data-tip="Qwen3-style QK-norm: a per-head RMSNorm (128 params each for Q and K) before rotary position embedding.">
+                  <rect class="sbox sbox-warm" x="10" y="258" width="286" height="30" rx="8"></rect>
+                  <text class="ssub" x="153" y="278" text-anchor="middle">per-head RMSNorm on Q, K (dim 128) + RoPE</text>
+                </g>
+
+                <line class="flowline" x1="153" y1="288" x2="153" y2="314" marker-end="url(#arrF)"></line>
+                <line class="flowline" x1="384" y1="232" x2="384" y2="314" marker-end="url(#arrF)"></line>
+
+                <!-- attention -->
+                <g data-tip="Scores are [16 heads × L_q × L_k] with mask M added before softmax. KV-cache cost: 2 (K,V) × 8 heads × 128 × 2 B = 4 KB per token per layer → 112 KB/token across 28 layers.">
+                  <rect class="sbox sbox-accent" x="40" y="316" width="380" height="78" rx="11"></rect>
+                  <text class="stitle taccent" x="230" y="339" text-anchor="middle">block-causal attention</text>
+                  <text class="smono" x="230" y="359" text-anchor="middle">softmax(Q Kᵀ / √128 + M) V → [L × 16 × 128]</text>
+                  <text class="ssub" x="230" y="378" text-anchor="middle">GQA: each K/V head serves 2 query heads · mask M → panel beside</text>
+                </g>
+                <line class="flowline" x1="230" y1="394" x2="230" y2="426" marker-end="url(#arrF)"></line>
+
+                <!-- W_O -->
+                <g data-tip="W_O: 2,048 × 2,048 = 4,194,304 params ≈ 8.4 MB BF16. Concatenates 16 × 128 head outputs back to d_model.">
+                  <rect class="sbox" x="110" y="428" width="240" height="44" rx="9"></rect>
+                  <text class="stitle sm" x="230" y="446" text-anchor="middle">W_O — [2,048 × 2,048] · 4.19 M</text>
+                  <text class="smono" x="230" y="464" text-anchor="middle">concat heads → 2,048</text>
+                </g>
+                <line class="flowline" x1="230" y1="472" x2="230" y2="491" marker-end="url(#arrF)"></line>
+
+                <!-- residual 1 -->
+                <path class="skipline" d="M110,42 H4 V506 H215" fill="none"></path>
+                <circle class="rescirc" cx="230" cy="506" r="13"></circle>
+                <text class="stitle" x="230" y="511" text-anchor="middle">+</text>
+                <line class="flowline" x1="230" y1="519" x2="230" y2="542" marker-end="url(#arrF)"></line>
+
+                <!-- norm 2 -->
+                <g data-tip="Second pre-norm RMSNorm: 2,048 params.">
+                  <rect class="sbox sbox-warm" x="110" y="544" width="240" height="36" rx="9"></rect>
+                  <text class="stitle" x="230" y="567" text-anchor="middle">RMSNorm (2,048 params)</text>
+                </g>
+
+                <!-- branch to gate/up -->
+                <path class="flowline-thin" d="M230,580 V594 H118 V606" fill="none"></path>
+                <path class="flowline-thin" d="M230,594 H342 V606" fill="none"></path>
+
+                <g data-tip="W_gate: 2,048 × 6,144 = 12,582,912 params ≈ 25.2 MB BF16.">
+                  <rect class="sbox" x="20" y="608" width="196" height="56" rx="9"></rect>
+                  <text class="stitle sm" x="118" y="630" text-anchor="middle">W_gate — [2,048 × 6,144]</text>
+                  <text class="smono" x="118" y="650" text-anchor="middle">12.58 M</text>
+                </g>
+                <g data-tip="W_up: 2,048 × 6,144 = 12,582,912 params ≈ 25.2 MB BF16.">
+                  <rect class="sbox" x="244" y="608" width="196" height="56" rx="9"></rect>
+                  <text class="stitle sm" x="342" y="630" text-anchor="middle">W_up — [2,048 × 6,144]</text>
+                  <text class="smono" x="342" y="650" text-anchor="middle">12.58 M</text>
+                </g>
+
+                <line class="flowline-thin" x1="118" y1="664" x2="118" y2="698"></line>
+                <line class="flowline-thin" x1="342" y1="664" x2="342" y2="698"></line>
+
+                <g data-tip="SwiGLU nonlinearity: elementwise SiLU(gate) times up. No parameters here.">
+                  <rect class="sbox sbox-warm" x="90" y="700" width="280" height="36" rx="9"></rect>
+                  <text class="smono" x="230" y="723" text-anchor="middle">SiLU(gate) ⊙ up → [L × 6,144]</text>
+                </g>
+                <line class="flowline" x1="230" y1="736" x2="230" y2="766" marker-end="url(#arrF)"></line>
+
+                <g data-tip="W_down: 6,144 × 2,048 = 12,582,912 params ≈ 25.2 MB BF16. MLP total: 37.75 M per layer — 3× the attention weights.">
+                  <rect class="sbox" x="110" y="768" width="240" height="44" rx="9"></rect>
+                  <text class="stitle sm" x="230" y="786" text-anchor="middle">W_down — [6,144 × 2,048]</text>
+                  <text class="smono" x="230" y="804" text-anchor="middle">12.58 M</text>
+                </g>
+                <line class="flowline" x1="230" y1="812" x2="230" y2="831" marker-end="url(#arrF)"></line>
+
+                <!-- residual 2 -->
+                <path class="skipline" d="M230,532 H8 V846 H215" fill="none"></path>
+                <circle class="rescirc" cx="230" cy="846" r="13"></circle>
+                <text class="stitle" x="230" y="851" text-anchor="middle">+</text>
+                <line class="flowline" x1="230" y1="859" x2="230" y2="882" marker-end="url(#arrF)"></line>
+
+                <!-- output -->
+                <g data-tip="Same shape out as in — 28 of these blocks are stacked.">
+                  <rect class="sbox" x="110" y="884" width="240" height="44" rx="9"></rect>
+                  <text class="stitle" x="230" y="902" text-anchor="middle">X′ — [L × 2,048]</text>
+                  <text class="smono" x="230" y="920" text-anchor="middle">→ layer ℓ+1</text>
+                </g>
+
+                <text class="smono" x="230" y="952" text-anchor="middle">one layer ≈ 50.33 M params · × 28 = 1.41 B · + 311 M embedding ≈ 1.72 B</text>
+              </svg>
+              </div>
+            </div>
+
+            <!-- mask panel -->
+            <div class="mask-col">
+              <div class="mask-modes">
+                <button class="mode-btn on" id="modeTrain" type="button">Training view — all queries</button>
+                <button class="mode-btn" id="modeDec" type="button">Decoding view — active block B2</button>
+              </div>
+
+              <div class="mask-wrap" id="maskWrap">
+                <svg id="maskSvg" viewBox="0 0 470 460" role="img" aria-label="Block-causal attention mask: 12 positions in 3 blocks of 4; bidirectional within a block, causal across blocks" style="width:100%; max-width:480px; height:auto; display:block; margin:0 auto;">
+                  <text class="stitle sm" x="117" y="16" text-anchor="middle">B0 · t0–t3</text>
+                  <text class="stitle sm" x="245" y="16" text-anchor="middle">B1 · t4–t7</text>
+                  <text class="stitle sm taccent" x="373" y="16" text-anchor="middle">B2 · t8–t11</text>
+                  <rect x="54" y="22" width="126" height="3" rx="1.5" fill="#d4a27f"></rect>
+                  <rect x="182" y="22" width="126" height="3" rx="1.5" fill="#d4a27f"></rect>
+                  <rect x="310" y="22" width="126" height="3" rx="1.5" fill="#d97757"></rect>
+
+                  {maskRows[0].cells.map((c) => (
+                    <text class="mlabel" x={54 + c.k * 32 + 15} y="52" text-anchor="middle">t{c.k}</text>
+                  ))}
+
+                  {maskRows.map((row) => (
+                    <g class={`mrow ${row.q < 8 ? 'row-prev' : 'row-cur'}`} data-q={row.q}>
+                      <text class="mlabel" x="46" y={64 + row.q * 32 + 19} text-anchor="end">t{row.q}</text>
+                      {row.cells.map((c) => (
+                        <rect class={`mcell ${c.cls}`} x={54 + c.k * 32} y={64 + row.q * 32} width="30" height="30" rx="4"></rect>
+                      ))}
+                      <rect class="mhit" x="4" y={64 + row.q * 32} width="460" height="32"></rect>
+                    </g>
+                  ))}
+
+                  <line class="mdiag" x1="54" y1="64" x2="438" y2="448"></line>
+                </svg>
+              </div>
+
+              <div class="mask-legend">
+                <span><i class="sw sw-past"></i> earlier block — causal, K/V read from cache</span>
+                <span><i class="sw sw-intra"></i> same block — bidirectional (future visible)</span>
+                <span><i class="sw sw-off"></i> later block — masked out</span>
+                <span><i class="sw sw-diag"></i> strict AR causal boundary, for comparison</span>
+              </div>
+
+              <p class="mask-caption" id="maskCaption">Hover a row: each row is one query position;
+                filled cells are the K/V positions it may attend to. Coral cells right of the dashed
+                diagonal are exactly what block diffusion adds over an AR mask.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 3 · DECODING TIMELINE ============ -->
+    <section class="section-tight" id="decode-view">
+      <div class="container">
+        <h2 class="viz-h">3 · Decoding timeline</h2>
+        <p class="viz-sub">Step through block-by-block generation: masked slots are denoised in
+          parallel, commits follow confidence, and each finalized block appends exact K/V entries
+          to the cache.</p>
+
+        <div class="viz-frame">
+          <div class="dt-controls">
+            <button class="btn ghost btn-sm" id="btnReset" type="button">⟲ Reset</button>
+            <button class="btn ghost btn-sm" id="btnPrev" type="button">← Prev</button>
+            <button class="btn btn-sm" id="btnNext" type="button">Next →</button>
+            <button class="btn ghost btn-sm" id="btnPlay" type="button">▶ Play</button>
+            <span class="dt-step" id="dtStep">Step 0 / 10 — Prefill</span>
+          </div>
+
+          <div class="dt-strip" id="dtStrip">
+            <span class="blk prompt-blk">
+              <span class="blk-label">prompt · in KV cache</span>
+              <span class="blk-toks">
+                <span class="chip p">The</span><span class="chip p">capital</span><span class="chip p">of</span><span class="chip p">France</span><span class="chip p">is</span>
+              </span>
+            </span>
+          </div>
+
+          <p class="dt-caption" id="dtCaption">Prefill — the 5-token prompt runs through all 28
+            layers once. Every layer writes K and V for the 5 positions: 5 × 112 KB = 560 KB of
+            cache. Identical to an AR model so far.</p>
+
+          <div class="dt-meters" id="dtMeters">forward passes 1 (1 prefill + 0 denoise) · tokens committed 0 · AR passes for the same tokens: 0</div>
+
+          <div class="cache-panel">
+            <div class="cache-title">KV cache — 28 layers × 8 KV heads × 128 dims × 2 (K,V) × BF16 = <b>112 KB / token</b></div>
+            <div class="cache-row" id="dtCache">
+              <span class="cc g-p"></span><span class="cc g-p"></span><span class="cc g-p"></span><span class="cc g-p"></span><span class="cc g-p"></span>
+            </div>
+            <div class="cache-label" id="dtCacheLbl">5 tokens × 112 KB = 560 KB</div>
+          </div>
+
+          <noscript>
+            <p class="viz-sub">This explorer steps through 10 decoding states with JavaScript
+              enabled; without it you are seeing the initial prefill state.</p>
+          </noscript>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ PROSE ============ -->
+    <section class="section">
+      <div class="container">
+        <div class="prose">
+          <h2>Reading the diagram</h2>
+
+          <h3>Stage 1 — the stack is just a transformer</h3>
+          <p>
+            There is no diffusion-specific machinery in the weights. The stack is a plain dense
+            decoder: a 151,936 × 2,048 tied embedding (311 M parameters), 28 identical transformer
+            blocks of about 50.3 M parameters each, a final RMSNorm, and the transposed embedding
+            as the LM head — roughly 1.72 B parameters, 3.4 GB in BF16. This is why SDAR-style
+            models can be <em>adapted</em> from a pretrained AR checkpoint rather than trained
+            from scratch: the published recipe starts from Qwen3 weights and continues training
+            with a block-diffusion objective. Everything that makes the model “diffusion” lives
+            in two places outside the weights: the attention mask and the decoding loop.
+          </p>
+
+          <h3>Stage 2 — one layer, and the mask that changes everything</h3>
+          <p>
+            Inside a block: pre-RMSNorm, then Q/K/V projections. The config is GQA-shaped —
+            16 query heads of dimension 128 (W<sub>Q</sub>: 2,048 → 2,048) but only 8 KV heads
+            (W<sub>K</sub>, W<sub>V</sub>: 2,048 → 1,024), so each K/V head serves two query
+            heads and the cache is half the size it would be with MHA. After per-head QK-norm and
+            RoPE comes the one genuinely different ingredient: the <strong>block-causal mask</strong>.
+            Partition positions into blocks of 4. A query may attend to every position in earlier
+            blocks (ordinary causal attention — those K/V come straight from the cache) and to
+            <em>every</em> position of its own block, including future ones. In the matrix panel,
+            the coral cells to the right of the dashed diagonal are precisely the visibility that
+            a causal AR mask forbids — and they are what lets several tokens be predicted jointly
+            in one pass. The MLP is a standard SwiGLU (2,048 → 6,144 → 2,048, 37.75 M parameters
+            per layer — three times the attention weights).
+          </p>
+
+          <h3>Stage 3 — decode in blocks, cache like an AR model</h3>
+          <p>
+            Generation appends a block of 4 <code>[MASK]</code> tokens and denoises it over a few
+            forward passes. Each pass produces a full 151,936-way distribution at every masked
+            position simultaneously; positions whose confidence clears a threshold τ are committed
+            (at least the argmax is, so progress is guaranteed), and committed tokens condition the
+            next pass. Commit order follows confidence, not left-to-right position. In the timeline
+            above, 8 tokens land in 5 denoising passes instead of 8 AR steps. When a block is
+            finished it is frozen; because cross-block attention is causal, its K and V are
+            <em>exact</em> — bit-for-bit what an AR pass would have produced — so they are appended
+            to the cache once and never touched again. The cache simply grows in block-sized
+            strides: 112 KB per token in this config.
+          </p>
+        </div>
+
+        <div class="eff-note band-dark">
+          <h3>Why this matters for efficiency</h3>
+          <p>
+            Two separate levers hide in this design. <strong>Within-block parallelism attacks the
+            weight-read floor.</strong> Batch-1 decoding is memory-bound: every forward pass streams
+            all ≈3.4 GB of weights through the GPU regardless of how many tokens it commits, so a
+            pass that commits 2–3 tokens cuts the weight traffic <em>per token</em> by 2–3×. The
+            tokens-per-pass ratio, controlled by the confidence threshold and block size, is nearly
+            free throughput. <strong>Block-causality makes KV reuse exact.</strong> Full-attention
+            diffusion LMs let every position keep revising, so any cached K/V can go stale and
+            cache reuse becomes an approximation to manage. Here, finalized blocks are immutable by
+            construction — the cache is append-only and exact, the same contract an AR engine
+            relies on. The trade lives between the two levers: larger blocks buy more parallelism
+            but weaken left-to-right conditioning inside the block; the released SDAR checkpoints
+            settle at a short block length of 4.
+          </p>
+          <div class="eff-chips">
+            <span class="eff-chip">1 fwd pass ≈ 3.4 GB weight reads (BF16, batch 1)</span>
+            <span class="eff-chip">KV: 112 KB/token — exact, append-only</span>
+            <span class="eff-chip">tokens/pass &gt; 1 is the whole game</span>
+          </div>
+        </div>
+
+        <div class="prose">
+          <h2>Going deeper</h2>
+          <ul class="deeper-list">
+            <li><a class="arrow-link" href="https://github.com/JetAstra/SDAR" target="_blank" rel="noopener">SDAR — model family, checkpoints &amp; tech report (GitHub)</a></li>
+            <li><a class="arrow-link" href="https://arxiv.org/abs/2503.09573" target="_blank" rel="noopener">Block Diffusion (BD3-LM) — interpolating between AR and diffusion LMs</a></li>
+            <li><a class="arrow-link" href="https://arxiv.org/abs/2502.09992" target="_blank" rel="noopener">LLaDA — large language diffusion models (full-attention dLLM)</a></li>
+            <li><a class="arrow-link" href="https://arxiv.org/abs/2505.22618" target="_blank" rel="noopener">Fast-dLLM — KV caching &amp; parallel decoding for diffusion LLMs</a></li>
+            <li><a class="arrow-link" href="https://arxiv.org/abs/2505.09388" target="_blank" rel="noopener">Qwen3 technical report — the backbone family</a></li>
+          </ul>
+          <p class="fine-print">
+            Shapes on this page assume the public SDAR-1.7B configuration (Qwen3-1.7B backbone:
+            d = 2,048, 28 layers, 16 Q / 8 KV heads, head_dim 128, FFN 6,144, vocab 151,936,
+            block length 4). The larger released variants (4B, 8B, and the 30B-A3B MoE) change
+            widths and depths, not the mechanics shown here. Confidence numbers in the timeline
+            are illustrative.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <div id="sdarTip" aria-hidden="true"></div>
+  </div>
+</Base>
+
+<style is:global>
+  /* ---- page chrome ---- */
+  .sdar-page .jump-row { display: flex; gap: 0.6rem; flex-wrap: wrap; margin: 1.6rem 0 0; }
+  .sdar-page .jump-row .tag { transition: border-color 0.2s, color 0.2s; }
+  .sdar-page .jump-row .tag:hover { border-color: var(--accent); color: var(--accent-strong); }
+  .sdar-page .config-note {
+    margin-top: 1.4rem; display: flex; flex-wrap: wrap; gap: 0.45rem; align-items: center;
+    font-size: 0.88rem; color: var(--text-secondary);
+  }
+  .sdar-page .config-lead { flex-basis: 100%; margin-bottom: 0.15rem; }
+  .sdar-page .viz-h { margin-bottom: 0.4rem; }
+  .sdar-page .viz-sub { color: var(--text-secondary); max-width: 46em; margin: 0 0 0.4rem; }
+  .sdar-page .sdar-scroll { overflow-x: auto; }
+
+  /* ---- shared SVG vocabulary ---- */
+  .sdar-page svg text { font-family: var(--font-sans); fill: var(--text); }
+  .sdar-page .stitle { font-size: 13px; font-weight: 600; }
+  .sdar-page .stitle.sm { font-size: 12px; }
+  .sdar-page .ssub { font-size: 11px; fill: var(--text-secondary); }
+  .sdar-page .smono { font-family: var(--font-mono); font-size: 10.5px; fill: var(--text-secondary); }
+  .sdar-page .anno { font-size: 12px; fill: var(--text-secondary); }
+  .sdar-page .taccent { fill: var(--accent-strong); }
+  .sdar-page .mlabel { font-family: var(--font-mono); font-size: 9.5px; fill: var(--text-tertiary); }
+
+  .sdar-page .sbox { fill: #ffffff; stroke: var(--line-strong); stroke-width: 1.3; }
+  .sdar-page .sbox-warm { fill: var(--surface-warm); stroke: var(--line); }
+  .sdar-page .sbox-accent { fill: #fdf6f2; stroke: var(--accent); stroke-dasharray: 5 4; stroke-width: 1.4; }
+  .sdar-page .sbox-blk { fill: #ffffff; }
+  .sdar-page .clickable { cursor: pointer; }
+  .sdar-page .clickable:hover .sbox-blk { stroke: var(--accent); stroke-width: 2; }
+  .sdar-page .clickable:hover .stitle { fill: var(--accent-strong); }
+  .sdar-page .blk-link { text-decoration: none; }
+
+  .sdar-page .flowline { stroke: var(--text-tertiary); stroke-width: 1.6; fill: none; }
+  .sdar-page .flowline-thin { stroke: var(--line-strong); stroke-width: 1.4; fill: none; }
+  .sdar-page .flowline-dash { stroke: var(--line-strong); stroke-width: 1.4; stroke-dasharray: 3 4; }
+  .sdar-page .skipline { stroke: var(--line-strong); stroke-width: 1.4; stroke-dasharray: 4 4; }
+  .sdar-page .loopline { stroke: var(--accent); stroke-width: 1.6; fill: none; stroke-dasharray: 6 5; }
+  .sdar-page .rescirc { fill: var(--surface-warm); stroke: var(--line-strong); stroke-width: 1.3; }
+
+  /* ---- layer view grid ---- */
+  .sdar-page .layer-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2rem; }
+  @media (min-width: 980px) {
+    .sdar-page .layer-grid { grid-template-columns: 5fr 4fr; align-items: start; }
+  }
+  .sdar-page .mask-modes { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.9rem; }
+  .sdar-page .mode-btn {
+    font-family: var(--font-sans); font-size: 0.78rem; font-weight: 600; cursor: pointer;
+    padding: 0.4em 1em; border-radius: 999px; border: 1px solid var(--line-strong);
+    background: var(--surface); color: var(--text-secondary); transition: all 0.2s;
+  }
+  .sdar-page .mode-btn.on { background: var(--text); border-color: var(--text); color: var(--bg); }
+  .sdar-page .mode-btn:not(.on):hover { border-color: var(--accent); color: var(--accent-strong); }
+
+  .sdar-page .mcell.m-past { fill: var(--swatch-kraft); opacity: 0.75; }
+  .sdar-page .mcell.m-intra { fill: var(--accent); }
+  .sdar-page .mcell.m-off { fill: #ffffff; stroke: var(--line); }
+  .sdar-page .mhit { fill: transparent; cursor: pointer; }
+  .sdar-page .mrow.active .mcell { stroke: var(--text); stroke-width: 1.4; }
+  .sdar-page .mrow.active .mlabel { fill: var(--text); font-weight: 700; }
+  .sdar-page .mrow { transition: opacity 0.25s; }
+  .sdar-page .mask-wrap.decode .row-prev { opacity: 0.22; }
+  .sdar-page .mdiag { stroke: var(--text); stroke-width: 1.2; stroke-dasharray: 5 4; opacity: 0.45; pointer-events: none; }
+
+  .sdar-page .mask-legend {
+    display: flex; flex-direction: column; gap: 0.3rem; margin: 0.9rem 0 0;
+    font-size: 0.8rem; color: var(--text-secondary);
+  }
+  .sdar-page .mask-legend .sw {
+    display: inline-block; width: 13px; height: 13px; border-radius: 3px;
+    margin-right: 0.45em; vertical-align: -2px;
+  }
+  .sdar-page .sw-past { background: var(--swatch-kraft); opacity: 0.75; }
+  .sdar-page .sw-intra { background: var(--accent); }
+  .sdar-page .sw-off { background: #fff; border: 1px solid var(--line-strong); }
+  .sdar-page .sw-diag { background: repeating-linear-gradient(45deg, var(--text) 0 3px, transparent 3px 6px); opacity: 0.5; border-radius: 0; height: 3px; margin-bottom: 4px; }
+  .sdar-page .mask-caption {
+    margin: 0.9rem 0 0; padding: 0.8rem 1rem; min-height: 4.6em;
+    background: var(--surface-warm); border-left: 3px solid var(--accent);
+    border-radius: 0 var(--radius-s) var(--radius-s) 0;
+    font-size: 0.88rem; color: var(--text-secondary);
+  }
+
+  /* ---- decoding timeline ---- */
+  .sdar-page .dt-controls { display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; margin-bottom: 1.3rem; }
+  .sdar-page .btn-sm { padding: 0.45em 1.1em; font-size: 0.85rem; }
+  .sdar-page .btn[disabled] { opacity: 0.4; pointer-events: none; }
+  .sdar-page .dt-step {
+    font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-secondary);
+    margin-left: auto; white-space: nowrap;
+  }
+
+  .sdar-page .dt-strip { display: flex; flex-wrap: wrap; gap: 0.8rem; align-items: flex-start; margin-bottom: 1.1rem; }
+  .sdar-page .blk {
+    display: inline-flex; flex-direction: column; gap: 0.4rem;
+    padding: 0.6rem 0.7rem 0.5rem; border-radius: var(--radius-s);
+    border: 1px solid var(--line); background: var(--surface);
+  }
+  .sdar-page .blk.active { border: 1.5px dashed var(--accent); background: #fdf6f2; }
+  .sdar-page .blk.cached { border-color: var(--swatch-olive); background: #f6f7f2; }
+  .sdar-page .blk-label {
+    font-size: 0.66rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--text-tertiary);
+  }
+  .sdar-page .blk.active .blk-label { color: var(--accent-strong); }
+  .sdar-page .blk.cached .blk-label { color: var(--swatch-olive); }
+  .sdar-page .blk-toks { display: flex; gap: 0.4rem; align-items: flex-start; }
+  .sdar-page .tokwrap { display: inline-flex; flex-direction: column; align-items: center; gap: 3px; min-height: 56px; min-width: 3em; }
+  .sdar-page .chip {
+    display: inline-block; font-family: var(--font-mono); font-size: 0.85rem;
+    padding: 0.28em 0.6em; border-radius: 7px; border: 1px solid transparent; white-space: nowrap;
+  }
+  .sdar-page .chip.p { background: var(--text); color: var(--bg); }
+  .sdar-page .chip.masked { border: 1.5px dashed var(--line-strong); color: var(--text-tertiary); background: transparent; }
+  .sdar-page .chip.just { background: var(--accent); color: #fff; animation: sdar-pop 0.45s var(--ease-out); }
+  .sdar-page .chip.done { background: var(--accent-soft); color: var(--accent-strong); }
+  .sdar-page .chip.kv { background: var(--surface-warm); color: var(--text); border-color: var(--line); }
+  @keyframes sdar-pop {
+    0% { transform: scale(0.6); opacity: 0; }
+    60% { transform: scale(1.12); }
+    100% { transform: scale(1); opacity: 1; }
+  }
+  .sdar-page .confbar { width: 90%; height: 5px; border-radius: 3px; background: var(--line); overflow: hidden; }
+  .sdar-page .confbar i { display: block; height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.4s var(--ease-out); }
+  .sdar-page .guess { font-family: var(--font-mono); font-size: 0.66rem; color: var(--text-tertiary); white-space: nowrap; }
+  .sdar-page .guess.dim { opacity: 0.55; }
+
+  .sdar-page .dt-caption {
+    margin: 0 0 0.8rem; padding: 0.9rem 1.1rem; min-height: 4.4em;
+    background: var(--surface-warm); border-left: 3px solid var(--accent);
+    border-radius: 0 var(--radius-s) var(--radius-s) 0; font-size: 0.95rem;
+  }
+  .sdar-page .dt-meters { font-family: var(--font-mono); font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 1.3rem; }
+  .sdar-page .dt-meters b { color: var(--accent-strong); }
+
+  .sdar-page .cache-panel { border-top: 1px solid var(--line); padding-top: 1rem; }
+  .sdar-page .cache-title { font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 0.55rem; }
+  .sdar-page .cache-title b { color: var(--text); }
+  .sdar-page .cache-row { display: flex; flex-wrap: wrap; gap: 3px; align-items: flex-end; min-height: 20px; }
+  .sdar-page .cc { width: 13px; height: 19px; border-radius: 3px; animation: sdar-rise 0.35s var(--ease-out); }
+  .sdar-page .cc.g-p { background: var(--swatch-slate); }
+  .sdar-page .cc.g-1 { background: var(--accent); }
+  .sdar-page .cc.g-2 { background: var(--swatch-kraft); }
+  .sdar-page .cc.g-sep { margin-left: 9px; }
+  @keyframes sdar-rise {
+    from { transform: translateY(6px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+  .sdar-page .cache-label { font-family: var(--font-mono); font-size: 0.78rem; color: var(--text-tertiary); margin-top: 0.5rem; }
+
+  /* ---- efficiency note ---- */
+  .sdar-page .eff-note {
+    border-radius: var(--radius-l); padding: clamp(1.4rem, 3vw, 2.2rem);
+    margin: 3rem 0; max-width: 860px;
+  }
+  .sdar-page .eff-note h3 { color: var(--text-on-dark); margin-bottom: 0.7rem; }
+  .sdar-page .eff-note p { font-size: 0.97rem; line-height: 1.7; }
+  .sdar-page .eff-chips { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1.1rem; }
+  .sdar-page .eff-chip {
+    font-family: var(--font-mono); font-size: 0.74rem; color: var(--text-on-dark);
+    border: 1px solid var(--line-on-dark); border-radius: 999px; padding: 0.35em 0.9em;
+    background: #1d1d1b;
+  }
+
+  .sdar-page .deeper-list { list-style: none; padding: 0; margin: 0.6rem 0 1.6rem; display: flex; flex-direction: column; gap: 0.55rem; }
+  .sdar-page .deeper-list .arrow-link { text-decoration: none; }
+  .sdar-page .fine-print { font-size: 0.85rem; color: var(--text-tertiary); }
+
+  /* ---- tooltip ---- */
+  #sdarTip {
+    position: fixed; z-index: 60; max-width: 280px; pointer-events: none;
+    background: var(--surface-dark); color: var(--text-on-dark);
+    font-family: var(--font-sans); font-size: 0.78rem; line-height: 1.5;
+    padding: 0.5rem 0.75rem; border-radius: 8px; opacity: 0;
+    transition: opacity 0.15s; box-shadow: 0 8px 24px rgba(20, 20, 19, 0.25);
+  }
+</style>
+
+<script>
+  // ============ shared tooltip ============
+  const tip = document.getElementById('sdarTip');
+  document.querySelectorAll('[data-tip]').forEach((el) => {
+    el.addEventListener('mousemove', (e) => {
+      if (!tip) return;
+      tip.textContent = el.getAttribute('data-tip') || '';
+      tip.style.opacity = '1';
+      const x = Math.min(e.clientX + 14, window.innerWidth - 296);
+      tip.style.left = x + 'px';
+      tip.style.top = e.clientY + 18 + 'px';
+    });
+    el.addEventListener('mouseleave', () => {
+      if (tip) tip.style.opacity = '0';
+    });
+  });
+
+  // ============ mask matrix ============
+  const maskWrap = document.getElementById('maskWrap');
+  const maskCap = document.getElementById('maskCaption');
+  const modeTrainBtn = document.getElementById('modeTrain');
+  const modeDecBtn = document.getElementById('modeDec');
+  let maskMode = 'train';
+
+  const CAP_DEFAULT = {
+    train:
+      'Hover a row: each row is one query position; filled cells are the K/V positions it may attend to. Coral cells right of the dashed diagonal are exactly what block diffusion adds over an AR mask.',
+    dec:
+      'Decoding view: while block B2 is being denoised, only its four queries (t8–t11) run through the layers. t0–t7 are finalized — they never run as queries again; their K/V are read from the cache.',
+  };
+
+  function setMaskMode(m) {
+    maskMode = m;
+    if (maskWrap) maskWrap.classList.toggle('decode', m === 'dec');
+    if (modeTrainBtn) modeTrainBtn.classList.toggle('on', m === 'train');
+    if (modeDecBtn) modeDecBtn.classList.toggle('on', m === 'dec');
+    if (maskCap) maskCap.textContent = CAP_DEFAULT[m];
+    clearRows();
+  }
+  if (modeTrainBtn) modeTrainBtn.addEventListener('click', () => setMaskMode('train'));
+  if (modeDecBtn) modeDecBtn.addEventListener('click', () => setMaskMode('dec'));
+
+  function clearRows() {
+    document.querySelectorAll('.mrow.active').forEach((x) => x.classList.remove('active'));
+  }
+
+  function rowText(q) {
+    const b = Math.floor(q / 4);
+    const s = b * 4;
+    const e = s + 3;
+    if (maskMode === 'dec' && b < 2) {
+      return (
+        't' + q + ' sits in a finalized block: during decoding it never runs as a query again — ' +
+        'its K/V (4 KB per layer) are read straight from the cache by later blocks.'
+      );
+    }
+    let t = 'Query t' + q + ' (block B' + b + '): ';
+    t += b > 0
+      ? 'attends causally to t0–t' + (s - 1) + ' (blocks B0–B' + (b - 1) + ', served from the KV cache) and '
+      : 'attends ';
+    t += 'bidirectionally to all of B' + b + ' (t' + s + '–t' + e + ')';
+    if (q < e) t += ' — including future positions t' + (q + 1) + '–t' + e;
+    t += '. Positions after t' + e + ' are masked out.';
+    return t;
+  }
+
+  document.querySelectorAll('.mrow').forEach((g) => {
+    const q = Number(g.getAttribute('data-q'));
+    const activate = () => {
+      clearRows();
+      g.classList.add('active');
+      if (maskCap) maskCap.textContent = rowText(q);
+    };
+    g.addEventListener('mouseenter', activate);
+    g.addEventListener('click', activate);
+  });
+  const maskSvg = document.getElementById('maskSvg');
+  if (maskSvg) {
+    maskSvg.addEventListener('mouseleave', () => {
+      clearRows();
+      if (maskCap) maskCap.textContent = CAP_DEFAULT[maskMode];
+    });
+  }
+
+  // ============ decoding timeline ============
+  const PROMPT = ['The', 'capital', 'of', 'France', 'is'];
+  const B1 = ['Paris', ',', 'home', 'to'];
+  const B2 = ['the', 'Louvre', 'museum', '.'];
+
+  // per-position states: 'h' hidden, 'm' masked (no scores yet), {c,g} masked with
+  // confidence + current guess, 'j' just committed, 'd' committed, 'k' cached
+  const H4 = ['h', 'h', 'h', 'h'];
+  const STEPS = [
+    {
+      name: 'Prefill', b1: H4, b2: H4, cache: 5, fw: 1, dec: 0, em: 0,
+      cap: 'Prefill — the 5-token prompt runs through all 28 layers once. Every layer writes K and V for the 5 positions: 5 × 112 KB = 560 KB of cache. Identical to an AR model so far.',
+    },
+    {
+      name: 'Open block 1', b1: ['m', 'm', 'm', 'm'], b2: H4, cache: 5, fw: 1, dec: 0, em: 0,
+      cap: 'A block of 4 [MASK] tokens is appended. Within this block attention will be bidirectional; toward the prompt it is causal, so the cached K/V are simply read — nothing is recomputed.',
+    },
+    {
+      name: 'Denoise 1/3', b1: ['j', { c: 0.55, g: ',' }, { c: 0.34, g: 'home' }, { c: 0.47, g: 'to' }], b2: H4, cache: 5, fw: 2, dec: 1, em: 1,
+      cap: "Denoise pass 1 — one forward pass scores all 4 masked positions in parallel. 'Paris' (0.98) clears the confidence threshold (τ ≈ 0.9) and is committed. The rest stay masked — but note the model already has guesses.",
+    },
+    {
+      name: 'Denoise 2/3', b1: ['d', 'j', { c: 0.61, g: 'home' }, 'j'], b2: H4, cache: 5, fw: 3, dec: 2, em: 3,
+      cap: "Denoise pass 2 — with 'Paris' fixed as context, confidence rises elsewhere: ',' (0.96) and 'to' (0.93) commit. Out of order — inside a block, commit order follows confidence, not position.",
+    },
+    {
+      name: 'Denoise 3/3', b1: ['d', 'd', 'j', 'd'], b2: H4, cache: 5, fw: 4, dec: 3, em: 4,
+      cap: "Denoise pass 3 — 'home' (0.97) resolves last. Block 1 took 3 forward passes for 4 tokens: 1.33 tokens per pass, vs exactly 1.0 for AR decoding.",
+    },
+    {
+      name: 'Cache append', b1: ['k', 'k', 'k', 'k'], b2: H4, cache: 9, fw: 4, dec: 3, em: 4,
+      cap: 'Block 1 is finalized. Because cross-block attention is causal, its K/V values are exact and are appended to the cache (+4 × 112 KB = 448 KB). They will never be recomputed — the same guarantee an AR cache gives.',
+    },
+    {
+      name: 'Open block 2', b1: ['k', 'k', 'k', 'k'], b2: ['m', 'm', 'm', 'm'], cache: 9, fw: 4, dec: 3, em: 4,
+      cap: 'Block 2 opens with 4 fresh masks. Its queries attend to 9 cached positions (prompt + block 1) plus the 4 in-block positions — 13 keys total per query.',
+    },
+    {
+      name: 'Denoise 1/2', b1: ['k', 'k', 'k', 'k'], b2: ['j', 'j', { c: 0.58, g: 'museum' }, { c: 0.71, g: '.' }], cache: 9, fw: 5, dec: 4, em: 6,
+      cap: "Denoise pass 1 — two tokens clear τ in a single pass: 'the' (0.95) and 'Louvre' (0.92). Two commits for one read of the 3.4 GB of weights.",
+    },
+    {
+      name: 'Denoise 2/2', b1: ['k', 'k', 'k', 'k'], b2: ['d', 'd', 'j', 'j'], cache: 9, fw: 6, dec: 5, em: 8,
+      cap: "Denoise pass 2 — 'museum' (0.94) and '.' (0.99) commit together. Block 2: 4 tokens in 2 passes.",
+    },
+    {
+      name: 'Cache append', b1: ['k', 'k', 'k', 'k'], b2: ['k', 'k', 'k', 'k'], cache: 13, fw: 6, dec: 5, em: 8,
+      cap: "Block 2's K/V join the cache: 13 tokens × 112 KB ≈ 1.42 MB. The cache grows in block-sized strides but is bit-for-bit what an AR pass would have produced.",
+    },
+    {
+      name: 'Tally', b1: ['k', 'k', 'k', 'k'], b2: ['k', 'k', 'k', 'k'], cache: 13, fw: 6, dec: 5, em: 8,
+      cap: 'Tally — 8 new tokens in 5 denoising passes (AR would use 8). At batch 1 each pass reads all ≈3.4 GB of weights, so tokens-per-pass is nearly free throughput. The knob is τ: lower it for more parallelism, raise it for more caution.',
+    },
+  ];
+
+  const stripEl = document.getElementById('dtStrip');
+  const capEl = document.getElementById('dtCaption');
+  const metersEl = document.getElementById('dtMeters');
+  const stepEl = document.getElementById('dtStep');
+  const cacheEl = document.getElementById('dtCache');
+  const cacheLblEl = document.getElementById('dtCacheLbl');
+  const btnPrev = document.getElementById('btnPrev');
+  const btnNext = document.getElementById('btnNext');
+  const btnPlay = document.getElementById('btnPlay');
+  const btnReset = document.getElementById('btnReset');
+
+  let cur = 0;
+  let timer = null;
+
+  function esc(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  }
+
+  function renderBlock(label, toks, states) {
+    if (states.every((s) => s === 'h')) return '';
+    const cached = states.every((s) => s === 'k');
+    const active = states.some((s) => s === 'm' || s === 'j' || typeof s === 'object');
+    const cls = cached ? 'cached' : active ? 'active' : 'done';
+    let inner = '';
+    states.forEach((s, i) => {
+      const t = esc(toks[i]);
+      if (s === 'm') {
+        inner += '<span class="tokwrap"><span class="chip masked">▢</span><span class="guess dim">?</span></span>';
+      } else if (typeof s === 'object') {
+        const pct = Math.round(s.c * 100);
+        inner +=
+          '<span class="tokwrap"><span class="chip masked">▢</span>' +
+          '<span class="confbar"><i style="width:' + pct + '%"></i></span>' +
+          '<span class="guess">' + esc(s.g) + ' · ' + s.c.toFixed(2) + '</span></span>';
+      } else if (s === 'j') {
+        inner += '<span class="tokwrap"><span class="chip just">' + t + '</span></span>';
+      } else if (s === 'd') {
+        inner += '<span class="tokwrap"><span class="chip done">' + t + '</span></span>';
+      } else {
+        inner += '<span class="tokwrap"><span class="chip kv">' + t + '</span></span>';
+      }
+    });
+    const lab = label + (cached ? ' · in KV cache' : active ? ' · denoising' : '');
+    return (
+      '<span class="blk ' + cls + '"><span class="blk-label">' + lab +
+      '</span><span class="blk-toks">' + inner + '</span></span>'
+    );
+  }
+
+  function promptHtml() {
+    const chips = PROMPT.map((t) => '<span class="chip p">' + esc(t) + '</span>').join('');
+    return (
+      '<span class="blk prompt-blk"><span class="blk-label">prompt · in KV cache</span>' +
+      '<span class="blk-toks">' + chips + '</span></span>'
+    );
+  }
+
+  function renderCache(n) {
+    let h = '';
+    for (let i = 0; i < n; i++) {
+      const g = i < 5 ? 'g-p' : i < 9 ? 'g-1' : 'g-2';
+      const sep = i === 5 || i === 9 ? ' g-sep' : '';
+      h += '<span class="cc ' + g + sep + '"></span>';
+    }
+    if (cacheEl) cacheEl.innerHTML = h;
+    const kb = n * 112;
+    let lbl = n + ' tokens × 112 KB = ' + kb.toLocaleString() + ' KB';
+    if (kb >= 1000) lbl += ' ≈ ' + (kb / 1024).toFixed(2) + ' MB';
+    if (cacheLblEl) cacheLblEl.textContent = lbl;
+  }
+
+  function render() {
+    const s = STEPS[cur];
+    if (stripEl) {
+      stripEl.innerHTML =
+        promptHtml() + renderBlock('block 1', B1, s.b1) + renderBlock('block 2', B2, s.b2);
+    }
+    if (capEl) capEl.textContent = s.cap;
+    if (metersEl) {
+      metersEl.innerHTML =
+        'forward passes <b>' + s.fw + '</b> (1 prefill + ' + s.dec + ' denoise) · ' +
+        'tokens committed <b>' + s.em + '</b> · AR passes for the same tokens: <b>' + s.em + '</b>';
+    }
+    if (stepEl) stepEl.textContent = 'Step ' + cur + ' / ' + (STEPS.length - 1) + ' — ' + s.name;
+    renderCache(s.cache);
+    if (btnPrev) btnPrev.toggleAttribute('disabled', cur === 0);
+    if (btnNext) btnNext.toggleAttribute('disabled', cur === STEPS.length - 1);
+  }
+
+  function stopPlay() {
+    if (timer !== null) {
+      clearInterval(timer);
+      timer = null;
+    }
+    if (btnPlay) btnPlay.textContent = '▶ Play';
+  }
+
+  function go(i) {
+    cur = Math.max(0, Math.min(STEPS.length - 1, i));
+    render();
+  }
+
+  if (btnPrev) btnPrev.addEventListener('click', () => { stopPlay(); go(cur - 1); });
+  if (btnNext) btnNext.addEventListener('click', () => { stopPlay(); go(cur + 1); });
+  if (btnReset) btnReset.addEventListener('click', () => { stopPlay(); go(0); });
+  if (btnPlay) {
+    btnPlay.addEventListener('click', () => {
+      if (timer !== null) {
+        stopPlay();
+        return;
+      }
+      if (cur === STEPS.length - 1) go(0);
+      btnPlay.textContent = '❚❚ Pause';
+      timer = setInterval(() => {
+        if (cur >= STEPS.length - 1) {
+          stopPlay();
+          return;
+        }
+        go(cur + 1);
+      }, 1800);
+    });
+  }
+
+  render();
+</script>

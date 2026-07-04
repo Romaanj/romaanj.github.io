@@ -1,0 +1,177 @@
+---
+import Base from '../../layouts/Base.astro';
+import { getCollection, render } from 'astro:content';
+
+export async function getStaticPaths() {
+  const entries = await getCollection('reviews');
+  return entries.map((e) => ({ params: { slug: e.id }, props: { entry: e } }));
+}
+
+const { entry } = Astro.props;
+const { Content } = await render(entry);
+
+const all = await getCollection('reviews');
+
+/* outgoing links + backlinks, deduped, dangling dropped */
+const outgoing = entry.data.links
+  .map((slug) => all.find((e) => e.id === slug))
+  .filter((e): e is NonNullable<typeof e> => Boolean(e));
+const backlinks = all.filter(
+  (e) => e.id !== entry.id && e.data.links.includes(entry.id)
+);
+const linkedMap = new Map(
+  [...outgoing, ...backlinks].map((e) => [e.id, e])
+);
+linkedMap.delete(entry.id);
+const linked = [...linkedMap.values()];
+
+const dateStr = entry.data.date.toLocaleDateString('en-US', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+});
+---
+
+<Base
+  title={`${entry.data.title} — Junwon Lee`}
+  description={entry.data.summary}
+>
+  <section class="section">
+    <div class="container review-detail">
+      <a class="back-link" href="/reviews/">← All reviews</a>
+
+      <p class="eyebrow">Paper Review</p>
+      <h1 class="review-title">{entry.data.title}</h1>
+
+      <div class="meta-row">
+        <span class="meta-item mono">{dateStr}</span>
+        {entry.data.authors && <span class="meta-item">{entry.data.authors}</span>}
+        {entry.data.lab && <span class="meta-item lab-badge">{entry.data.lab}</span>}
+        {entry.data.venue && <span class="meta-item venue">{entry.data.venue}</span>}
+        {entry.data.arxivId && (
+          <a
+            class="meta-item arxiv-link mono"
+            href={`https://arxiv.org/abs/${entry.data.arxivId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            arXiv:{entry.data.arxivId}
+          </a>
+        )}
+      </div>
+
+      <div class="tag-row">
+        {entry.data.tags.map((t) => (
+          <span class="tag accent">{t}</span>
+        ))}
+      </div>
+
+      <p class="lede review-lede">{entry.data.summary}</p>
+
+      <div class="prose">
+        <Content />
+      </div>
+
+      {linked.length > 0 && (
+        <div class="linked-block">
+          <p class="eyebrow">Linked reviews</p>
+          <div class="card-grid">
+            {linked.map((e) => (
+              <a class="card" href={`/reviews/${e.id}/`}>
+                <span class="card-kicker">{e.data.tags[0]}</span>
+                <h3>{e.data.title}</h3>
+                <p>{e.data.summary}</p>
+                <span class="card-meta">
+                  {e.data.date.toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: '2-digit',
+                    year: 'numeric',
+                  })}
+                  {e.data.lab ? ` · ${e.data.lab}` : ''}
+                </span>
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <p class="bottom-back">
+        <a class="arrow-link" href="/reviews/">Back to the review vault</a>
+      </p>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .back-link {
+    display: inline-block;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    text-decoration: none;
+    margin-bottom: 2rem;
+    transition: color 0.15s ease;
+  }
+  .back-link:hover {
+    color: var(--accent-strong);
+  }
+  .review-title {
+    max-width: 860px;
+  }
+  .meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.55rem 1.1rem;
+    margin-top: 1.1rem;
+    font-size: 0.86rem;
+    color: var(--text-secondary);
+  }
+  .mono {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.76rem;
+  }
+  .lab-badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem;
+    padding: 0.18rem 0.55rem;
+    border-radius: 999px;
+    background: var(--surface-warm);
+    border: 1px solid var(--line);
+  }
+  .venue {
+    font-weight: 600;
+    color: var(--text);
+  }
+  .arxiv-link {
+    color: var(--accent-strong);
+    text-decoration: none;
+    border-bottom: 1px dotted var(--accent);
+  }
+  .arxiv-link:hover {
+    border-bottom-style: solid;
+  }
+  .tag-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.9rem;
+  }
+  .review-lede {
+    margin-top: 1.6rem;
+    max-width: 760px;
+  }
+  .prose {
+    margin-top: 2.25rem;
+  }
+  .linked-block {
+    margin-top: 3.5rem;
+    padding-top: 2.25rem;
+    border-top: 1px solid var(--line);
+  }
+  .linked-block .card-grid {
+    margin-top: 1.25rem;
+  }
+  .bottom-back {
+    margin-top: 3rem;
+  }
+</style>

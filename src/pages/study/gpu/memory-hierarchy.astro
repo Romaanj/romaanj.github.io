@@ -1,0 +1,932 @@
+---
+import Base from '../../../layouts/Base.astro';
+
+// Build-time geometry for the A100 die map (renders to static HTML, no JS needed).
+// 108 SMs drawn as two banks of 54 (9 cols x 6 rows) around the L2 band.
+const smCols = 9;
+const smRows = 6;
+const cellW = 71.1;
+const cellH = 26.5;
+const banks = [{ y0: 36 }, { y0: 272 }];
+const sms: { id: number; x: number; y: number }[] = [];
+let n = 0;
+for (const bank of banks) {
+  for (let r = 0; r < smRows; r++) {
+    for (let c = 0; c < smCols; c++) {
+      sms.push({ id: n++, x: 106 + c * cellW, y: bank.y0 + r * cellH });
+    }
+  }
+}
+---
+
+<Base
+  title="GPU Memory Hierarchy — Junwon Lee"
+  description="An interactive tour of where bytes live on an NVIDIA A100 — die map, memory-hierarchy ladder, interactive roofline, and one decode step traced — and why LLM decode is memory-bound."
+>
+  <section class="section hero">
+    <div class="container">
+      <p class="eyebrow">Study · GPU · Interactive</p>
+      <h1>Where the bytes live,<br /><em>and why decode waits for them.</em></h1>
+      <p class="lede">
+        A datacenter GPU is a small city built around one shortage: bytes per second.
+        This is a guided tour of the NVIDIA A100-40GB — the floorplan, the memory ladder,
+        the roofline, and a single LLM decode step traced byte by byte — ending at the
+        number that rules inference: <span class="mono-inline">14&nbsp;GB ÷ 1.55&nbsp;TB/s ≈ 9&nbsp;ms per token</span>.
+      </p>
+      <div class="spec-strip" aria-label="A100-40GB key specs">
+        <div class="spec"><span class="spec-num">108</span><span class="spec-label">SMs</span></div>
+        <div class="spec"><span class="spec-num">312</span><span class="spec-label">TFLOP/s BF16 (dense)</span></div>
+        <div class="spec"><span class="spec-num">40 MB</span><span class="spec-label">L2 cache</span></div>
+        <div class="spec"><span class="spec-num">40 GB</span><span class="spec-label">HBM2e</span></div>
+        <div class="spec"><span class="spec-num">1.555 TB/s</span><span class="spec-label">HBM bandwidth</span></div>
+        <div class="spec"><span class="spec-num">≈200</span><span class="spec-label">FLOP/byte ridge point</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section-tight">
+    <div class="container">
+      <div class="viz-frame explorer">
+        <div class="views" role="tablist" aria-label="Explorer views">
+          <button class="btn view-btn is-active" data-view="die">① Die map</button>
+          <button class="btn ghost view-btn" data-view="ladder">② Hierarchy ladder</button>
+          <button class="btn ghost view-btn" data-view="roofline">③ Roofline</button>
+          <button class="btn ghost view-btn" data-view="trace">④ One decode step</button>
+        </div>
+
+        <!-- ============ VIEW A · DIE MAP ============ -->
+        <div class="panel" id="panel-die" data-panel="die">
+          <div class="panel-head">
+            <h3>The floorplan: compute is an island, memory is the ocean around it</h3>
+            <p class="panel-sub">Simplified A100 die. Hover any region for its numbers; <strong>click an SM</strong> to zoom into its internals on the right.</p>
+          </div>
+          <div class="die-grid">
+            <div class="die-svg-wrap">
+              <svg viewBox="0 0 860 460" width="100%" style="min-width: 640px" role="img" aria-label="Simplified A100 floorplan: HBM stacks flanking a die with 108 SMs and a 40MB L2 band">
+                <!-- HBM stacks, left -->
+                {[30, 175, 320].map((y) => (
+                  <g class="region hbm" data-info="hbm">
+                    <rect x="14" y={y} width="60" height="115" rx="6" class="hbm-rect" />
+                    <text x="44" y={y + 62} class="svg-label vert" transform={`rotate(-90 44 ${y + 62})`}>HBM2e</text>
+                  </g>
+                ))}
+                <!-- HBM stacks, right -->
+                {[30, 175, 320].map((y) => (
+                  <g class="region hbm" data-info="hbm">
+                    <rect x="786" y={y} width="60" height="115" rx="6" class="hbm-rect" />
+                    <text x="816" y={y + 62} class="svg-label vert" transform={`rotate(-90 816 ${y + 62})`}>HBM2e</text>
+                  </g>
+                ))}
+                <!-- die outline -->
+                <rect x="90" y="10" width="680" height="440" rx="10" class="die-rect" />
+                <!-- SM banks -->
+                {sms.map((sm) => (
+                  <rect
+                    x={sm.x} y={sm.y} width="63" height="20" rx="3"
+                    class="sm region" data-info="sm" data-sm={sm.id}
+                  />
+                ))}
+                <!-- L2 band -->
+                <g class="region l2" data-info="l2">
+                  <rect x="106" y="202" width="310" height="48" rx="5" class="l2-rect" />
+                  <text x="261" y="231" class="svg-label mid">L2 · 20 MB partition</text>
+                </g>
+                <g class="region l2" data-info="l2">
+                  <rect x="428" y="202" width="310" height="48" rx="5" class="l2-rect" />
+                  <text x="583" y="231" class="svg-label mid">L2 · 20 MB partition</text>
+                </g>
+                <!-- interconnect hint lines -->
+                <line x1="74" y1="230" x2="90" y2="230" class="wire" />
+                <line x1="770" y1="230" x2="786" y2="230" class="wire" />
+              </svg>
+            </div>
+            <div class="die-side">
+              <div class="info-card" id="die-info">
+                <span class="card-kicker" id="die-info-kicker">A100-40GB die</span>
+                <h4 id="die-info-title">826 mm² of silicon, one bottleneck</h4>
+                <p id="die-info-body">
+                  108 streaming multiprocessors (SMs) share a 40 MB L2 cache and five active
+                  HBM2e stacks delivering 1.555 TB/s. Every weight an LLM touches must cross
+                  from the flanking HBM into this island — hover a region to see its numbers.
+                </p>
+              </div>
+              <div class="sm-detail">
+                <span class="card-kicker">Inside one SM <span id="sm-detail-which">(click any SM)</span></span>
+                <svg viewBox="0 0 400 310" width="100%" role="img" aria-label="Inside one A100 SM: four processing blocks with warp scheduler, register file and tensor core, above a combined 192KB L1/shared memory">
+                  <rect x="4" y="4" width="392" height="302" rx="8" class="smd-outline" />
+                  {[0, 1, 2, 3].map((i) => (
+                    <g transform={`translate(${12 + i * 96}, 14)`}>
+                      <rect x="0" y="0" width="88" height="196" rx="5" class="smd-block" />
+                      <rect x="6" y="8" width="76" height="26" rx="3" class="smd-sched" />
+                      <text x="44" y="25" class="svg-label tiny mid">warp sched</text>
+                      <rect x="6" y="40" width="76" height="40" rx="3" class="smd-rf" />
+                      <text x="44" y="57" class="svg-label tiny mid">register file</text>
+                      <text x="44" y="72" class="svg-label tiny mid strong">64 KB</text>
+                      <rect x="6" y="86" width="76" height="52" rx="3" class="smd-cores" />
+                      <text x="44" y="106" class="svg-label tiny mid">FP32 / INT32</text>
+                      <text x="44" y="121" class="svg-label tiny mid">FP64 lanes</text>
+                      <rect x="6" y="144" width="76" height="44" rx="3" class="smd-tc" />
+                      <text x="44" y="162" class="svg-label tiny mid on-accent">Tensor Core</text>
+                      <text x="44" y="177" class="svg-label tiny mid on-accent">3rd gen</text>
+                    </g>
+                  ))}
+                  <rect x="12" y="220" width="376" height="42" rx="5" class="smd-smem" />
+                  <text x="200" y="238" class="svg-label mid">L1 data cache + shared memory · 192 KB combined</text>
+                  <text x="200" y="254" class="svg-label mid tiny">(up to 164 KB configurable as shared memory)</text>
+                  <rect x="12" y="270" width="180" height="26" rx="5" class="smd-misc" />
+                  <text x="102" y="287" class="svg-label tiny mid">LD/ST units</text>
+                  <rect x="208" y="270" width="180" height="26" rx="5" class="smd-misc" />
+                  <text x="298" y="287" class="svg-label tiny mid">SFU · Tex</text>
+                </svg>
+                <p class="sm-detail-caption">
+                  Per SM: 4 processing blocks, each with a warp scheduler, a 64 KB register-file
+                  partition (256 KB total) and one tensor core (4 per SM, 432 on the die).
+                  All four share 192 KB of combined L1/shared storage — up to 164 KB usable
+                  as software-managed shared memory.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ============ VIEW B · HIERARCHY LADDER ============ -->
+        <div class="panel" id="panel-ladder" data-panel="ladder">
+          <div class="panel-head">
+            <h3>The ladder: every step up costs ~1000× capacity, buys ~10× speed</h3>
+            <p class="panel-sub">Log-scale bars — equal visual steps are multiplicative. Hover a level for what actually fits there during LLM inference.</p>
+          </div>
+          <div class="ladder">
+            <div class="ladder-legend">
+              <span><i class="sw sw-cap"></i> capacity</span>
+              <span><i class="sw sw-bw"></i> aggregate bandwidth</span>
+              <span><i class="sw sw-lat"></i> latency (shorter is better)</span>
+            </div>
+
+            <div class="rung" tabindex="0">
+              <div class="rung-head">
+                <span class="rung-name">Registers</span>
+                <span class="rung-where">inside each SM partition</span>
+              </div>
+              <div class="bars">
+                <div class="bar-row"><span class="bar cap" style="width:29%"></span><span class="bar-val">256 KB / SM · ≈27 MB on die</span></div>
+                <div class="bar-row"><span class="bar bw" style="width:92%"></span><span class="bar-val">≈100+ TB/s-class operand rate</span></div>
+                <div class="bar-row"><span class="bar lat" style="width:13%"></span><span class="bar-val">≈1–2 cycles (≈1 ns)</span></div>
+              </div>
+              <div class="rung-fits">
+                <strong>What fits:</strong> only the accumulator fragments of the tile being
+                multiplied <em>right now</em> — each thread holds a few dozen 32-bit values.
+                Fun fact: the die-wide register file (≈27 MB) is two-thirds the size of L2,
+                and orders of magnitude faster.
+              </div>
+            </div>
+
+            <div class="rung" tabindex="0">
+              <div class="rung-head">
+                <span class="rung-name">Shared memory / L1</span>
+                <span class="rung-where">per SM, software-managed</span>
+              </div>
+              <div class="bars">
+                <div class="bar-row"><span class="bar cap" style="width:25%"></span><span class="bar-val">192 KB combined / SM (≤164 KB shared) · ≈17.7 MB usable die-wide</span></div>
+                <div class="bar-row"><span class="bar bw" style="width:64%"></span><span class="bar-val">≈19.5 TB/s aggregate (128 B/clk × 108 SMs)</span></div>
+                <div class="bar-row"><span class="bar lat" style="width:36%"></span><span class="bar-val">≈20–30 cycles (≈20 ns)</span></div>
+              </div>
+              <div class="rung-fits">
+                <strong>What fits:</strong> the working tiles of a GEMM. A 128×128 FP16 tile is
+                32 KB, so double-buffered A- and B-tiles plus pipeline stages fill it. That's
+                ~0.0005% of a 7B model resident at once — everything else must stream.
+              </div>
+            </div>
+
+            <div class="rung" tabindex="0">
+              <div class="rung-head">
+                <span class="rung-name">L2 cache</span>
+                <span class="rung-where">shared, two 20 MB partitions</span>
+              </div>
+              <div class="bars">
+                <div class="bar-row"><span class="bar cap" style="width:32%"></span><span class="bar-val">40 MB</span></div>
+                <div class="bar-row"><span class="bar bw" style="width:43%"></span><span class="bar-val">several TB/s aggregate (microbenchmarks: ~3–7 TB/s, access-pattern dependent)</span></div>
+                <div class="bar-row"><span class="bar lat" style="width:68%"></span><span class="bar-val">≈200+ cycles (≈150–250 ns; far partition costs more)</span></div>
+              </div>
+              <div class="rung-fits">
+                <strong>What fits:</strong> barely one weight matrix — a single 4096×4096 FP16
+                projection is 33.5 MB. Or ~76 tokens' worth of a 7B model's KV cache
+                (≈524 KB per token). Weights stream <em>through</em> L2; they cannot live in it.
+              </div>
+            </div>
+
+            <div class="rung" tabindex="0">
+              <div class="rung-head">
+                <span class="rung-name">HBM2e</span>
+                <span class="rung-where">off-die, five active stacks</span>
+              </div>
+              <div class="bars">
+                <div class="bar-row"><span class="bar cap" style="width:92%"></span><span class="bar-val">40 GB</span></div>
+                <div class="bar-row"><span class="bar bw" style="width:25%"></span><span class="bar-val">1.555 TB/s</span></div>
+                <div class="bar-row"><span class="bar lat" style="width:89%"></span><span class="bar-val">≈400–500 ns</span></div>
+              </div>
+              <div class="rung-fits">
+                <strong>What fits:</strong> the model itself. A 7B model in FP16 is ~14 GB;
+                a 4k-token KV cache adds ~2 GB; the rest is activations, workspace, and
+                headroom. This is the <em>only</em> level that holds the weights — which is
+                why its 1.555 TB/s, not the 312 TFLOP/s, sets the decode speed limit.
+              </div>
+            </div>
+
+            <div class="ladder-note">
+              Bandwidths are aggregates across the die; per-byte latency is hidden by
+              parallelism, but <strong>bandwidth cannot be hidden</strong> — every byte of a
+              7B model must physically cross the HBM interface for every generated token.
+            </div>
+          </div>
+        </div>
+
+        <!-- ============ VIEW C · ROOFLINE ============ -->
+        <div class="panel" id="panel-roofline" data-panel="roofline">
+          <div class="panel-head">
+            <h3>The roofline: two ceilings, and decode lives under the slanted one</h3>
+            <p class="panel-sub">
+              Achievable FLOP/s = min(peak compute, bandwidth × arithmetic intensity). Log–log axes.
+              Drag the batch slider and switch weight precision to move the ● marker.
+            </p>
+          </div>
+          <div class="roofline-grid">
+            <div class="roofline-svg-wrap">
+              <svg id="roofline-svg" viewBox="0 0 760 452" width="100%" style="min-width: 640px" role="img" aria-label="Roofline for the A100: memory-bound slope of 1.555 terabytes per second meeting a 312 teraflop compute roof at about 200 flop per byte">
+                <!-- memory-bound shading -->
+                <polygon points="60,400 60,379.2 574.6,63.4 574.6,400" class="rf-shade" />
+                <!-- gridlines x: AI 0.25..1024 (powers of 4) -->
+                <g class="rf-grid">
+                  <line x1="166.7" y1="40" x2="166.7" y2="400" /><line x1="273.3" y1="40" x2="273.3" y2="400" />
+                  <line x1="380" y1="40" x2="380" y2="400" /><line x1="486.7" y1="40" x2="486.7" y2="400" />
+                  <line x1="593.3" y1="40" x2="593.3" y2="400" /><line x1="700" y1="40" x2="700" y2="400" />
+                  <line x1="60" y1="334.5" x2="700" y2="334.5" /><line x1="60" y1="269.1" x2="700" y2="269.1" />
+                  <line x1="60" y1="203.6" x2="700" y2="203.6" /><line x1="60" y1="138.2" x2="700" y2="138.2" />
+                  <line x1="60" y1="72.7" x2="700" y2="72.7" />
+                </g>
+                <!-- axes -->
+                <line x1="60" y1="400" x2="700" y2="400" class="rf-axis" />
+                <line x1="60" y1="40" x2="60" y2="400" class="rf-axis" />
+                <g class="rf-ticks">
+                  <text x="60" y="418">0.25</text><text x="166.7" y="418">1</text><text x="273.3" y="418">4</text>
+                  <text x="380" y="418">16</text><text x="486.7" y="418">64</text><text x="593.3" y="418">256</text>
+                  <text x="700" y="418">1024</text>
+                  <text x="52" y="404" class="ty">0.25</text><text x="52" y="338" class="ty">1</text>
+                  <text x="52" y="273" class="ty">4</text><text x="52" y="208" class="ty">16</text>
+                  <text x="52" y="142" class="ty">64</text><text x="52" y="77" class="ty">256</text>
+                </g>
+                <text x="380" y="444" class="rf-axis-label">arithmetic intensity — FLOP / byte from HBM (log)</text>
+                <text x="18" y="220" class="rf-axis-label" transform="rotate(-90 18 220)">achievable TFLOP/s (log)</text>
+                <!-- roofs -->
+                <line x1="60" y1="379.2" x2="574.6" y2="63.4" class="rf-mem-roof" />
+                <line x1="574.6" y1="63.4" x2="700" y2="63.4" class="rf-comp-roof" />
+                <text x="235" y="240" class="rf-roof-label" transform="rotate(-31.5 235 240)">HBM roof · 1.555 TB/s × AI</text>
+                <text x="637" y="55" class="rf-roof-label comp">312 TFLOP/s BF16</text>
+                <!-- ridge -->
+                <line x1="574.6" y1="63.4" x2="574.6" y2="400" class="rf-ridge" />
+                <text x="574.6" y="392" class="rf-ridge-label">ridge ≈ 200 FLOP/B</text>
+                <!-- fixed workload markers -->
+                <g class="rf-marker" data-rf="prefill">
+                  <circle cx="658.9" cy="68.4" r="7" class="mk mk-prefill" />
+                  <text x="658.9" y="90" class="mk-label">prefill GEMM</text>
+                </g>
+                <g class="rf-marker" data-rf="decode1">
+                  <circle cx="166.7" cy="313.7" r="7" class="mk mk-decode" />
+                  <text x="166.7" y="300" class="mk-label">decode GEMV, B=1</text>
+                </g>
+                <g class="rf-marker" data-rf="attn">
+                  <circle cx="149.5" cy="324.2" r="7" class="mk mk-attn" />
+                  <text x="149.5" y="346" class="mk-label">attention · long KV</text>
+                </g>
+                <!-- movable batch marker (JS) -->
+                <g id="rf-batch" class="rf-marker live">
+                  <circle id="rf-batch-dot" cx="326.7" cy="215.5" r="9" class="mk mk-batch" />
+                  <text id="rf-batch-label" x="326.7" y="200" class="mk-label strong">batched decode · B=8</text>
+                </g>
+              </svg>
+            </div>
+            <div class="roofline-side">
+              <div class="ctrl-block">
+                <span class="ctrl-label">Batch size B (weights amortize, AI ≈ B × FLOP-per-weight-byte)</span>
+                <input type="range" id="batch-slider" min="0" max="9" step="1" value="3" aria-label="Batch size, powers of two from 1 to 512" />
+                <div class="ctrl-scale"><span>1</span><span>8</span><span>64</span><span>512</span></div>
+              </div>
+              <div class="ctrl-block">
+                <span class="ctrl-label">Weight precision (weight-only quantization)</span>
+                <div class="quant-btns">
+                  <button class="tag quant-btn is-active" data-bpw="2">FP16 · 2 B/w</button>
+                  <button class="tag quant-btn" data-bpw="1">INT8 · 1 B/w</button>
+                  <button class="tag quant-btn" data-bpw="0.5">INT4 · 0.5 B/w</button>
+                </div>
+              </div>
+              <div class="readout" id="rf-readout">
+                <div class="ro-row"><span>Arithmetic intensity</span><strong id="ro-ai">≈ 8 FLOP/B</strong></div>
+                <div class="ro-row"><span>Achievable</span><strong id="ro-tflops">≈ 12.4 TFLOP/s (4.0% of peak)</strong></div>
+                <div class="ro-row"><span>Aggregate decode ceiling</span><strong id="ro-toks">≈ 889 tok/s (8 seq × 111)</strong></div>
+                <div class="ro-row"><span>Regime</span><strong id="ro-regime" class="regime mem">memory-bound</strong></div>
+              </div>
+              <div class="divider-math" id="rf-division">
+                <span class="dm-title">The division that sets the ceiling (per sequence)</span>
+                <code id="dm-code">14 GB weights ÷ 1.555 TB/s ≈ 9.0 ms/token → ~111 tok/s</code>
+                <p id="dm-note">
+                  At B=1 every generated token must read <em>all</em> weights once. Quantize
+                  FP16→INT4 and the same division reads 3.5 GB ÷ 1.555 TB/s ≈ 2.3 ms → ~440 tok/s:
+                  compression is a bandwidth multiplier, not a compute trick.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ============ VIEW D · ONE DECODE STEP ============ -->
+        <div class="panel" id="panel-trace" data-panel="trace">
+          <div class="panel-head">
+            <h3>One decode step, traced: 15.4 GB in, one token out</h3>
+            <p class="panel-sub">
+              Llama-7B-class model (d=4096, 32 layers, FFN 11008, vocab 32k), FP16, 4096 tokens
+              of context, batch 1. Step through what actually moves.
+            </p>
+          </div>
+          <div class="trace-grid">
+            <div class="trace-svg-wrap">
+              <svg viewBox="0 0 760 350" width="100%" style="min-width: 640px" role="img" aria-label="Data flow of one decode step: weights and KV cache stream from HBM through L2 into the SM, activations stay in shared memory and registers">
+                <!-- HBM -->
+                <g id="tr-hbm" class="tr-box">
+                  <rect x="16" y="36" width="158" height="272" rx="10" class="tr-hbm-rect" />
+                  <text x="95" y="62" class="svg-label mid strong">HBM · 40 GB</text>
+                  <rect x="30" y="76" width="130" height="98" rx="6" class="tr-res weights" />
+                  <text x="95" y="116" class="svg-label mid">weights</text>
+                  <text x="95" y="134" class="svg-label mid tiny">13.5 GB FP16</text>
+                  <rect x="30" y="184" width="130" height="62" rx="6" class="tr-res kv" />
+                  <text x="95" y="210" class="svg-label mid">KV cache</text>
+                  <text x="95" y="228" class="svg-label mid tiny">2.15 GB @ 4k ctx</text>
+                  <rect x="30" y="256" width="130" height="38" rx="6" class="tr-res acts" />
+                  <text x="95" y="280" class="svg-label mid tiny">activations (tiny)</text>
+                </g>
+                <!-- L2 -->
+                <g id="tr-l2" class="tr-box">
+                  <rect x="234" y="118" width="92" height="110" rx="8" class="tr-l2-rect" />
+                  <text x="280" y="166" class="svg-label mid">L2</text>
+                  <text x="280" y="184" class="svg-label mid tiny">40 MB</text>
+                </g>
+                <!-- SM island -->
+                <g id="tr-sm" class="tr-box">
+                  <rect x="392" y="36" width="352" height="272" rx="10" class="tr-sm-rect" />
+                  <text x="568" y="62" class="svg-label mid strong">108 SMs</text>
+                  <rect x="410" y="78" width="150" height="90" rx="6" class="tr-smem" />
+                  <text x="485" y="112" class="svg-label mid tiny">SMEM / L1</text>
+                  <text x="485" y="128" class="svg-label mid tiny">activation x[1×4096]</text>
+                  <text x="485" y="144" class="svg-label mid tiny">= 8 KB, stays here</text>
+                  <rect x="578" y="78" width="150" height="90" rx="6" class="tr-regs" />
+                  <text x="653" y="112" class="svg-label mid tiny">registers</text>
+                  <text x="653" y="128" class="svg-label mid tiny">accumulators</text>
+                  <rect x="410" y="188" width="318" height="100" rx="6" class="tr-tc" />
+                  <text x="569" y="228" class="svg-label mid on-accent">tensor cores</text>
+                  <text x="569" y="248" class="svg-label mid tiny on-accent" id="tr-tc-note">≈2 FLOPs per weight byte-pair, then the weight is discarded</text>
+                </g>
+                <!-- streaming paths -->
+                <path id="tr-path-w" class="tr-path" d="M 174 125 C 210 125, 210 148, 234 148 L 326 148 C 360 148, 360 120, 392 120" />
+                <path id="tr-path-kv" class="tr-path" d="M 174 214 C 208 214, 210 198, 234 198 L 326 198 C 360 198, 360 236, 392 236" />
+                <text id="tr-flow-label" x="283" y="102" class="svg-label mid tiny strong">idle — waiting for a token</text>
+              </svg>
+            </div>
+            <div class="trace-side">
+              <div class="trace-controls">
+                <button class="btn ghost" id="tr-prev">← Prev</button>
+                <button class="btn" id="tr-play">▶ Play</button>
+                <button class="btn ghost" id="tr-next">Next →</button>
+                <span class="trace-stepnum" id="tr-stepnum">step 0 / 7</span>
+              </div>
+              <div class="trace-caption" id="tr-caption">
+                A new token needs to be generated. The entire model sits in HBM; the “state”
+                the GPU actually computes on — one 4096-long activation vector — is 8 KB.
+                Press <strong>Next</strong> (or Play) to watch what has to move.
+              </div>
+              <div class="trace-counters">
+                <div class="tc-row">
+                  <span class="tc-name">bytes from HBM</span>
+                  <div class="tc-bar-wrap"><div class="tc-bar bytes" id="tc-bytes-bar" style="width:0%"></div></div>
+                  <strong class="tc-val" id="tc-bytes">0 B</strong>
+                </div>
+                <div class="tc-row">
+                  <span class="tc-name">FLOPs done</span>
+                  <div class="tc-bar-wrap"><div class="tc-bar flops" id="tc-flops-bar" style="width:0%"></div></div>
+                  <strong class="tc-val" id="tc-flops">0</strong>
+                </div>
+                <div class="tc-row time">
+                  <span class="tc-name">time if BW-limited</span>
+                  <strong class="tc-val" id="tc-time-mem">0 ms</strong>
+                </div>
+                <div class="tc-row time">
+                  <span class="tc-name">time if compute-limited</span>
+                  <strong class="tc-val" id="tc-time-comp">0 ms</strong>
+                </div>
+              </div>
+              <div class="trace-punchline is-dim" id="tr-punchline">
+                <strong>Punchline:</strong> ≈15.4 GB moved for ≈15 GFLOP — arithmetic intensity ≈ 1.
+                The byte-time floor is ~9.9 ms; the FLOP time is ~0.05 ms. The tensor cores are
+                idle ~99.5% of the step, and measured decode throughput on good kernels sits
+                near this bandwidth ceiling — not the 312 TFLOP/s brochure number.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div><!-- /viz-frame -->
+    </div>
+  </section>
+
+  <!-- ============ READING THE DIAGRAM ============ -->
+  <section class="section">
+    <div class="container">
+      <div class="prose">
+        <p class="eyebrow">Reading the diagram</p>
+        <h2>The four views, in words</h2>
+
+        <h3>① Die map — compute is an island</h3>
+        <p>
+          The A100 die packs 108 SMs, each with 4 third-generation tensor cores, a 256 KB
+          register file, and 192 KB of combined L1/shared storage (up to 164 KB configurable
+          as shared memory). All of them talk to a 40 MB L2 split into two partitions, and the
+          L2 talks to five active HBM2e stacks sitting <em>physically beside</em> the die on a
+          silicon interposer. The geography is the point: FLOPs are manufactured in the middle,
+          but every byte of an LLM's weights lives off-die and must be imported at 1.555 TB/s —
+          the width of that bridge, not the size of the island, decides how fast you decode.
+        </p>
+
+        <h3>② Hierarchy ladder — multiplicative trades</h3>
+        <p>
+          Each level trades roughly three orders of magnitude of capacity for one order of
+          magnitude of bandwidth and latency. The numbers worth memorizing: shared memory
+          aggregates to ≈19.5 TB/s (about 12× HBM), and the register file, at ≈27 MB die-wide,
+          is a <em>faster and nearly as large</em> pool as L2 — which is why high-performance
+          GEMM kernels are really register-file choreography. The ladder also explains why
+          caching weights is hopeless: the largest on-die pool (L2, 40 MB) barely holds one
+          4096×4096 FP16 matrix (33.5 MB) out of a 13.5 GB model.
+        </p>
+
+        <h3>③ Roofline — one model, two regimes</h3>
+        <p>
+          Arithmetic intensity (AI) is FLOPs performed per byte moved from HBM. The machine's
+          balance point is 312 TFLOP/s ÷ 1.555 TB/s ≈ 200 FLOP/byte. Prefill GEMMs (thousands
+          of tokens sharing each weight read) sit far right, compute-bound. Single-batch decode
+          is a GEMV: 2 FLOPs per 2-byte weight, AI ≈ 1, achieving ≈1.6 TFLOP/s — half a percent
+          of peak, and no kernel cleverness can fix it because the bytes are mandatory.
+          Batching amortizes weight reads (AI ≈ B), which is why serving systems fight for
+          large batches; attention over a long KV cache, however, stays at AI ≈ 1 even when
+          batched, because each sequence reads its <em>own</em> KV — this is exactly the seam
+          that KV-cache compression and quantization attack.
+        </p>
+
+        <h3>④ One decode step — the mandatory 15 GB</h3>
+        <p>
+          For a 7B-class FP16 model with 4k context at batch 1, one token costs ≈13.5 GB of
+          weights + ≈2.15 GB of KV cache + a 262 MB LM head read — ≈15.4 GB of traffic for
+          ≈15 GFLOP of work. Divide: 15.4 GB ÷ 1.555 TB/s ≈ 9.9 ms, an upper bound near
+          ~100 tok/s, while the same FLOPs would take the tensor cores ~0.05 ms. Everything in
+          efficient inference follows from this division — quantize weights and KV (shrink the
+          numerator), batch requests (amortize it), or restructure attention so fewer bytes are
+          mandatory. My research lives in that numerator.
+        </p>
+
+        <h3>Fine print on the numbers</h3>
+        <p>
+          Peak specs (108 SMs, 40 GB @ 1.555 TB/s, 40 MB L2, 312 TFLOP/s dense BF16/FP16 tensor
+          core, 192 KB L1+shared per SM with ≤164 KB shared) are from NVIDIA's A100 white paper
+          for the SXM 40 GB part. On-die bandwidth and latency figures (L2 and shared-memory
+          throughput, ~20/200/450 ns tiers) are microbenchmark-derived ballparks that vary with
+          access pattern and clocks — treat them as order-of-magnitude anchors, not datasheet
+          promises. Tokens/s figures are bandwidth <em>ceilings</em>; real kernels land 70–90%
+          of the way there.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ GOING DEEPER ============ -->
+  <section class="section band-dark">
+    <div class="container">
+      <p class="eyebrow">Going deeper</p>
+      <h2>Pull the thread</h2>
+      <div class="card-grid" style="margin-top:2rem;">
+        <a class="card" href="https://images.nvidia.com/aem-dam/en-zz/Solutions/data-center/nvidia-ampere-architecture-whitepaper.pdf" target="_blank" rel="noopener">
+          <span class="card-kicker">Primary source</span>
+          <h3>NVIDIA A100 white paper</h3>
+          <p>The datasheet behind every number in the die map — SM diagram, memory subsystem, tensor-core formats.</p>
+          <span class="card-meta">nvidia.com · PDF</span>
+        </a>
+        <a class="card" href="https://dl.acm.org/doi/10.1145/1498765.1498785" target="_blank" rel="noopener">
+          <span class="card-kicker">The model</span>
+          <h3>Roofline (Williams et al., 2009)</h3>
+          <p>The original insightful-performance-model paper — two ceilings, one x-axis, endless mileage.</p>
+          <span class="card-meta">CACM · classic</span>
+        </a>
+        <a class="card" href="https://kipp.ly/transformer-inference-arithmetic/" target="_blank" rel="noopener">
+          <span class="card-kicker">Back of envelope</span>
+          <h3>Transformer inference arithmetic</h3>
+          <p>kipply's walkthrough of the same bytes-per-token accounting done here, extended to multi-GPU serving.</p>
+          <span class="card-meta">blog · essential</span>
+        </a>
+        <a class="card" href="https://arxiv.org/abs/2205.14135" target="_blank" rel="noopener">
+          <span class="card-kicker">Hierarchy in action</span>
+          <h3>FlashAttention</h3>
+          <p>What "IO-aware" means in practice: restructure attention around SMEM tiles so the mandatory HBM bytes shrink.</p>
+          <span class="card-meta">arXiv 2205.14135</span>
+        </a>
+        <a class="card" href="/study/">
+          <span class="card-kicker">Study</span>
+          <h3>Back to the bench</h3>
+          <p>More interactive tear-downs — model anatomy, quantization pipelines, and the rest of the GPU track.</p>
+          <span class="card-meta arrow-link">All study notes</span>
+        </a>
+        <a class="card" href="/research/">
+          <span class="card-kicker">Research</span>
+          <h3>Where this bites</h3>
+          <p>KV-cache compression and diffusion-LLM acceleration — my research is an attack on the numerator of that division.</p>
+          <span class="card-meta arrow-link">Research areas</span>
+        </a>
+      </div>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .hero h1 em { font-style: italic; color: var(--accent-strong); }
+  .lede { margin-top: 1.4rem; }
+  .mono-inline { font-family: var(--font-mono); font-size: 0.88em; background: var(--surface-warm); padding: 0.1em 0.4em; border-radius: 5px; white-space: nowrap; }
+
+  .spec-strip {
+    display: flex; flex-wrap: wrap; gap: 0.7rem 2.2rem;
+    margin-top: 2.2rem; padding: 1.1rem 1.4rem;
+    background: var(--surface-warm); border-radius: var(--radius-m);
+    border: 1px solid var(--line);
+  }
+  .spec { display: flex; flex-direction: column; }
+  .spec-num { font-family: var(--font-serif); font-size: 1.45rem; color: var(--accent-strong); line-height: 1.2; }
+  .spec-label { font-size: 0.74rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-tertiary); }
+
+  /* ---- explorer chrome ---- */
+  .views { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-bottom: 1.6rem; }
+  .view-btn { font-size: 0.88rem; padding: 0.5em 1.15em; }
+  .view-btn.is-active { background: var(--accent-strong); border-color: var(--accent-strong); color: #fff; }
+  .panel.is-hidden { display: none; }
+  .panel + .panel { margin-top: 2.5rem; } /* visible only when JS is off (all panels stacked) */
+  .panel.is-hidden + .panel { margin-top: 0; }
+  .panel-head h3 { margin-bottom: 0.3rem; }
+  .panel-sub { color: var(--text-secondary); font-size: 0.95rem; margin-bottom: 1.4rem; }
+
+  /* ---- die map ---- */
+  .die-grid { display: grid; grid-template-columns: 1.55fr 1fr; gap: 1.4rem; align-items: start; }
+  .die-svg-wrap { min-width: 0; overflow-x: auto; }
+  .die-rect { fill: var(--surface-warm); stroke: var(--line-strong); stroke-width: 1.5; }
+  .hbm-rect { fill: var(--swatch-slate); opacity: 0.85; transition: opacity 0.15s; }
+  .l2-rect { fill: var(--swatch-kraft); opacity: 0.9; transition: opacity 0.15s; }
+  .sm { fill: var(--swatch-sky); opacity: 0.75; cursor: pointer; transition: opacity 0.15s, fill 0.15s; }
+  .region:hover .hbm-rect, .region:hover .l2-rect { opacity: 1; }
+  .sm:hover { opacity: 1; }
+  .sm.is-selected { fill: var(--accent); opacity: 1; }
+  .wire { stroke: var(--line-strong); stroke-width: 2; }
+  .svg-label { font-family: var(--font-sans); font-size: 13px; fill: var(--text); }
+  .svg-label.vert { fill: #fff; font-size: 12px; letter-spacing: 0.08em; text-anchor: middle; }
+  .svg-label.mid { text-anchor: middle; }
+  .svg-label.tiny { font-size: 10.5px; fill: var(--text-secondary); }
+  .svg-label.strong { font-weight: 600; fill: var(--text); }
+  .svg-label.on-accent { fill: #fff; }
+
+  .die-side { display: flex; flex-direction: column; gap: 1.1rem; min-width: 0; }
+  .info-card {
+    background: var(--surface-warm); border: 1px solid var(--line);
+    border-radius: var(--radius-m); padding: 1.1rem 1.2rem;
+  }
+  .info-card h4 { font-family: var(--font-serif); font-size: 1.12rem; margin: 0.35rem 0 0.4rem; }
+  .info-card p { margin: 0; font-size: 0.88rem; color: var(--text-secondary); }
+  .sm-detail { border: 1px solid var(--line); border-radius: var(--radius-m); padding: 1rem 1.1rem; }
+  .sm-detail-caption { font-size: 0.82rem; color: var(--text-secondary); margin: 0.7rem 0 0; }
+  .smd-outline { fill: var(--surface); stroke: var(--line-strong); }
+  .smd-block { fill: var(--surface-warm); stroke: var(--line); }
+  .smd-sched { fill: var(--swatch-heather); opacity: 0.55; }
+  .smd-rf { fill: var(--swatch-olive); opacity: 0.55; }
+  .smd-cores { fill: var(--swatch-sky); opacity: 0.45; }
+  .smd-tc { fill: var(--accent); }
+  .smd-smem { fill: var(--swatch-kraft); opacity: 0.6; }
+  .smd-misc { fill: var(--surface-warm); stroke: var(--line); }
+
+  /* ---- ladder ---- */
+  .ladder { display: flex; flex-direction: column; gap: 0.9rem; }
+  .ladder-legend { display: flex; gap: 1.6rem; flex-wrap: wrap; font-size: 0.8rem; color: var(--text-secondary); }
+  .sw { display: inline-block; width: 14px; height: 9px; border-radius: 3px; margin-right: 0.4em; }
+  .sw-cap { background: var(--swatch-sky); }
+  .sw-bw { background: var(--accent); }
+  .sw-lat { background: var(--swatch-slate); }
+  .rung {
+    border: 1px solid var(--line); border-radius: var(--radius-m);
+    padding: 1rem 1.2rem; background: var(--surface);
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .rung:hover, .rung:focus { border-color: var(--accent); box-shadow: var(--shadow-card-hover); outline: none; }
+  .rung-head { display: flex; align-items: baseline; gap: 0.8em; margin-bottom: 0.5rem; }
+  .rung-name { font-family: var(--font-serif); font-size: 1.15rem; font-weight: 500; }
+  .rung-where { font-size: 0.78rem; color: var(--text-tertiary); }
+  .bars { display: flex; flex-direction: column; gap: 0.3rem; }
+  .bar-row { display: flex; align-items: center; gap: 0.7em; }
+  .bar { height: 10px; border-radius: 4px; flex-shrink: 0; }
+  .bar.cap { background: var(--swatch-sky); }
+  .bar.bw { background: var(--accent); }
+  .bar.lat { background: var(--swatch-slate); }
+  .bar-val { font-family: var(--font-mono); font-size: 0.74rem; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rung-fits {
+    max-height: 0; overflow: hidden; opacity: 0;
+    transition: max-height 0.35s var(--ease-out), opacity 0.3s, margin 0.3s;
+    font-size: 0.86rem; color: var(--text-secondary); margin-top: 0;
+  }
+  .rung:hover .rung-fits, .rung:focus .rung-fits { max-height: 8em; opacity: 1; margin-top: 0.7rem; }
+  .ladder-note { font-size: 0.86rem; color: var(--text-secondary); border-left: 3px solid var(--accent); padding-left: 1em; }
+
+  /* ---- roofline ---- */
+  .roofline-grid { display: grid; grid-template-columns: 1.6fr 1fr; gap: 1.4rem; align-items: start; }
+  .roofline-svg-wrap { min-width: 0; overflow-x: auto; }
+  .rf-shade { fill: var(--accent-soft); opacity: 0.45; }
+  .rf-grid line { stroke: var(--line); stroke-width: 1; }
+  .rf-axis { stroke: var(--text); stroke-width: 1.5; }
+  .rf-ticks text { font-family: var(--font-mono); font-size: 11px; fill: var(--text-tertiary); text-anchor: middle; }
+  .rf-ticks .ty { text-anchor: end; }
+  .rf-axis-label { font-family: var(--font-sans); font-size: 12.5px; fill: var(--text-secondary); text-anchor: middle; }
+  .rf-mem-roof { stroke: var(--accent-strong); stroke-width: 3; stroke-linecap: round; }
+  .rf-comp-roof { stroke: var(--text); stroke-width: 3; stroke-linecap: round; }
+  .rf-roof-label { font-family: var(--font-sans); font-size: 12px; font-weight: 600; fill: var(--accent-strong); text-anchor: middle; }
+  .rf-roof-label.comp { fill: var(--text); text-anchor: middle; }
+  .rf-ridge { stroke: var(--line-strong); stroke-dasharray: 4 5; }
+  .rf-ridge-label { font-family: var(--font-mono); font-size: 10.5px; fill: var(--text-tertiary); text-anchor: middle; }
+  .mk { stroke: #fff; stroke-width: 2; }
+  .mk-prefill { fill: var(--swatch-olive); }
+  .mk-decode { fill: var(--swatch-slate); }
+  .mk-attn { fill: var(--swatch-heather); }
+  .mk-batch { fill: var(--accent); }
+  .mk-label { font-family: var(--font-sans); font-size: 11.5px; fill: var(--text-secondary); text-anchor: middle; }
+  .mk-label.strong { font-weight: 600; fill: var(--accent-strong); }
+  #rf-batch circle { transition: cx 0.3s var(--ease-out), cy 0.3s var(--ease-out); }
+  #rf-batch text { transition: x 0.3s var(--ease-out), y 0.3s var(--ease-out); }
+
+  .roofline-side { display: flex; flex-direction: column; gap: 1.1rem; min-width: 0; }
+  .ctrl-block { display: flex; flex-direction: column; gap: 0.45rem; }
+  .ctrl-label { font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); }
+  input[type='range'] { width: 100%; accent-color: var(--accent-strong); }
+  .ctrl-scale { display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-tertiary); }
+  .quant-btns { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+  .quant-btn { cursor: pointer; font-family: var(--font-mono); }
+  .quant-btn.is-active { border-color: transparent; background: var(--accent-soft); color: var(--accent-strong); font-weight: 600; }
+  .readout { border: 1px solid var(--line); border-radius: var(--radius-m); padding: 0.9rem 1.1rem; display: flex; flex-direction: column; gap: 0.45rem; }
+  .ro-row { display: flex; justify-content: space-between; gap: 1em; font-size: 0.86rem; color: var(--text-secondary); }
+  .ro-row strong { font-family: var(--font-mono); font-size: 0.82rem; color: var(--text); text-align: right; }
+  .regime.mem { color: var(--accent-strong); }
+  .regime.comp { color: var(--swatch-olive); }
+  .divider-math { background: var(--surface-warm); border-radius: var(--radius-m); padding: 1rem 1.1rem; }
+  .dm-title { display: block; font-size: 0.74rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-tertiary); margin-bottom: 0.5rem; }
+  .divider-math code { display: block; font-family: var(--font-mono); font-size: 0.82rem; color: var(--accent-strong); margin-bottom: 0.6rem; overflow-x: auto; white-space: nowrap; }
+  .divider-math p { margin: 0; font-size: 0.83rem; color: var(--text-secondary); }
+
+  /* ---- trace ---- */
+  .trace-grid { display: grid; grid-template-columns: 1.55fr 1fr; gap: 1.4rem; align-items: start; }
+  .trace-svg-wrap { min-width: 0; overflow-x: auto; }
+  .tr-hbm-rect { fill: var(--swatch-slate); opacity: 0.16; stroke: var(--swatch-slate); }
+  .tr-l2-rect { fill: var(--swatch-kraft); opacity: 0.3; stroke: var(--swatch-kraft); }
+  .tr-sm-rect { fill: var(--swatch-sky); opacity: 0.12; stroke: var(--swatch-sky); }
+  .tr-res { stroke-width: 1; }
+  .tr-res.weights { fill: var(--swatch-slate); opacity: 0.45; }
+  .tr-res.kv { fill: var(--swatch-heather); opacity: 0.5; }
+  .tr-res.acts { fill: var(--swatch-olive); opacity: 0.45; }
+  .tr-smem { fill: var(--swatch-kraft); opacity: 0.45; }
+  .tr-regs { fill: var(--swatch-olive); opacity: 0.4; }
+  .tr-tc { fill: var(--accent); opacity: 0.9; }
+  .tr-path {
+    fill: none; stroke: var(--line-strong); stroke-width: 5;
+    stroke-linecap: round; stroke-dasharray: 10 12; opacity: 0.45;
+  }
+  .tr-path.is-live {
+    stroke: var(--accent-strong); opacity: 1;
+    animation: tr-flow 0.7s linear infinite;
+  }
+  @keyframes tr-flow { to { stroke-dashoffset: -22; } }
+
+  .trace-side { display: flex; flex-direction: column; gap: 1rem; min-width: 0; }
+  .trace-controls { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+  .trace-controls .btn { font-size: 0.84rem; padding: 0.45em 1.05em; }
+  .trace-stepnum { font-family: var(--font-mono); font-size: 0.76rem; color: var(--text-tertiary); margin-left: auto; }
+  .trace-caption {
+    min-height: 7.2em; font-size: 0.9rem; color: var(--text-secondary);
+    border: 1px solid var(--line); border-radius: var(--radius-m); padding: 0.95rem 1.1rem;
+    background: var(--surface);
+  }
+  .trace-caption code, .trace-caption .shape { font-family: var(--font-mono); font-size: 0.82em; background: var(--surface-warm); padding: 0.08em 0.35em; border-radius: 4px; white-space: nowrap; }
+  .trace-counters { display: flex; flex-direction: column; gap: 0.45rem; }
+  .tc-row { display: grid; grid-template-columns: 9.5em 1fr auto; align-items: center; gap: 0.7em; font-size: 0.8rem; color: var(--text-secondary); }
+  .tc-row.time { grid-template-columns: 9.5em 1fr; }
+  .tc-row.time .tc-val { text-align: right; }
+  .tc-bar-wrap { height: 10px; background: var(--surface-warm); border-radius: 4px; overflow: hidden; }
+  .tc-bar { height: 100%; border-radius: 4px; transition: width 0.45s var(--ease-out); }
+  .tc-bar.bytes { background: var(--accent); }
+  .tc-bar.flops { background: var(--swatch-olive); }
+  .tc-val { font-family: var(--font-mono); font-size: 0.78rem; color: var(--text); }
+  .trace-punchline {
+    font-size: 0.86rem; border-left: 3px solid var(--accent); padding-left: 1em;
+    color: var(--text-secondary); transition: opacity 0.4s;
+  }
+  .trace-punchline.is-dim { opacity: 0.35; }
+
+  @media (max-width: 900px) {
+    .die-grid, .roofline-grid, .trace-grid { grid-template-columns: 1fr; }
+    .spec-strip { gap: 0.7rem 1.4rem; }
+  }
+</style>
+
+<script>
+  // ============ view switching ============
+  const btns = Array.from(document.querySelectorAll<HTMLButtonElement>('.view-btn'));
+  const panels = Array.from(document.querySelectorAll<HTMLElement>('[data-panel]'));
+  function activate(view: string) {
+    for (const b of btns) {
+      const on = b.dataset.view === view;
+      b.classList.toggle('is-active', on);
+      b.classList.toggle('ghost', !on);
+    }
+    for (const p of panels) p.classList.toggle('is-hidden', p.dataset.panel !== view);
+  }
+  for (const b of btns) b.addEventListener('click', () => activate(b.dataset.view || 'die'));
+  activate('die'); // JS present: collapse the no-JS stacked layout into tabs
+
+  // ============ view A · die map ============
+  const dieInfo = {
+    default: {
+      k: 'A100-40GB die',
+      t: '826 mm² of silicon, one bottleneck',
+      b: '108 streaming multiprocessors (SMs) share a 40 MB L2 cache and five active HBM2e stacks delivering 1.555 TB/s. Every weight an LLM touches must cross from the flanking HBM into this island — hover a region to see its numbers.',
+    },
+    hbm: {
+      k: 'HBM2e stack',
+      t: '8 GB per stack · 1.555 TB/s aggregate',
+      b: 'Five active stacks (a sixth site exists but is disabled on the 40 GB part) sit on the interposer beside the die, ~400–500 ns away. This is the only level that holds a model: 13.5 GB of FP16 weights, plus KV cache. Split evenly, each SM’s fair share of bandwidth is ~14 GB/s.',
+    },
+    l2: {
+      k: 'L2 cache partition',
+      t: '20 MB × 2 · ~200+ cycles',
+      b: '40 MB total in two partitions joined by a crossbar, with several TB/s of aggregate throughput. But one 4096×4096 FP16 projection is already 33.5 MB — weights stream through L2; they cannot live in it.',
+    },
+    sm: {
+      k: 'Streaming multiprocessor',
+      t: '1 of 108 · 4 tensor cores each',
+      b: 'Per SM: 4 warp schedulers, a 256 KB register file, 192 KB combined L1/shared (up to 164 KB shared). All 108 together deliver 312 dense BF16 TFLOP/s — the machine can do ~200 FLOPs in the time it takes HBM to deliver one byte.',
+    },
+  } as const;
+  const infoK = document.getElementById('die-info-kicker');
+  const infoT = document.getElementById('die-info-title');
+  const infoB = document.getElementById('die-info-body');
+  function setInfo(key: keyof typeof dieInfo) {
+    const d = dieInfo[key];
+    if (infoK) infoK.textContent = d.k;
+    if (infoT) infoT.textContent = d.t;
+    if (infoB) infoB.textContent = d.b;
+  }
+  const dieSvg = document.querySelector('#panel-die svg');
+  dieSvg?.addEventListener('mouseover', (e) => {
+    const region = (e.target as Element).closest<SVGElement>('.region');
+    if (region?.dataset.info) setInfo(region.dataset.info as keyof typeof dieInfo);
+  });
+  dieSvg?.addEventListener('mouseleave', () => setInfo('default'));
+  dieSvg?.addEventListener('click', (e) => {
+    const sm = (e.target as Element).closest<SVGElement>('.sm');
+    if (!sm) return;
+    dieSvg.querySelectorAll('.sm.is-selected').forEach((el) => el.classList.remove('is-selected'));
+    sm.classList.add('is-selected');
+    const which = document.getElementById('sm-detail-which');
+    if (which) which.textContent = `— SM #${Number(sm.dataset.sm) + 1} of 108`;
+    setInfo('sm');
+  });
+
+  // ============ view C · roofline ============
+  const BW = 1.555; // TB/s
+  const PEAK = 312; // TFLOP/s
+  const RIDGE = PEAK / (BW * 1000) * 1000; // ≈ 200.6 FLOP/B
+  const X0 = 60, PX_OCT_X = 53.333, Y0 = 400, PX_OCT_Y = 32.727;
+  const xpx = (ai: number) => X0 + (Math.log2(ai) + 2) * PX_OCT_X;
+  const ypx = (t: number) => Y0 - (Math.log2(t) + 2) * PX_OCT_Y;
+  let bpw = 2; // bytes per weight
+  const slider = document.getElementById('batch-slider') as HTMLInputElement | null;
+  const fmtInt = (x: number) => Math.round(x).toLocaleString('en-US');
+
+  const dmText: Record<string, { code: string }> = {
+    '2':   { code: '14 GB weights ÷ 1.555 TB/s ≈ 9.0 ms/token → ~111 tok/s' },
+    '1':   { code: '7 GB weights ÷ 1.555 TB/s ≈ 4.5 ms/token → ~222 tok/s' },
+    '0.5': { code: '3.5 GB weights ÷ 1.555 TB/s ≈ 2.3 ms/token → ~444 tok/s' },
+  };
+
+  function renderRoofline() {
+    if (!slider) return;
+    const B = 2 ** Number(slider.value);
+    const ai = Math.min(B * (2 / bpw), 1024);
+    const t = Math.min(BW * ai, PEAK);
+    const modelGB = 14 * (bpw / 2);
+    const perSeq = 1555 / modelGB;
+    const compCap = (PEAK * 1e12) / 14e9; // FLOP roof / ~14 GFLOP per token
+    const toks = Math.min(B * perSeq, compCap);
+    const dot = document.getElementById('rf-batch-dot');
+    const lab = document.getElementById('rf-batch-label');
+    const cx = xpx(ai), cy = ypx(t);
+    dot?.setAttribute('cx', String(cx));
+    dot?.setAttribute('cy', String(cy));
+    lab?.setAttribute('x', String(Math.min(cx, 630)));
+    lab?.setAttribute('y', String(Math.max(cy - 16, 52)));
+    if (lab) lab.textContent = `batched decode · B=${B}`;
+    const set = (id: string, txt: string) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+    set('ro-ai', `≈ ${ai < 10 ? ai.toFixed(1) : fmtInt(ai)} FLOP/B`);
+    set('ro-tflops', `≈ ${t < 10 ? t.toFixed(2) : t < 100 ? t.toFixed(1) : t.toFixed(0)} TFLOP/s (${((t / PEAK) * 100).toFixed(1)}% of peak)`);
+    set('ro-toks', toks >= compCap - 1
+      ? `≈ ${fmtInt(compCap)} tok/s (compute roof)`
+      : `≈ ${fmtInt(toks)} tok/s (${B} seq × ${fmtInt(perSeq)})`);
+    const reg = document.getElementById('ro-regime');
+    if (reg) {
+      const mem = ai < RIDGE;
+      reg.textContent = mem ? 'memory-bound' : 'compute-bound';
+      reg.classList.toggle('mem', mem);
+      reg.classList.toggle('comp', !mem);
+    }
+    const dm = document.getElementById('dm-code');
+    if (dm) dm.textContent = dmText[String(bpw)].code;
+  }
+  slider?.addEventListener('input', renderRoofline);
+  document.querySelectorAll<HTMLButtonElement>('.quant-btn').forEach((qb) => {
+    qb.addEventListener('click', () => {
+      document.querySelectorAll('.quant-btn').forEach((x) => x.classList.remove('is-active'));
+      qb.classList.add('is-active');
+      bpw = Number(qb.dataset.bpw);
+      renderRoofline();
+    });
+  });
+  renderRoofline();
+
+  // ============ view D · decode trace ============
+  type Step = { bytes: number; flops: number; cap: string; paths: string[]; flow: string };
+  const MB = 1e6, GB = 1e9;
+  const steps: Step[] = [
+    { bytes: 0, flops: 0, paths: [], flow: 'idle — waiting for a token',
+      cap: 'A new token needs to be generated. The entire model sits in HBM; the “state” the GPU actually computes on — one 4096-long activation vector — is 8 KB. Press <strong>Next</strong> (or Play) to watch what has to move.' },
+    { bytes: 8.2e3, flops: 0, paths: ['w'], flow: 'embedding row → SMEM',
+      cap: 'Embedding lookup: one row of <span class="shape">E[32000×4096]</span> — 4096 FP16 values, 8 KB. The activation <span class="shape">x[1×4096]</span> now lives on-die in SMEM/registers for the whole step.' },
+    { bytes: 134.2 * MB, flops: 134.2e6, paths: ['w'], flow: 'layer 1: Wq Wk Wv Wo streaming',
+      cap: 'Layer 1 attention projections: <span class="shape">x[1×4096] × W{q,k,v,o}[4096×4096]</span>. Four 33.6 MB matrices stream in; each FP16 weight is used for exactly 2 FLOPs, then discarded. This is a GEMV: arithmetic intensity ≈ 1 FLOP/byte.' },
+    { bytes: 67.1 * MB, flops: 67.1e6, paths: ['kv'], flow: 'layer 1: KV cache read + append',
+      cap: 'Attention over history: <span class="shape">q · Kᵀ[4096 tok × 4096]</span>, then <span class="shape">scores × V</span> — 67 MB of layer-1 KV cache read, +2 KB appended. Also AI ≈ 1, and unlike weights, batching does <em>not</em> amortize it: every sequence reads its own KV.' },
+    { bytes: 270.5 * MB, flops: 270.5e6, paths: ['w'], flow: 'layer 1: MLP weights streaming',
+      cap: 'Layer 1 MLP: <span class="shape">W_gate, W_up [4096×11008]</span> and <span class="shape">W_down [11008×4096]</span> — 3 × 90.2 MB = 271 MB. The FFN is roughly two-thirds of all weight bytes in the model.' },
+    { bytes: 14.626 * GB, flops: 14.626e9, paths: ['w', 'kv'], flow: 'layers 2–32: same pattern ×31',
+      cap: 'Layers 2–32 repeat the identical pattern: 31 more × (134 MB attention weights + 67 MB KV + 271 MB MLP) ≈ 14.6 GB. The activation shuttling between layers never leaves the SMs.' },
+    { bytes: 262.1 * MB, flops: 262.1e6, paths: ['w'], flow: 'LM head → logits → one token',
+      cap: 'LM head: <span class="shape">h[1×4096] × W[4096×32000]</span> = 262 MB read for 32,000 logits → sample → <strong>one token</strong>. Now do it all again for the next one.' },
+    { bytes: 0, flops: 0, paths: [], flow: 'done: 1 token out',
+      cap: 'Total: ≈<strong>15.4 GB</strong> crossed the HBM interface to produce ≈<strong>15 GFLOP</strong> of useful math — AI ≈ 1, versus a machine balance point of ≈200. The byte-time floor is ~9.9 ms; the FLOP time would be ~0.05 ms.' },
+  ];
+  const cumBytes: number[] = []; const cumFlops: number[] = [];
+  steps.reduce((a, s, i) => (cumBytes[i] = a + s.bytes), 0);
+  steps.reduce((a, s, i) => (cumFlops[i] = a + s.flops), 0);
+  const TOTAL_B = cumBytes[cumBytes.length - 1];
+  const TOTAL_F = cumFlops[cumFlops.length - 1];
+  const fmtBytes = (b: number) =>
+    b <= 0 ? '0 B' : b < 1e4 ? `${(b / 1e3).toFixed(1)} KB` : b < GB ? `${(b / MB).toFixed(0)} MB` : `${(b / GB).toFixed(2)} GB`;
+  const fmtFlops = (f: number) =>
+    f <= 0 ? '0' : f < 1e9 ? `${(f / 1e6).toFixed(0)} MFLOP` : `${(f / 1e9).toFixed(2)} GFLOP`;
+
+  let stepIdx = 0;
+  let playTimer: ReturnType<typeof setInterval> | null = null;
+  const $ = (id: string) => document.getElementById(id);
+  function renderTrace() {
+    const s = steps[stepIdx];
+    const capEl = $('tr-caption'); if (capEl) capEl.innerHTML = s.cap;
+    const num = $('tr-stepnum'); if (num) num.textContent = `step ${stepIdx} / ${steps.length - 1}`;
+    $('tr-path-w')?.classList.toggle('is-live', s.paths.includes('w'));
+    $('tr-path-kv')?.classList.toggle('is-live', s.paths.includes('kv'));
+    const flow = $('tr-flow-label'); if (flow) flow.textContent = s.flow;
+    const cb = cumBytes[stepIdx], cf = cumFlops[stepIdx];
+    const bv = $('tc-bytes'); if (bv) bv.textContent = fmtBytes(cb);
+    const fv = $('tc-flops'); if (fv) fv.textContent = fmtFlops(cf);
+    const bb = $('tc-bytes-bar'); if (bb) bb.style.width = `${(cb / TOTAL_B) * 100}%`;
+    const fb = $('tc-flops-bar'); if (fb) fb.style.width = `${(cf / TOTAL_F) * 100}%`;
+    const tm = $('tc-time-mem'); if (tm) tm.textContent = `${((cb / 1.555e12) * 1e3).toFixed(2)} ms  (@ 1.555 TB/s)`;
+    const tc = $('tc-time-comp'); if (tc) tc.textContent = `${((cf / 312e12) * 1e3).toFixed(3)} ms  (@ 312 TFLOP/s)`;
+    $('tr-punchline')?.classList.toggle('is-dim', stepIdx !== steps.length - 1);
+  }
+  function stopPlay() {
+    if (playTimer) { clearInterval(playTimer); playTimer = null; }
+    const pb = $('tr-play'); if (pb) pb.textContent = '▶ Play';
+  }
+  $('tr-next')?.addEventListener('click', () => { stopPlay(); stepIdx = Math.min(stepIdx + 1, steps.length - 1); renderTrace(); });
+  $('tr-prev')?.addEventListener('click', () => { stopPlay(); stepIdx = Math.max(stepIdx - 1, 0); renderTrace(); });
+  $('tr-play')?.addEventListener('click', () => {
+    if (playTimer) { stopPlay(); return; }
+    if (stepIdx >= steps.length - 1) stepIdx = 0;
+    const pb = $('tr-play'); if (pb) pb.textContent = '⏸ Pause';
+    renderTrace();
+    playTimer = setInterval(() => {
+      stepIdx += 1;
+      if (stepIdx >= steps.length - 1) stopPlay();
+      renderTrace();
+    }, 2200);
+  });
+  renderTrace();
+</script>

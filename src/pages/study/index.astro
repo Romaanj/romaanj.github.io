@@ -1,0 +1,110 @@
+---
+import Base from '../../layouts/Base.astro';
+import { getCollection } from 'astro:content';
+
+const entries = await getCollection('study');
+
+type StudyEntry = (typeof entries)[number];
+
+const byOrderThenDate = (a: StudyEntry, b: StudyEntry) =>
+  a.data.order - b.data.order || a.data.date.valueOf() - b.data.date.valueOf();
+
+const tracks = [
+  {
+    key: 'models',
+    label: 'AI Models',
+    blurb: 'Architectures pulled apart layer by layer — what each block computes, and what actually moves between them.',
+  },
+  {
+    key: 'quantization',
+    label: 'Quantization',
+    blurb: 'From fp16 tensors to packed low-bit integers: scales, zero-points, and where the error really goes.',
+  },
+  {
+    key: 'gpu',
+    label: 'GPU',
+    blurb: 'The machine under the math — memory hierarchy, bandwidth, occupancy, and why most kernels wait on bytes.',
+  },
+] as const;
+
+const byTrack = Object.fromEntries(
+  tracks.map((t) => [t.key, entries.filter((e) => e.data.track === t.key).sort(byOrderThenDate)])
+) as Record<(typeof tracks)[number]['key'], StudyEntry[]>;
+
+const hrefOf = (e: StudyEntry) => e.data.interactive ?? `/study/${e.id}/`;
+const dateOf = (e: StudyEntry) => e.data.date.toISOString().slice(0, 10);
+---
+
+<Base
+  title="Study — Junwon Lee"
+  description="Interactive tear-downs of AI model architectures, quantization pipelines, and GPU internals — drawn until the data flow is obvious."
+>
+  <section class="section study-hero">
+    <div class="container">
+      <p class="eyebrow">Study</p>
+      <h1>Tear it down until the matrices show</h1>
+      <p class="lede">
+        My test for understanding a system: can I draw its data flow from memory — every tensor,
+        every reshape, every byte that crosses a bus? These notes are interactive tear-downs of
+        model architectures, quantization pipelines, and GPU internals, built while studying them
+        (공부하면서 그린 해부도).
+      </p>
+    </div>
+  </section>
+
+  {tracks.map((track) => (
+    <section class="section-tight">
+      <div class="container">
+        <div class="track-head">
+          <p class="eyebrow">{track.label}</p>
+          <h2>{track.label}</h2>
+          <p class="track-blurb">{track.blurb}</p>
+        </div>
+        {byTrack[track.key].length > 0 ? (
+          <div class="card-grid">
+            {byTrack[track.key].map((e) => (
+              <a class="card" href={hrefOf(e)}>
+                <span class="card-kicker">{track.label}</span>
+                <h3>{e.data.title}</h3>
+                <p>{e.data.summary}</p>
+                <span class="card-meta">
+                  {e.data.interactive && <span class="tag accent">Interactive</span>}
+                  <span>{dateOf(e)}</span>
+                </span>
+              </a>
+            ))}
+          </div>
+        ) : (
+          <p class="empty-track">Notes incoming — this bench is still being set up.</p>
+        )}
+      </div>
+    </section>
+  ))}
+</Base>
+
+<style>
+  .study-hero {
+    padding-bottom: clamp(1.5rem, 4vw, 3rem);
+  }
+  .study-hero .lede {
+    margin-top: 1.4rem;
+    max-width: 46rem;
+  }
+  .track-head {
+    margin-bottom: 1.6rem;
+  }
+  .track-head h2 {
+    margin-top: 0.2rem;
+  }
+  .track-blurb {
+    color: var(--text-secondary);
+    max-width: 42rem;
+    margin-top: 0.5rem;
+  }
+  .empty-track {
+    color: var(--text-secondary);
+    font-style: italic;
+    border-left: 2px solid var(--line);
+    padding-left: 1rem;
+  }
+</style>

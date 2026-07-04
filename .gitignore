@@ -1,0 +1,17 @@
+# build output
+dist/
+
+# generated types / astro cache
+.astro/
+
+# dependencies
+node_modules/
+
+# logs
+npm-debug.log*
+
+# macOS
+.DS_Store
+
+# internal ops drafts — never publish (contains machine-local paths)
+docs/AUTOSWEEP-INTEGRATION.md

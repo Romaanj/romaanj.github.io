@@ -1,0 +1,71 @@
+---
+import Base from '../../layouts/Base.astro';
+import { getCollection, render } from 'astro:content';
+
+export async function getStaticPaths() {
+  const entries = await getCollection('study');
+  return entries
+    .filter((e) => !e.data.interactive)
+    .map((e) => ({ params: { slug: e.id }, props: { entry: e } }));
+}
+
+const { entry } = Astro.props;
+const { Content } = await render(entry);
+
+const trackLabel: Record<string, string> = {
+  models: 'AI Models',
+  quantization: 'Quantization',
+  gpu: 'GPU',
+};
+const dateStr = entry.data.date.toISOString().slice(0, 10);
+---
+
+<Base title={`${entry.data.title} — Junwon Lee`} description={entry.data.summary}>
+  <section class="section">
+    <div class="container">
+      <div class="note-head">
+        <a class="back-link" href="/study/">&larr; All study notes</a>
+        <p class="eyebrow">{trackLabel[entry.data.track] ?? entry.data.track}</p>
+        <h1>{entry.data.title}</h1>
+        <div class="note-meta">
+          <span class="tag">{trackLabel[entry.data.track] ?? entry.data.track}</span>
+          {entry.data.tags.map((t) => <span class="tag">{t}</span>)}
+          <span class="note-date">{dateStr}</span>
+        </div>
+      </div>
+      <div class="prose">
+        <Content />
+      </div>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .note-head {
+    max-width: 720px;
+    margin-bottom: 2.5rem;
+  }
+  .back-link {
+    display: inline-block;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    text-decoration: none;
+    margin-bottom: 1.6rem;
+    transition: color 0.15s ease;
+  }
+  .back-link:hover {
+    color: var(--accent-strong);
+  }
+  .note-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-top: 1rem;
+  }
+  .note-date {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    color: var(--text-tertiary);
+  }
+</style>

@@ -1,0 +1,149 @@
+---
+import Base from '../layouts/Base.astro';
+import { getCollection } from 'astro:content';
+
+const reviews = (await getCollection('reviews'))
+  .sort((a, b) => b.data.date.valueOf() - a.data.date.valueOf())
+  .slice(0, 3);
+const study = (await getCollection('study'))
+  .sort((a, b) => b.data.date.valueOf() - a.data.date.valueOf())
+  .slice(0, 3);
+
+const trackLabel: Record<string, string> = {
+  models: 'AI Models',
+  quantization: 'Quantization',
+  gpu: 'GPU',
+};
+const studyHref = (e: (typeof study)[number]) => e.data.interactive ?? `/study/${e.id}/`;
+---
+
+<Base title="Junwon Lee — Efficient AI Research">
+  <!-- hero -->
+  <section class="section hero">
+    <div class="container">
+      <p class="eyebrow">Research · Systems · Efficiency</p>
+      <h1>
+        Making large-model inference<br />
+        <em>cheap enough to matter.</em>
+      </h1>
+      <p class="lede">
+        I'm Junwon Lee, a graduate researcher at IRIS Lab, Sungkyunkwan University.
+        I work on training-free acceleration of diffusion LLMs — KV-cache compression,
+        quantization, and the memory wall between HBM and useful tokens.
+      </p>
+      <div class="hero-actions">
+        <a class="btn" href="/research/">Explore research</a>
+        <a class="btn ghost" href="/about/">About me</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- pillars -->
+  <section class="section-tight">
+    <div class="container">
+      <div class="card-grid pillars">
+        <a class="card" href="/research/">
+          <span class="card-kicker">Research</span>
+          <h3>Inference acceleration</h3>
+          <p>Diffusion-LM serving, KV-cache compression and quantization — where the FLOPs are cheap and the bytes are not.</p>
+          <span class="card-meta arrow-link">Research areas</span>
+        </a>
+        <a class="card" href="/study/">
+          <span class="card-kicker">Study</span>
+          <h3>Tear-downs, visualized</h3>
+          <p>Interactive anatomy of models, quantization pipelines, and GPU memory — every matrix multiply drawn out.</p>
+          <span class="card-meta arrow-link">Open the lab bench</span>
+        </a>
+        <a class="card" href="/reviews/">
+          <span class="card-kicker">Paper Review</span>
+          <h3>The reading graph</h3>
+          <p>Daily paper reviews on dLLMs, KV caching, sparse attention and hybrid architectures — linked like an Obsidian vault.</p>
+          <span class="card-meta arrow-link">Browse reviews</span>
+        </a>
+        <a class="card" href="/projects/">
+          <span class="card-kicker">Project</span>
+          <h3>Side quests</h3>
+          <p>Things built for fun and curiosity — market-flow analysis, tooling, and whatever else escapes the lab.</p>
+          <span class="card-meta arrow-link">See projects</span>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  {reviews.length > 0 && (
+    <section class="section">
+      <div class="container">
+        <div class="row-head">
+          <div>
+            <p class="eyebrow">Latest reviews</p>
+            <h2>Recently on the reading list</h2>
+          </div>
+          <a class="arrow-link" href="/reviews/">All reviews</a>
+        </div>
+        <div class="card-grid">
+          {reviews.map((r) => (
+            <a class="card" href={`/reviews/${r.id}/`}>
+              <span class="card-kicker">{r.data.tags[0] ?? 'Paper'}</span>
+              <h3>{r.data.title}</h3>
+              <p>{r.data.summary}</p>
+              <span class="card-meta">
+                {r.data.lab && <span>{r.data.lab}</span>}
+                <span>{r.data.date.toISOString().slice(0, 10)}</span>
+              </span>
+            </a>
+          ))}
+        </div>
+      </div>
+    </section>
+  )}
+
+  {study.length > 0 && (
+    <section class="section band-dark">
+      <div class="container">
+        <div class="row-head">
+          <div>
+            <p class="eyebrow">Study</p>
+            <h2>On the bench right now</h2>
+          </div>
+          <a class="arrow-link" href="/study/">All notes</a>
+        </div>
+        <div class="card-grid">
+          {study.map((s) => (
+            <a class="card" href={studyHref(s)}>
+              <span class="card-kicker">{trackLabel[s.data.track]}</span>
+              <h3>{s.data.title}</h3>
+              <p>{s.data.summary}</p>
+              <span class="card-meta">
+                {s.data.interactive && <span class="tag accent">Interactive</span>}
+              </span>
+            </a>
+          ))}
+        </div>
+      </div>
+    </section>
+  )}
+</Base>
+
+<style>
+  .hero { padding-top: clamp(3.5rem, 9vw, 7rem); }
+  .hero h1 em {
+    font-style: italic;
+    color: var(--accent-strong);
+  }
+  .hero-actions {
+    display: flex;
+    gap: 0.8rem;
+    margin-top: 2.2rem;
+    flex-wrap: wrap;
+  }
+  .lede { margin-top: 1.6rem; }
+  .row-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+  }
+  .pillars .card h3 { font-size: 1.35rem; }
+</style>

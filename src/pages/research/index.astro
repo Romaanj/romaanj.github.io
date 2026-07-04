@@ -1,0 +1,254 @@
+---
+import Base from '../../layouts/Base.astro';
+---
+
+<Base
+  title="Research — Junwon Lee"
+  description="Research areas: diffusion LLM inference, KV-cache compression and quantization, speculative decoding, and video diffusion efficiency — where algorithms meet the memory wall."
+>
+  <!-- hero -->
+  <section class="section hero">
+    <div class="container">
+      <p class="eyebrow">Research</p>
+      <h1>
+        The cost of inference is <em>bytes moved</em>,<br />
+        not math done.
+      </h1>
+      <p class="lede">
+        Modern language-model inference rarely runs out of arithmetic — it runs out of
+        memory bandwidth. Weights and KV caches stream through HBM far slower than tensor
+        cores can consume them, so the useful question is almost never "how do we compute
+        faster?" but "how do we move less?" I study training-free ways to answer that for
+        diffusion LLMs and their neighbors: the interesting problems live at the boundary
+        of algorithms and hardware (알고리즘과 하드웨어의 경계), where a decoding rule,
+        a cache layout, and a roofline plot all constrain each other.
+      </p>
+    </div>
+  </section>
+
+  <!-- research areas -->
+  <section class="section-tight">
+    <div class="container">
+      <p class="eyebrow">Research areas</p>
+      <h2>Four rooms, one wall</h2>
+      <p class="lede areas-lede">
+        Different model families, same recurring bottleneck: memory movement.
+        Each area below is a different angle on that one wall.
+      </p>
+
+      <div class="card-grid">
+        <div class="card area-card area-dllm">
+          <span class="card-kicker">01 · Diffusion LLMs</span>
+          <h3>Diffusion LLM inference</h3>
+          <p>
+            Diffusion LLMs decode many tokens per step instead of one, which rewrites the
+            serving economics we take for granted in autoregressive models. I work on
+            parallel decoding schedules, what can safely be cached across denoising steps,
+            and measuring dLLM inference by end-to-end serving cost and quality —
+            not per-step proxies.
+          </p>
+          <span class="card-meta">
+            <span class="tag">parallel decoding</span>
+            <span class="tag">caching</span>
+            <span class="tag">serving economics</span>
+            <span class="tag">dLLM vs AR</span>
+          </span>
+        </div>
+
+        <div class="card area-card area-kv">
+          <span class="card-kicker">02 · Memory</span>
+          <h3>KV-cache compression &amp; quantization</h3>
+          <p>
+            At long context and large batch, the KV cache — not the weights — is what
+            caps how many requests fit on a GPU. I study low-bit and structured
+            representations of keys and values that shrink that footprint while keeping
+            accuracy, and why keys and values deserve different treatment in the first place.
+          </p>
+          <span class="card-meta">
+            <span class="tag">low-bit KV</span>
+            <span class="tag">quantization</span>
+            <span class="tag">long context</span>
+            <span class="tag">memory wall</span>
+          </span>
+        </div>
+
+        <div class="card area-card area-spec">
+          <span class="card-kicker">03 · Decoding</span>
+          <h3>Speculative &amp; parallel decoding</h3>
+          <p>
+            Speculation trades cheap drafts for expensive verifications, and the whole
+            bargain hinges on acceptance behavior. I care about the latency structure
+            underneath: when drafting pays for itself, how acceptance rates move with the
+            task, and how these ideas compose with parallel decoders rather than compete
+            with them.
+          </p>
+          <span class="card-meta">
+            <span class="tag">drafting</span>
+            <span class="tag">acceptance rates</span>
+            <span class="tag">latency structure</span>
+          </span>
+        </div>
+
+        <div class="card area-card area-video">
+          <span class="card-kicker">04 · Multimodal</span>
+          <h3>Video &amp; multimodal diffusion efficiency</h3>
+          <p>
+            Video diffusion transformers hit the same memory-wall story with the volume
+            turned up: enormous attention states, heavy redundancy across denoising steps
+            and frames. The open question is which text-side lessons transfer — and which
+            quietly fail — when the tokens are spatiotemporal.
+          </p>
+          <span class="card-meta">
+            <span class="tag">video DiT</span>
+            <span class="tag">attention caching</span>
+            <span class="tag">cross-domain transfer</span>
+          </span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- how I work -->
+  <section class="section band-dark work-band">
+    <div class="container">
+      <p class="eyebrow">How I work</p>
+      <h2>Three habits I try not to break</h2>
+      <div class="principles">
+        <div class="principle">
+          <span class="principle-num">1</span>
+          <h3>Observe before you optimize.</h3>
+          <p>
+            A bottleneck is an empirical fact, not an assumption. Before touching any
+            technique, profile where the bytes and the milliseconds actually go — the
+            measured system is allowed to disagree with the paper diagram, and usually does.
+          </p>
+        </div>
+        <div class="principle">
+          <span class="principle-num">2</span>
+          <h3>A method must be forced by a mechanism.</h3>
+          <p>
+            A good method is the corollary of an explanation: first understand why the
+            cost arises, then let the fix follow from that understanding. If a simpler
+            baseline would work, the honest move is to use it and say so.
+          </p>
+        </div>
+        <div class="principle">
+          <span class="principle-num">3</span>
+          <h3>Report what the measurement says.</h3>
+          <p>
+            Matched baselines, controlled comparisons, and numbers taken from runs that
+            actually finished. Negative results are results — an experiment that rules
+            out a plausible story earns its keep.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- publications -->
+  <section class="section">
+    <div class="container">
+      <p class="eyebrow">Publications &amp; preprints</p>
+      <h2>Selected work</h2>
+
+      <div class="pub-empty">
+        <p class="serif pub-empty-line">First entries are in the pipeline.</p>
+        <p class="pub-empty-note">
+          Until they land here, the writing lives elsewhere: I keep a running set of
+          reviews of other people's papers — dLLMs, KV caching, sparse attention —
+          on the Paper Review page.
+        </p>
+        <a class="arrow-link" href="/reviews/">Read the paper reviews</a>
+      </div>
+
+      <!-- template: copy one <li class="pub-item"> per publication once entries exist.
+      <ul class="pub-list">
+        <li class="pub-item">
+          <span class="pub-venue tag accent">VENUE 2027</span>
+          <h3 class="pub-title"><a href="https://arxiv.org/abs/XXXX.XXXXX">Paper Title Goes Here</a></h3>
+          <p class="pub-authors"><strong>Junwon Lee</strong>, Coauthor One, Coauthor Two</p>
+          <p class="pub-blurb">One-sentence description of the contribution.</p>
+          <span class="card-meta">
+            <a class="arrow-link" href="https://arxiv.org/abs/XXXX.XXXXX">arXiv</a>
+            <a class="arrow-link" href="https://github.com/Romaanj/repo">Code</a>
+          </span>
+        </li>
+      </ul>
+      -->
+    </div>
+  </section>
+</Base>
+
+<style>
+  .hero {
+    padding-top: clamp(3.5rem, 9vw, 6.5rem);
+  }
+  .hero h1 em {
+    font-style: italic;
+    color: var(--accent-strong);
+  }
+  .hero .lede {
+    margin-top: 1.6rem;
+  }
+
+  .areas-lede {
+    margin: 0.9rem 0 2.2rem;
+  }
+
+  /* area cards: swatch-tinted top rule per area */
+  .area-card {
+    border-top: 3px solid var(--line-strong);
+  }
+  .area-dllm  { border-top-color: var(--accent); }
+  .area-kv    { border-top-color: var(--swatch-slate); }
+  .area-spec  { border-top-color: var(--swatch-olive); }
+  .area-video { border-top-color: var(--swatch-sky); }
+
+  /* how I work band */
+  .work-band h2 {
+    margin-bottom: 2.4rem;
+  }
+  .principles {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: clamp(1.4rem, 3vw, 2.6rem);
+  }
+  .principle {
+    border-top: 1px solid var(--line-on-dark);
+    padding-top: 1.3rem;
+  }
+  .principle-num {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--accent);
+    display: inline-block;
+    margin-bottom: 0.7rem;
+  }
+  .principle h3 {
+    font-size: 1.22rem;
+    margin-bottom: 0.6rem;
+  }
+  .principle p {
+    font-size: 0.94rem;
+    margin: 0;
+  }
+
+  /* publications empty state */
+  .pub-empty {
+    margin-top: 1.8rem;
+    max-width: var(--prose-width);
+    border-left: 3px solid var(--accent);
+    padding-left: clamp(1.2rem, 3vw, 2rem);
+  }
+  .pub-empty-line {
+    font-size: clamp(1.35rem, 2.4vw, 1.8rem);
+    color: var(--text);
+    margin-bottom: 0.7rem;
+    line-height: 1.3;
+  }
+  .pub-empty-note {
+    color: var(--text-secondary);
+    max-width: 40em;
+    margin-bottom: 1.1rem;
+  }
+</style>

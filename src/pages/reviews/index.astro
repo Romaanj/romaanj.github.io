@@ -1,0 +1,608 @@
+---
+import Base from '../../layouts/Base.astro';
+import { getCollection } from 'astro:content';
+
+const entries = await getCollection('reviews');
+const sorted = [...entries].sort((a, b) => b.data.date.getTime() - a.data.date.getTime());
+const ids = new Set(entries.map((e) => e.id));
+
+/* ---------- graph data (build time) ---------- */
+
+const shortLabel = (title: string) => {
+  const head = title.split(':')[0].trim();
+  return head.length > 30 ? head.slice(0, 28) + '…' : head;
+};
+
+const GROUP_COLORS: Record<string, string> = {
+  'diffusion-llm': 'var(--swatch-clay)',
+  'kv-cache': 'var(--swatch-sky)',
+  quantization: 'var(--swatch-heather)',
+  'sparse-attention': 'var(--swatch-olive)',
+  'linear-attention': 'var(--swatch-kraft)',
+  serving: 'var(--swatch-slate)',
+  'speculative-decoding': 'var(--accent)',
+};
+const FALLBACK_COLORS = [
+  'var(--swatch-clay)',
+  'var(--swatch-sky)',
+  'var(--swatch-olive)',
+  'var(--swatch-heather)',
+  'var(--swatch-kraft)',
+  'var(--swatch-slate)',
+];
+
+const nodes = entries.map((e) => ({
+  id: e.id,
+  label: shortLabel(e.data.title),
+  title: e.data.title,
+  group: e.data.tags[0] ?? 'misc',
+  tags: e.data.tags,
+  summary: e.data.summary,
+  url: `/reviews/${e.id}/`,
+}));
+
+const edgeKey = (a: string, b: string) => [a, b].sort().join('~');
+const edgeMap = new Map<string, { source: string; target: string; kind: 'link' | 'tag' }>();
+
+// explicit vault links (deduped, dangling dropped)
+for (const e of entries) {
+  for (const target of e.data.links) {
+    if (target === e.id || !ids.has(target)) continue;
+    const k = edgeKey(e.id, target);
+    if (!edgeMap.has(k)) edgeMap.set(k, { source: e.id, target, kind: 'link' });
+  }
+}
+// lighter shared-tag edges (>= 2 tags in common, only where no explicit link)
+for (let i = 0; i < entries.length; i++) {
+  for (let j = i + 1; j < entries.length; j++) {
+    const a = entries[i];
+    const b = entries[j];
+    const shared = a.data.tags.filter((t) => b.data.tags.includes(t));
+    if (shared.length >= 2) {
+      const k = edgeKey(a.id, b.id);
+      if (!edgeMap.has(k)) edgeMap.set(k, { source: a.id, target: b.id, kind: 'tag' });
+    }
+  }
+}
+const edges = [...edgeMap.values()];
+
+const degree: Record<string, number> = {};
+for (const n of nodes) degree[n.id] = 0;
+for (const ed of edges) {
+  degree[ed.source] += 1;
+  degree[ed.target] += 1;
+}
+
+const groupsInUse = [...new Set(nodes.map((n) => n.group))];
+const groupColor: Record<string, string> = {};
+groupsInUse.forEach((g, i) => {
+  groupColor[g] = GROUP_COLORS[g] ?? FALLBACK_COLORS[i % FALLBACK_COLORS.length];
+});
+
+const graph = {
+  nodes: nodes.map((n) => ({ ...n, degree: degree[n.id], color: groupColor[n.group] })),
+  edges,
+};
+
+/* ---------- monthly listing ---------- */
+
+const fmtDay = (d: Date) =>
+  d.toLocaleDateString('en-US', { month: 'short', day: '2-digit' });
+const monthKey = (d: Date) =>
+  d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+const months: { label: string; items: typeof sorted }[] = [];
+for (const e of sorted) {
+  const label = monthKey(e.data.date);
+  const last = months[months.length - 1];
+  if (last && last.label === label) last.items.push(e);
+  else months.push({ label, items: [e] });
+}
+---
+
+<Base
+  title="Paper Review — Junwon Lee"
+  description="Daily reviews of papers on diffusion LLMs, KV caching, quantization, and sparse & hybrid attention — linked like a vault."
+>
+  <section class="section">
+    <div class="container">
+      <p class="eyebrow">Paper Review</p>
+      <h1>A reading vault for efficient inference</h1>
+      <p class="lede">
+        Daily reviews of papers on diffusion LLMs, KV caching, quantization, sparse &amp;
+        hybrid attention — auto-collected, human-curated, and linked like a vault
+        (매일 한 편씩).
+      </p>
+
+      <div class="viz-frame graph-frame">
+        <div class="graph-toolbar">
+          <span class="graph-hint">drag · zoom · hover · click to open</span>
+          <div class="graph-legend" id="graph-legend">
+            {groupsInUse.map((g) => (
+              <button
+                class="tag legend-pill"
+                type="button"
+                data-group={g}
+                style={`--pill-color: ${groupColor[g]}`}
+              >
+                <span class="pill-dot" aria-hidden="true"></span>
+                {g}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div class="graph-stage" id="graph-stage">
+          <svg id="review-graph" role="img" aria-label="Force-directed graph of paper reviews linked by references and shared tags"></svg>
+          <div class="graph-tooltip" id="graph-tooltip" hidden>
+            <strong class="tt-title"></strong>
+            <span class="tt-summary"></span>
+          </div>
+        </div>
+      </div>
+
+      <script type="application/json" id="review-graph-data" set:html={JSON.stringify(graph)} />
+    </div>
+  </section>
+
+  <section class="section-tight">
+    <div class="container">
+      <p class="eyebrow">Archive</p>
+      <h2>All reviews</h2>
+
+      {months.map((m) => (
+        <div class="month-group">
+          <h3 class="month-label">{m.label}</h3>
+          <ul class="review-list">
+            {m.items.map((e) => (
+              <li class="review-row">
+                <a class="row-link" href={`/reviews/${e.id}/`}>
+                  <span class="row-date">{fmtDay(e.data.date)}</span>
+                  <span class="row-main">
+                    <span class="row-title">{e.data.title}</span>
+                    <span class="row-summary">{e.data.summary}</span>
+                    <span class="row-meta">
+                      {e.data.lab && <span class="lab-badge">{e.data.lab}</span>}
+                      {e.data.tags.map((t) => (
+                        <span class="tag">{t}</span>
+                      ))}
+                    </span>
+                  </span>
+                  <span class="row-arrow" aria-hidden="true">→</span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  </section>
+</Base>
+
+<script>
+  import {
+    forceSimulation,
+    forceLink,
+    forceManyBody,
+    forceCenter,
+    forceCollide,
+    forceX,
+    forceY,
+  } from 'd3-force';
+  import { select } from 'd3-selection';
+  import { zoom } from 'd3-zoom';
+  import { drag } from 'd3-drag';
+
+  interface GNode {
+    id: string;
+    label: string;
+    title: string;
+    group: string;
+    tags: string[];
+    summary: string;
+    url: string;
+    degree: number;
+    color: string;
+    x?: number;
+    y?: number;
+    fx?: number | null;
+    fy?: number | null;
+  }
+  interface GEdge {
+    source: string | GNode;
+    target: string | GNode;
+    kind: 'link' | 'tag';
+  }
+
+  const dataEl = document.getElementById('review-graph-data');
+  const stage = document.getElementById('graph-stage');
+  const svgEl = document.getElementById('review-graph');
+  const tooltip = document.getElementById('graph-tooltip');
+  const legend = document.getElementById('graph-legend');
+
+  if (dataEl && stage && svgEl && tooltip) {
+    const graph = JSON.parse(dataEl.textContent || '{"nodes":[],"edges":[]}') as {
+      nodes: GNode[];
+      edges: GEdge[];
+    };
+
+    let width = stage.clientWidth || 800;
+    let height = stage.clientHeight || 460;
+
+    const radius = (d: GNode) => 8 + d.degree * 2.5;
+
+    // adjacency for hover highlighting
+    const neighbors = new Map<string, Set<string>>();
+    for (const n of graph.nodes) neighbors.set(n.id, new Set([n.id]));
+    for (const e of graph.edges) {
+      const s = typeof e.source === 'string' ? e.source : e.source.id;
+      const t = typeof e.target === 'string' ? e.target : e.target.id;
+      neighbors.get(s)?.add(t);
+      neighbors.get(t)?.add(s);
+    }
+
+    const svg = select(svgEl as unknown as SVGSVGElement)
+      .attr('viewBox', `0 0 ${width} ${height}`)
+      .attr('preserveAspectRatio', 'xMidYMid meet');
+
+    const root = svg.append('g');
+
+    const linkSel = root
+      .append('g')
+      .selectAll('line')
+      .data(graph.edges)
+      .join('line')
+      .attr('stroke', (d) => (d.kind === 'link' ? 'var(--line-strong)' : 'var(--line)'))
+      .attr('stroke-width', (d) => (d.kind === 'link' ? 1.8 : 1))
+      .attr('stroke-dasharray', (d) => (d.kind === 'link' ? null : '3 4'))
+      .attr('stroke-linecap', 'round');
+
+    const nodeSel = root
+      .append('g')
+      .selectAll('g')
+      .data(graph.nodes)
+      .join('g')
+      .attr('cursor', 'pointer');
+
+    nodeSel
+      .append('circle')
+      .attr('r', radius)
+      .attr('fill', (d) => d.color)
+      .attr('stroke', 'var(--bg)')
+      .attr('stroke-width', 2);
+
+    nodeSel
+      .append('text')
+      .text((d) => d.label)
+      .attr('text-anchor', 'middle')
+      .attr('dy', (d) => radius(d) + 14)
+      .attr('font-family', "'Inter Variable', Inter, sans-serif")
+      .attr('font-size', '11px')
+      .attr('font-weight', '500')
+      .attr('fill', 'var(--text-secondary)')
+      .attr('paint-order', 'stroke')
+      .attr('stroke', 'var(--bg)')
+      .attr('stroke-width', 3)
+      .attr('pointer-events', 'none');
+
+    const sim = forceSimulation<GNode>(graph.nodes)
+      .force(
+        'link',
+        forceLink<GNode, GEdge>(graph.edges)
+          .id((d) => d.id)
+          .distance((d) => (d.kind === 'link' ? 110 : 150))
+          .strength((d) => (d.kind === 'link' ? 0.5 : 0.12))
+      )
+      .force('charge', forceManyBody().strength(-320))
+      .force('center', forceCenter(width / 2, height / 2))
+      .force('collide', forceCollide<GNode>().radius((d) => radius(d) + 26))
+      .force('x', forceX(width / 2).strength(0.05))
+      .force('y', forceY(height / 2).strength(0.07));
+
+    sim.on('tick', () => {
+      linkSel
+        .attr('x1', (d) => (d.source as GNode).x ?? 0)
+        .attr('y1', (d) => (d.source as GNode).y ?? 0)
+        .attr('x2', (d) => (d.target as GNode).x ?? 0)
+        .attr('y2', (d) => (d.target as GNode).y ?? 0);
+      nodeSel.attr('transform', (d) => `translate(${d.x ?? 0},${d.y ?? 0})`);
+    });
+
+    /* zoom / pan */
+    const zoomBehavior = zoom<SVGSVGElement, unknown>()
+      .scaleExtent([0.4, 3])
+      .on('zoom', (event) => root.attr('transform', event.transform));
+    svg.call(zoomBehavior as never).on('dblclick.zoom', null);
+
+    /* drag */
+    nodeSel.call(
+      drag<SVGGElement, GNode>()
+        .on('start', (event, d) => {
+          if (!event.active) sim.alphaTarget(0.3).restart();
+          d.fx = d.x;
+          d.fy = d.y;
+        })
+        .on('drag', (event, d) => {
+          d.fx = event.x;
+          d.fy = event.y;
+        })
+        .on('end', (event, d) => {
+          if (!event.active) sim.alphaTarget(0);
+          d.fx = null;
+          d.fy = null;
+        }) as never
+    );
+
+    /* filter state (legend pills) */
+    const activeGroups = new Set<string>();
+    const nodeVisible = (d: GNode) => activeGroups.size === 0 || activeGroups.has(d.group);
+
+    /* hover + filter combined opacity pass */
+    let hovered: GNode | null = null;
+    const applyStyles = () => {
+      const hoodOK = (d: GNode) =>
+        !hovered || neighbors.get(hovered.id)?.has(d.id);
+      nodeSel
+        .attr('opacity', (d) => (nodeVisible(d) ? (hoodOK(d) ? 1 : 0.15) : 0.08))
+        .select('circle')
+        .attr('stroke', (d) => (hovered && d.id === hovered.id ? 'var(--accent)' : 'var(--bg)'))
+        .attr('stroke-width', (d) => (hovered && d.id === hovered.id ? 3 : 2));
+      linkSel.attr('opacity', (d) => {
+        const s = d.source as GNode;
+        const t = d.target as GNode;
+        if (!nodeVisible(s) || !nodeVisible(t)) return 0.05;
+        if (!hovered) return 1;
+        return s.id === hovered.id || t.id === hovered.id ? 1 : 0.08;
+      });
+    };
+
+    nodeSel
+      .on('mouseenter', (event: MouseEvent, d: GNode) => {
+        hovered = d;
+        applyStyles();
+        (tooltip.querySelector('.tt-title') as HTMLElement).textContent = d.title;
+        (tooltip.querySelector('.tt-summary') as HTMLElement).textContent = d.summary;
+        tooltip.hidden = false;
+        positionTooltip(event);
+      })
+      .on('mousemove', (event: MouseEvent) => positionTooltip(event))
+      .on('mouseleave', () => {
+        hovered = null;
+        applyStyles();
+        tooltip.hidden = true;
+      })
+      .on('click', (event: MouseEvent, d: GNode) => {
+        if (event.defaultPrevented) return; // suppressed after drag
+        window.location.href = d.url;
+      });
+
+    function positionTooltip(event: MouseEvent) {
+      if (!stage || !tooltip) return;
+      const rect = stage.getBoundingClientRect();
+      let x = event.clientX - rect.left + 14;
+      let y = event.clientY - rect.top + 14;
+      const tw = tooltip.offsetWidth;
+      const th = tooltip.offsetHeight;
+      if (x + tw > rect.width - 8) x = event.clientX - rect.left - tw - 14;
+      if (y + th > rect.height - 8) y = event.clientY - rect.top - th - 14;
+      tooltip.style.left = `${Math.max(8, x)}px`;
+      tooltip.style.top = `${Math.max(8, y)}px`;
+    }
+
+    /* legend pills toggle group filters */
+    legend?.querySelectorAll<HTMLButtonElement>('.legend-pill').forEach((pill) => {
+      pill.addEventListener('click', () => {
+        const g = pill.dataset.group;
+        if (!g) return;
+        if (activeGroups.has(g)) {
+          activeGroups.delete(g);
+          pill.classList.remove('active');
+        } else {
+          activeGroups.add(g);
+          pill.classList.add('active');
+        }
+        applyStyles();
+      });
+    });
+
+    /* keep centered on resize */
+    let resizeTimer: ReturnType<typeof setTimeout>;
+    window.addEventListener('resize', () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        width = stage.clientWidth || width;
+        height = stage.clientHeight || height;
+        svg.attr('viewBox', `0 0 ${width} ${height}`);
+        sim.force('center', forceCenter(width / 2, height / 2));
+        sim.force('x', forceX(width / 2).strength(0.05));
+        sim.force('y', forceY(height / 2).strength(0.07));
+        sim.alpha(0.3).restart();
+      }, 150);
+    });
+  }
+</script>
+
+<style>
+  .graph-frame {
+    margin-top: 2.5rem;
+    padding: 0;
+    overflow: hidden;
+  }
+  .graph-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.85rem 1.1rem;
+    border-bottom: 1px solid var(--line);
+  }
+  .graph-hint {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+    letter-spacing: 0.02em;
+  }
+  .graph-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+  .legend-pill {
+    cursor: pointer;
+    border: 1px solid var(--line);
+    background: transparent;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+  .legend-pill .pill-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--pill-color, var(--accent));
+    flex: none;
+  }
+  .legend-pill:hover {
+    border-color: var(--accent);
+  }
+  .legend-pill.active {
+    background: var(--surface-warm);
+    border-color: var(--pill-color, var(--accent));
+  }
+  .graph-stage {
+    position: relative;
+    height: 480px;
+    background: var(--bg);
+  }
+  .graph-stage svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+  .graph-tooltip {
+    position: absolute;
+    max-width: 280px;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(20, 20, 19, 0.1);
+    padding: 0.65rem 0.8rem;
+    pointer-events: none;
+    z-index: 5;
+  }
+  .graph-tooltip .tt-title {
+    display: block;
+    font-size: 0.85rem;
+    line-height: 1.3;
+    margin-bottom: 0.25rem;
+  }
+  .graph-tooltip .tt-summary {
+    display: block;
+    font-size: 0.76rem;
+    line-height: 1.45;
+    color: var(--text-secondary);
+  }
+
+  /* ---- archive list ---- */
+  .month-group {
+    margin-top: 2.25rem;
+  }
+  .month-label {
+    font-size: 1.05rem;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 0.5rem;
+    margin-bottom: 0.25rem;
+  }
+  .review-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .review-row {
+    border-bottom: 1px solid var(--line);
+  }
+  .row-link {
+    display: flex;
+    align-items: baseline;
+    gap: 1.25rem;
+    padding: 1.05rem 0.35rem;
+    text-decoration: none;
+    color: inherit;
+    transition: background 0.15s ease;
+    border-radius: 8px;
+  }
+  .row-link:hover {
+    background: var(--surface-warm);
+  }
+  .row-date {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.74rem;
+    color: var(--text-secondary);
+    flex: none;
+    width: 4.2rem;
+  }
+  .row-main {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    min-width: 0;
+  }
+  .row-title {
+    font-weight: 600;
+    font-size: 1rem;
+    line-height: 1.35;
+  }
+  .row-link:hover .row-title {
+    color: var(--accent-strong);
+  }
+  .row-summary {
+    font-size: 0.88rem;
+    line-height: 1.5;
+    color: var(--text-secondary);
+  }
+  .row-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: 0.1rem;
+  }
+  .lab-badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem;
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+    background: var(--surface-warm);
+    border: 1px solid var(--line);
+    color: var(--text-secondary);
+  }
+  .row-arrow {
+    margin-left: auto;
+    color: var(--accent);
+    opacity: 0;
+    transition: opacity 0.15s ease, transform 0.2s ease;
+    flex: none;
+  }
+  .row-link:hover .row-arrow {
+    opacity: 1;
+    transform: translateX(3px);
+  }
+
+  @media (max-width: 640px) {
+    .graph-stage {
+      height: 380px;
+    }
+    .row-link {
+      flex-direction: column;
+      gap: 0.3rem;
+    }
+    .row-date {
+      width: auto;
+    }
+    .row-arrow {
+      display: none;
+    }
+  }
+</style>

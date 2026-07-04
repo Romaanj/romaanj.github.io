@@ -1,0 +1,304 @@
+---
+import Base from '../layouts/Base.astro';
+---
+
+<Base
+  title="About — Junwon Lee"
+  description="Junwon Lee — MS student at IRIS Lab, Sungkyunkwan University. Training-free acceleration of diffusion LLMs, KV-cache compression, quantization, and efficient inference systems."
+>
+  <!-- hero -->
+  <section class="section hero">
+    <div class="container hero-grid">
+      <div>
+        <p class="eyebrow">About me</p>
+        <h1>Hi, I'm Junwon.<br /><em>I make big models run cheap.</em></h1>
+        <p class="lede">
+          MS student at IRIS Lab, Sungkyunkwan University (SKKU), working on
+          efficient inference for large models — diffusion LLMs, KV caches,
+          quantization, and the stubborn gap between peak FLOPs and the bytes
+          a GPU can actually move.
+        </p>
+      </div>
+
+      <!-- decorative monogram (no photo, on purpose) -->
+      <div class="monogram-wrap" aria-hidden="true">
+        <svg class="monogram" viewBox="0 0 240 240" xmlns="http://www.w3.org/2000/svg" role="img">
+          <rect x="4" y="4" width="232" height="232" rx="24" class="mg-ground" />
+          <!-- quarter-circle, coral -->
+          <path d="M 236 236 L 236 140 A 96 96 0 0 0 140 236 Z" class="mg-coral" />
+          <!-- small geometric friends -->
+          <circle cx="52" cy="188" r="14" class="mg-olive" />
+          <path d="M 178 44 L 206 92 L 150 92 Z" class="mg-kraft" />
+          <!-- serif initials -->
+          <text x="46" y="132" class="mg-letters">JL</text>
+          <!-- roofline: bandwidth slope meeting the compute ceiling -->
+          <path d="M 46 158 L 118 150 L 194 150" class="mg-roofline" />
+        </svg>
+      </div>
+    </div>
+  </section>
+
+  <!-- bio -->
+  <section class="section-tight">
+    <div class="container">
+      <div class="prose">
+        <p>
+          My research interest is <strong>training-free acceleration</strong>:
+          making inference faster and lighter without touching the weights.
+          Right now that means diffusion LLMs — an architecture whose serving
+          story is still being written — and the KV-cache machinery around
+          them: compression, quantization, and deciding which bytes deserve
+          to live in HBM at all.
+        </p>
+        <p>
+          I try to be a measurement-first researcher. Before proposing a
+          method I want a profile, a roofline sketch, and a mechanism I can
+          point at — otherwise the "speedup" is usually just a benchmark
+          artifact wearing a nice name. The best days in the lab are the ones
+          where a plot disagrees with my intuition
+          (그날은 뭔가 배운 날입니다 — that's a day something was learned).
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- what I care about -->
+  <section class="section band-warm">
+    <div class="container">
+      <p class="eyebrow">Principles</p>
+      <h2>What I care about</h2>
+      <div class="card-grid values">
+        <div class="card">
+          <span class="card-kicker">Bottlenecks</span>
+          <h3>The memory wall, not the FLOP count</h3>
+          <p>
+            Modern accelerators rarely starve for arithmetic — they starve for
+            bytes. I read systems through a roofline lens: find where the
+            workload actually sits, then attack that ceiling, not the one in
+            the marketing slide.
+          </p>
+        </div>
+        <div class="card">
+          <span class="card-kicker">Constraint</span>
+          <h3>Training-free by default</h3>
+          <p>
+            The most useful acceleration is the kind you can apply to a
+            checkpoint this afternoon. No retraining runs, no distillation
+            budget — just a sharper use of what the model already computes.
+          </p>
+        </div>
+        <div class="card">
+          <span class="card-kicker">Discipline</span>
+          <h3>Measurement before method</h3>
+          <p>
+            A method should be the corollary of a mechanism you have actually
+            observed. Profile first, form a hypothesis, design the experiment
+            that could kill it — then, and only then, write the method section.
+          </p>
+        </div>
+        <div class="card">
+          <span class="card-kicker">Taste</span>
+          <h3>End-to-end honesty</h3>
+          <p>
+            Speedups are reported wall-clock, end-to-end, at matched quality —
+            not in the flattering microbenchmark. If a trick only wins in a
+            corner case, the paper should say which corner.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- background -->
+  <section class="section">
+    <div class="container">
+      <p class="eyebrow">Background</p>
+      <h2>A short timeline</h2>
+      <ol class="timeline">
+        <li>
+          <span class="tl-dot" aria-hidden="true"></span>
+          <div class="tl-body">
+            <span class="tl-when">Present</span>
+            <h3>M.S. student — IRIS Lab, Sungkyunkwan University</h3>
+            <p>
+              Efficient inference for large models: diffusion-LLM acceleration,
+              KV-cache compression and quantization, GPU memory systems.
+            </p>
+          </div>
+        </li>
+        <!-- EDIT ME: replace with your actual undergraduate degree, school, and years -->
+        <li>
+          <span class="tl-dot" aria-hidden="true"></span>
+          <div class="tl-body">
+            <span class="tl-when">Earlier</span>
+            <h3>B.S. — engineering undergrad</h3>
+            <p>
+              Where the habit of poking at hardware limits began: first
+              profilers, first CUDA kernels, first "why is this slow?".
+            </p>
+          </div>
+        </li>
+        <!-- EDIT ME: optional earlier item (internship, award, first project) — or delete this entry -->
+        <li>
+          <span class="tl-dot" aria-hidden="true"></span>
+          <div class="tl-body">
+            <span class="tl-when">Before that</span>
+            <h3>First computer, first bottleneck</h3>
+            <p>
+              Every systems person has an origin story about a machine that
+              was too slow. This line is a placeholder for mine.
+            </p>
+          </div>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- contact -->
+  <section class="section-tight contact">
+    <div class="container">
+      <div class="contact-row">
+        <div>
+          <p class="eyebrow">Contact</p>
+          <h2>Say hello</h2>
+          <p class="contact-note">
+            Happy to talk about efficient inference, diffusion LLMs, or GPU
+            systems — 커피챗 환영합니다.
+          </p>
+        </div>
+        <div class="contact-actions">
+          <a class="btn" href="mailto:jwlee1218@g.skku.edu">Email me</a>
+          <a class="btn ghost" href="https://github.com/Romaanj" target="_blank" rel="noopener">GitHub — Romaanj</a>
+          <a class="arrow-link" href="/research/">See what I'm working on</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .hero { padding-top: clamp(3.5rem, 9vw, 7rem); }
+  .hero h1 em {
+    font-style: italic;
+    color: var(--accent-strong);
+  }
+  .hero-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 250px;
+    gap: clamp(2rem, 5vw, 4rem);
+    align-items: center;
+  }
+  .lede { margin-top: 1.6rem; }
+
+  /* monogram */
+  .monogram-wrap { justify-self: end; }
+  .monogram {
+    display: block;
+    width: 100%;
+    max-width: 250px;
+  }
+  .mg-ground {
+    fill: var(--surface-warm);
+    stroke: var(--line);
+    stroke-width: 1.5;
+  }
+  .mg-coral { fill: var(--accent); }
+  .mg-olive { fill: var(--swatch-olive); }
+  .mg-kraft { fill: var(--swatch-kraft); }
+  .mg-letters {
+    font-family: 'Source Serif 4 Variable', Georgia, serif;
+    font-size: 92px;
+    font-weight: 600;
+    fill: var(--text);
+    letter-spacing: 0.02em;
+  }
+  .mg-roofline {
+    fill: none;
+    stroke: var(--accent-strong);
+    stroke-width: 4;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  /* warm band for values */
+  .band-warm {
+    background: var(--surface-warm);
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+  }
+  .band-warm h2 { margin-bottom: 2rem; }
+  .values .card h3 { font-size: 1.2rem; }
+
+  /* timeline */
+  .timeline {
+    list-style: none;
+    margin: 2.2rem 0 0;
+    padding: 0;
+    position: relative;
+    max-width: 720px;
+  }
+  .timeline::before {
+    content: '';
+    position: absolute;
+    left: 7px;
+    top: 6px;
+    bottom: 6px;
+    width: 2px;
+    background: var(--line);
+  }
+  .timeline li {
+    position: relative;
+    padding: 0 0 2.2rem 2.2rem;
+  }
+  .timeline li:last-child { padding-bottom: 0; }
+  .tl-dot {
+    position: absolute;
+    left: 0;
+    top: 0.35rem;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--bg);
+    border: 3px solid var(--accent);
+  }
+  .timeline li:first-child .tl-dot { background: var(--accent); }
+  .tl-when {
+    display: inline-block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--accent-strong);
+    margin-bottom: 0.3rem;
+  }
+  .tl-body h3 { font-size: 1.25rem; margin: 0 0 0.4rem; }
+  .tl-body p { color: color-mix(in srgb, var(--text) 72%, transparent); max-width: 60ch; }
+
+  /* contact */
+  .contact-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 2rem;
+    flex-wrap: wrap;
+    border-top: 1px solid var(--line);
+    padding-top: clamp(2rem, 4vw, 3rem);
+  }
+  .contact-note {
+    margin-top: 0.8rem;
+    color: color-mix(in srgb, var(--text) 72%, transparent);
+    max-width: 42ch;
+  }
+  .contact-actions {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  @media (max-width: 760px) {
+    .hero-grid { grid-template-columns: 1fr; }
+    .monogram-wrap { justify-self: start; }
+    .monogram { max-width: 180px; }
+  }
+</style>
