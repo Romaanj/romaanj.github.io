@@ -1,6 +1,26 @@
 import { defineCollection, z } from 'astro:content';
 import { glob } from 'astro/loaders';
 
+/**
+ * The 13-item structured analysis (fixed order, one sentence each).
+ * Keys map to: 배경/문제/기존 한계/목표/방법/핵심 아이디어/검증/결과/비교/의의/한계/향후 과제/자원 공개.
+ */
+const analysisBlock = z.object({
+  background: z.string(),
+  problem: z.string(),
+  prior_limits: z.string(),
+  goal: z.string(),
+  method: z.string(),
+  key_idea: z.string(),
+  validation: z.string(),
+  results: z.string(),
+  comparison: z.string(),
+  significance: z.string(),
+  limitations: z.string(),
+  future_work: z.string(),
+  resources: z.string(),
+});
+
 /** Paper reviews — auto-published by the daily sweep or written by hand. */
 const reviews = defineCollection({
   loader: glob({ pattern: '**/*.{md,mdx}', base: './src/content/reviews' }),
@@ -12,9 +32,17 @@ const reviews = defineCollection({
     venue: z.string().optional(),
     date: z.coerce.date(),
     tags: z.array(z.string()).default([]),
+    /** reading-list section: diffusion-llm | kv-cache | hybrid-architecture |
+     *  post-training | on-device | architecture | compression | serving */
+    topic: z.string().optional(),
     summary: z.string(),
+    summary_ko: z.string().optional(),
     /** slugs of related reviews — edges in the graph view */
     links: z.array(z.string()).default([]),
+    /** verified primary sources only (paper / PDF / project / GitHub / dataset / checkpoint) */
+    resources: z.array(z.object({ label: z.string(), url: z.string().url() })).default([]),
+    /** bilingual 13-item structured analysis; en shown by default, ko via toggle */
+    analysis: z.object({ ko: analysisBlock, en: analysisBlock }).optional(),
     source: z.enum(['autosweep', 'manual']).default('manual'),
     rating: z.number().min(1).max(5).optional(),
   }),

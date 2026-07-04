@@ -84,35 +84,80 @@ const graph = {
   edges,
 };
 
-/* ---------- monthly listing ---------- */
+/* ---------- topical reading list ---------- */
+
+const TOPIC_ORDER: [string, string][] = [
+  ['kv-cache', 'KV Cache & Compression'],
+  ['hybrid-architecture', 'Hybrid & Linear Attention'],
+  ['diffusion-llm', 'Diffusion LLMs'],
+  ['post-training', 'Post-training'],
+  ['on-device', 'On-device AI'],
+  ['architecture', 'Architecture'],
+  ['compression', 'Compression'],
+  ['serving', 'Serving'],
+];
+const KNOWN_TOPICS = new Set(TOPIC_ORDER.map(([k]) => k));
+
+const topicOf = (e: (typeof sorted)[number]) => {
+  const t = e.data.topic ?? e.data.tags[0] ?? 'more';
+  return KNOWN_TOPICS.has(t) ? t : 'more';
+};
+
+const buckets = new Map<string, typeof sorted>();
+for (const e of sorted) {
+  const t = topicOf(e);
+  if (!buckets.has(t)) buckets.set(t, []);
+  buckets.get(t)!.push(e);
+}
+
+const sections = [...TOPIC_ORDER, ['more', 'More'] as [string, string]]
+  .filter(([k]) => (buckets.get(k)?.length ?? 0) > 0)
+  .map(([k, label]) => ({ id: `topic-${k}`, label, items: buckets.get(k)! }));
 
 const fmtDay = (d: Date) =>
-  d.toLocaleDateString('en-US', { month: 'short', day: '2-digit' });
-const monthKey = (d: Date) =>
-  d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-
-const months: { label: string; items: typeof sorted }[] = [];
-for (const e of sorted) {
-  const label = monthKey(e.data.date);
-  const last = months[months.length - 1];
-  if (last && last.label === label) last.items.push(e);
-  else months.push({ label, items: [e] });
-}
+  d.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
 ---
 
 <Base
   title="Paper Review — Junwon Lee"
-  description="Daily reviews of papers on diffusion LLMs, KV caching, quantization, and sparse & hybrid attention — linked like a vault."
+  description="A topical reading list on efficient AI — model architecture, post-training, compression, and on-device inference; currently KV cache quantization and hybrid attention — linked like a vault."
 >
+  <script is:inline>
+    try {
+      document.documentElement.setAttribute(
+        'data-review-lang',
+        localStorage.getItem('review-lang') === 'ko' ? 'ko' : 'en'
+      );
+    } catch (e) {
+      /* no-JS / blocked storage: EN default via CSS */
+    }
+  </script>
+
   <section class="section">
     <div class="container">
       <p class="eyebrow">Paper Review</p>
-      <h1>A reading vault for efficient inference</h1>
+      <h1>A reading vault for efficient AI</h1>
       <p class="lede">
-        Daily reviews of papers on diffusion LLMs, KV caching, quantization, sparse &amp;
-        hybrid attention — auto-collected, human-curated, and linked like a vault
-        (매일 한 편씩).
+        Daily reviews of papers on model architecture, post-training,
+        model compression &amp; 경량화, and on-device AI — currently centered on
+        KV cache quantization and hybrid (full + linear) attention — auto-collected,
+        human-curated, and linked like a vault (매일 한 편씩).
       </p>
+
+      <div class="hero-controls">
+        <div class="lang-toggle" role="group" aria-label="Summary language">
+          <button type="button" class="lang-pill active" data-lang="en">EN</button>
+          <button type="button" class="lang-pill" data-lang="ko">한국어</button>
+        </div>
+        <nav class="toc-chips" aria-label="Reading list sections">
+          {sections.map((s) => (
+            <a class="toc-chip" href={`#${s.id}`}>
+              {s.label}
+              <span class="chip-count">{s.items.length}</span>
+            </a>
+          ))}
+        </nav>
+      </div>
 
       <div class="viz-frame graph-frame">
         <div class="graph-toolbar">
@@ -146,20 +191,32 @@ for (const e of sorted) {
 
   <section class="section-tight">
     <div class="container">
-      <p class="eyebrow">Archive</p>
-      <h2>All reviews</h2>
+      <p class="eyebrow">Reading list</p>
+      <h2>Papers by topic</h2>
 
-      {months.map((m) => (
-        <div class="month-group">
-          <h3 class="month-label">{m.label}</h3>
+      {sections.map((s) => (
+        <div class="topic-group">
+          <h2 class="eyebrow topic-heading" id={s.id}>
+            {s.label}
+            <span class="chip-count">{s.items.length}</span>
+          </h2>
           <ul class="review-list">
-            {m.items.map((e) => (
+            {s.items.map((e) => (
               <li class="review-row">
                 <a class="row-link" href={`/reviews/${e.id}/`}>
                   <span class="row-date">{fmtDay(e.data.date)}</span>
                   <span class="row-main">
                     <span class="row-title">{e.data.title}</span>
-                    <span class="row-summary">{e.data.summary}</span>
+                    <span class="row-summary">
+                      {e.data.summary_ko ? (
+                        <>
+                          <span class="lang-en">{e.data.summary}</span>
+                          <span class="lang-ko">{e.data.summary_ko}</span>
+                        </>
+                      ) : (
+                        e.data.summary
+                      )}
+                    </span>
                     <span class="row-meta">
                       {e.data.lab && <span class="lab-badge">{e.data.lab}</span>}
                       {e.data.tags.map((t) => (
@@ -177,6 +234,30 @@ for (const e of sorted) {
     </div>
   </section>
 </Base>
+
+<script>
+  /* ---------- shared EN | 한국어 toggle ---------- */
+  const pills = Array.from(
+    document.querySelectorAll<HTMLButtonElement>('.lang-pill')
+  );
+  const applyLang = (lang: string) => {
+    document.documentElement.setAttribute('data-review-lang', lang);
+    try {
+      localStorage.setItem('review-lang', lang);
+    } catch {
+      /* storage unavailable */
+    }
+    pills.forEach((p) => p.classList.toggle('active', p.dataset.lang === lang));
+  };
+  const initial =
+    document.documentElement.getAttribute('data-review-lang') === 'ko'
+      ? 'ko'
+      : 'en';
+  pills.forEach((p) => {
+    p.classList.toggle('active', p.dataset.lang === initial);
+    p.addEventListener('click', () => applyLang(p.dataset.lang === 'ko' ? 'ko' : 'en'));
+  });
+</script>
 
 <script>
   import {
@@ -422,8 +503,91 @@ for (const e of sorted) {
 </script>
 
 <style>
+  /* ---- language visibility (EN default, works without JS) ---- */
+  .lang-ko {
+    display: none;
+  }
+  :global(html[data-review-lang='ko']) .lang-ko {
+    display: revert;
+  }
+  :global(html[data-review-lang='ko']) .lang-en {
+    display: none;
+  }
+
+  /* ---- hero controls: toggle + section chips ---- */
+  .hero-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.9rem 1.25rem;
+    margin-top: 1.6rem;
+  }
+  .lang-toggle {
+    display: inline-flex;
+    gap: 0.3rem;
+    padding: 0.25rem;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--surface);
+    flex: none;
+  }
+  .lang-pill {
+    font-family: inherit;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    padding: 0.32rem 0.85rem;
+    border: none;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .lang-pill:hover {
+    color: var(--text);
+  }
+  .lang-pill.active {
+    background: var(--text);
+    color: var(--bg);
+  }
+  .toc-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+  .toc-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.76rem;
+    font-weight: 500;
+    padding: 0.3rem 0.75rem;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    color: var(--text-secondary);
+    text-decoration: none;
+    transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+  }
+  .toc-chip:hover {
+    border-color: var(--accent);
+    color: var(--accent-strong);
+    background: var(--surface-warm);
+  }
+  .chip-count {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.64rem;
+    padding: 0.08rem 0.42rem;
+    border-radius: 999px;
+    background: var(--surface-warm);
+    border: 1px solid var(--line);
+    color: var(--text-secondary);
+  }
+
+  /* ---- graph frame ---- */
   .graph-frame {
-    margin-top: 2.5rem;
+    margin-top: 2rem;
     padding: 0;
     overflow: hidden;
   }
@@ -504,16 +668,18 @@ for (const e of sorted) {
     color: var(--text-secondary);
   }
 
-  /* ---- archive list ---- */
-  .month-group {
-    margin-top: 2.25rem;
+  /* ---- topical reading list ---- */
+  .topic-group {
+    margin-top: 2.5rem;
   }
-  .month-label {
-    font-size: 1.05rem;
-    color: var(--text-secondary);
+  .topic-heading {
+    scroll-margin-top: 5.5rem;
     border-bottom: 1px solid var(--line);
-    padding-bottom: 0.5rem;
+    padding-bottom: 0.55rem;
     margin-bottom: 0.25rem;
+  }
+  .topic-heading .chip-count {
+    margin-left: 0.15rem;
   }
   .review-list {
     list-style: none;
@@ -538,10 +704,10 @@ for (const e of sorted) {
   }
   .row-date {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.74rem;
+    font-size: 0.72rem;
     color: var(--text-secondary);
     flex: none;
-    width: 4.2rem;
+    width: 6.4rem;
   }
   .row-main {
     display: flex;

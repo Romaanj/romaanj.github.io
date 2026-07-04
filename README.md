@@ -37,19 +37,67 @@ without extension (`src/content/reviews/my-paper.md` → `/reviews/my-paper/`).
 
 ### `reviews` — paper reviews
 
-| field     | type                       | notes                                   |
-|-----------|----------------------------|-----------------------------------------|
-| `title`   | string (required)          | paper title                             |
-| `summary` | string (required)          | one-liner shown on cards                |
-| `date`    | date (required)            | `YYYY-MM-DD`                            |
-| `arxivId` | string?                    | e.g. `2404.12345`                       |
-| `authors` | string?                    |                                          |
-| `lab`     | string?                    |                                          |
-| `venue`   | string?                    |                                          |
-| `tags`    | string[] (default `[]`)    |                                          |
-| `links`   | string[] (default `[]`)    | slugs of related reviews → graph edges  |
-| `source`  | `autosweep` \| `manual`    | default `manual`                        |
-| `rating`  | number? (1–5)              |                                          |
+| field        | type                              | notes                                                        |
+|--------------|-----------------------------------|--------------------------------------------------------------|
+| `title`      | string (required)                 | paper title                                                  |
+| `summary`    | string (required)                 | one-liner shown on cards (English)                           |
+| `summary_ko` | string?                           | Korean one-liner (shown when the language toggle is KO)      |
+| `date`       | date (required)                   | `YYYY-MM-DD`                                                 |
+| `arxivId`    | string?                           | e.g. `2404.12345`                                            |
+| `authors`    | string?                           |                                                               |
+| `lab`        | string?                           |                                                               |
+| `venue`      | string?                           |                                                               |
+| `tags`       | string[] (default `[]`)           |                                                               |
+| `topic`      | string?                           | reading-list section: `diffusion-llm` \| `kv-cache` \| `hybrid-architecture` \| `post-training` \| `on-device` \| `architecture` \| `compression` \| `serving` |
+| `links`      | string[] (default `[]`)           | slugs of related reviews → graph edges                       |
+| `resources`  | `{label, url}[]` (default `[]`)   | **verified** primary links only (arXiv / PDF / project / GitHub / dataset / checkpoint) |
+| `analysis`   | `{ ko: {...}, en: {...} }`?       | bilingual 13-key structured analysis (below)                 |
+| `source`     | `autosweep` \| `manual`           | default `manual`                                             |
+| `rating`     | number? (1–5)                     |                                                               |
+
+**The 13-item analysis block.** `analysis.ko` and `analysis.en` each carry the
+same 13 keys in a **fixed order**, one information-dense sentence per key
+(identical content across the two languages). Key quantitative numbers may be
+marked `**bold**`; the renderer converts them.
+
+| # | key            | ko label    | en label            |
+|---|----------------|-------------|----------------------|
+| 1 | `background`   | 배경        | Background           |
+| 2 | `problem`      | 문제        | Problem              |
+| 3 | `prior_limits` | 기존 한계   | Prior limitations    |
+| 4 | `goal`         | 목표        | Goal                 |
+| 5 | `method`       | 방법        | Method               |
+| 6 | `key_idea`     | 핵심 아이디어 | Key idea           |
+| 7 | `validation`   | 검증        | Validation           |
+| 8 | `results`      | 결과        | Results              |
+| 9 | `comparison`   | 비교        | Comparison           |
+| 10 | `significance` | 의의       | Significance         |
+| 11 | `limitations`  | 한계       | Limitations          |
+| 12 | `future_work`  | 향후 과제  | Future work          |
+| 13 | `resources`    | 자원 공개  | Released resources   |
+
+**Language toggle.** The review page renders one language at a time — English
+by default, Korean via the KO/EN toggle. The toggle switches the 13 labels and
+sentence bodies together (and `summary` ↔ `summary_ko` where shown); both maps
+must therefore be complete.
+
+**Analysis YAML shape** (mini-example, first keys shown — all 13 required in
+each language):
+
+```yaml
+analysis:
+  ko:
+    background: 'LLM 디코딩은 KV 캐시 메모리에 의해 병목이 걸린다.'
+    problem: '긴 컨텍스트에서 KV 캐시가 배치 크기를 제한한다.'
+    prior_limits: '기존 4-bit 양자화는 **2-bit**에서 정확도가 붕괴한다.'
+    # ... goal, method, key_idea, validation, results, comparison,
+    #     significance, limitations, future_work, resources
+  en:
+    background: 'LLM decoding is bottlenecked by KV-cache memory.'
+    problem: 'At long context the KV cache caps batch size.'
+    prior_limits: 'Prior 4-bit quantizers collapse at **2-bit**.'
+    # ... same 13 keys, same order, same content as ko
+```
 
 ### `study` — study notes
 
@@ -84,12 +132,19 @@ title: "Paper Title"
 arxivId: "2404.12345"
 date: 2026-07-04
 tags: [kv-cache, quantization]
+topic: kv-cache
 summary: "One-line takeaway."
+summary_ko: "한 줄 요약."
 links: []
+resources:
+  - { label: "arXiv", url: "https://arxiv.org/abs/2404.12345" }
+analysis:
+  ko: { background: '...', ... }   # all 13 keys, fixed order (see table above)
+  en: { background: '...', ... }
 source: manual
 ---
 
-## What it does
+## Notes
 ...
 ```
 
@@ -126,8 +181,11 @@ it copies only the paper title and arXiv id, never the note's prose:
 python3 scripts/publish_review.py <lit-note.md> --slug <slug> [--date YYYY-MM-DD] [--tags a,b]
 ```
 
-It writes `src/content/reviews/<slug>.md` with `source: autosweep`, a `TODO` summary, and an
-empty *What it does / How it works / Why it matters / Open questions* body template. It
+It writes `src/content/reviews/<slug>.md` with `source: autosweep` and the full new-schema
+frontmatter as TODO stubs: `topic`, `summary` / `summary_ko`, `links: []`, `resources: []`
+(verified links only), and a complete bilingual `analysis:` block (`ko:` + `en:`, each with
+all 13 keys in fixed order, every value `'TODO'`), plus a minimal `## Notes` body. It
 refuses (exit 1) if the slug already exists. The daily lit autosweep calls this for each
-public-worthy paper, then the review body is written in a public-facing tone, and the result
-is committed to `src/content/reviews/` and pushed — the Pages action publishes it.
+public-worthy paper, then the 13-item analysis is filled in both languages from the paper
+itself in a public-facing tone, and the result is committed to `src/content/reviews/` and
+pushed — the Pages action publishes it.

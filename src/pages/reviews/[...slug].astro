@@ -30,12 +30,105 @@ const dateStr = entry.data.date.toLocaleDateString('en-US', {
   month: 'long',
   day: 'numeric',
 });
+
+/* ---------- 13-item bilingual analysis ---------- */
+
+const ANALYSIS_KEYS = [
+  'background',
+  'problem',
+  'prior_limits',
+  'goal',
+  'method',
+  'key_idea',
+  'validation',
+  'results',
+  'comparison',
+  'significance',
+  'limitations',
+  'future_work',
+  'resources',
+] as const;
+
+const EN_LABELS = [
+  'Background',
+  'Problem',
+  'Prior limitations',
+  'Goal',
+  'Method',
+  'Key idea',
+  'Validation',
+  'Results',
+  'Comparison',
+  'Significance',
+  'Limitations',
+  'Future work',
+  'Released resources',
+];
+
+const KO_LABELS = [
+  '배경',
+  '문제',
+  '기존 한계',
+  '목표',
+  '방법',
+  '핵심 아이디어',
+  '검증',
+  '결과',
+  '비교',
+  '의의',
+  '한계',
+  '향후 과제',
+  '자원 공개',
+];
+
+/* restrained rainbow: red → rose across the 13 rows (pre-muted for the ivory ground) */
+const HUES = [
+  '#c0524a', '#c9703d', '#b98a2e', '#8a9a3a', '#5f9a57', '#3f9b8a', '#3a92a8',
+  '#4a7fb5', '#5b6ab8', '#7a63b4', '#94549f', '#b0537e', '#bd5a63',
+];
+
+/** HTML-escape first, then convert **...** to <strong>. No other markdown. */
+const escapeHtml = (s: string) =>
+  s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+const boldify = (s: string) =>
+  escapeHtml(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+
+const analysis = entry.data.analysis;
+const analysisRows = analysis
+  ? ANALYSIS_KEYS.map((key, i) => ({
+      num: String(i + 1).padStart(2, '0'),
+      hue: HUES[i],
+      labelEn: EN_LABELS[i],
+      labelKo: KO_LABELS[i],
+      htmlEn: boldify(analysis.en[key] ?? ''),
+      htmlKo: boldify(analysis.ko[key] ?? ''),
+    }))
+  : [];
+
+const hasNotes = (entry.body ?? '').trim().length > 0;
+const hasKoLede = Boolean(entry.data.summary_ko);
 ---
 
 <Base
   title={`${entry.data.title} — Junwon Lee`}
   description={entry.data.summary}
 >
+  <script is:inline>
+    try {
+      document.documentElement.setAttribute(
+        'data-review-lang',
+        localStorage.getItem('review-lang') === 'ko' ? 'ko' : 'en'
+      );
+    } catch (e) {
+      /* no-JS / blocked storage: EN default via CSS */
+    }
+  </script>
+
   <section class="section">
     <div class="container review-detail">
       <a class="back-link" href="/reviews/">← All reviews</a>
@@ -66,11 +159,66 @@ const dateStr = entry.data.date.toLocaleDateString('en-US', {
         ))}
       </div>
 
-      <p class="lede review-lede">{entry.data.summary}</p>
+      {hasKoLede ? (
+        <>
+          <p class="lede review-lede lang-en">{entry.data.summary}</p>
+          <p class="lede review-lede lang-ko">{entry.data.summary_ko}</p>
+        </>
+      ) : (
+        <p class="lede review-lede">{entry.data.summary}</p>
+      )}
 
-      <div class="prose">
-        <Content />
+      <div class="lang-toggle" role="group" aria-label="Analysis language">
+        <button type="button" class="lang-pill active" data-lang="en">EN</button>
+        <button type="button" class="lang-pill" data-lang="ko">한국어</button>
       </div>
+
+      {analysisRows.length > 0 && (
+        <div class="analysis-block">
+          <div class="summary-list">
+            {analysisRows.map((row) => (
+              <div class="summary-row" style={`--row-hue: ${row.hue}`}>
+                <span class="row-num" aria-hidden="true">{row.num}</span>
+                <div class="row-body">
+                  <p class="row-text lang-en">
+                    <strong class="row-label">{row.labelEn}</strong>
+                    <span set:html={row.htmlEn} />
+                  </p>
+                  <p class="row-text lang-ko">
+                    <strong class="row-label">{row.labelKo}</strong>
+                    <span set:html={row.htmlKo} />
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {entry.data.resources.length > 0 && (
+        <div class="resource-row">
+          {entry.data.resources.map((r) => (
+            <a
+              class="resource-chip"
+              href={r.url}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {r.label}
+              <span class="chip-ext" aria-hidden="true">↗</span>
+            </a>
+          ))}
+        </div>
+      )}
+
+      {hasNotes && (
+        <div class="notes-block">
+          {analysisRows.length > 0 && <p class="eyebrow notes-eyebrow">Notes</p>}
+          <div class="prose">
+            <Content />
+          </div>
+        </div>
+      )}
 
       {linked.length > 0 && (
         <div class="linked-block">
@@ -101,6 +249,29 @@ const dateStr = entry.data.date.toLocaleDateString('en-US', {
     </div>
   </section>
 </Base>
+
+<script>
+  const pills = Array.from(
+    document.querySelectorAll<HTMLButtonElement>('.lang-pill')
+  );
+  const applyLang = (lang: string) => {
+    document.documentElement.setAttribute('data-review-lang', lang);
+    try {
+      localStorage.setItem('review-lang', lang);
+    } catch {
+      /* storage unavailable */
+    }
+    pills.forEach((p) => p.classList.toggle('active', p.dataset.lang === lang));
+  };
+  const initial =
+    document.documentElement.getAttribute('data-review-lang') === 'ko'
+      ? 'ko'
+      : 'en';
+  pills.forEach((p) => {
+    p.classList.toggle('active', p.dataset.lang === initial);
+    p.addEventListener('click', () => applyLang(p.dataset.lang === 'ko' ? 'ko' : 'en'));
+  });
+</script>
 
 <style>
   .back-link {
@@ -160,8 +331,137 @@ const dateStr = entry.data.date.toLocaleDateString('en-US', {
     margin-top: 1.6rem;
     max-width: 760px;
   }
-  .prose {
-    margin-top: 2.25rem;
+
+  /* ---- language visibility (EN default, works without JS) ---- */
+  .lang-ko {
+    display: none;
+  }
+  :global(html[data-review-lang='ko']) .lang-ko {
+    display: revert;
+  }
+  :global(html[data-review-lang='ko']) .lang-en {
+    display: none;
+  }
+
+  /* ---- language toggle ---- */
+  .lang-toggle {
+    display: inline-flex;
+    gap: 0.3rem;
+    margin-top: 1.6rem;
+    padding: 0.25rem;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--surface);
+  }
+  .lang-pill {
+    font-family: inherit;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    padding: 0.32rem 0.85rem;
+    border: none;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .lang-pill:hover {
+    color: var(--text);
+  }
+  .lang-pill.active {
+    background: var(--text);
+    color: var(--bg);
+  }
+
+  /* ---- 13-item analysis: one column, never a grid ---- */
+  .analysis-block {
+    margin-top: 1.75rem;
+    max-width: 860px;
+  }
+  .summary-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .summary-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 0.95rem 1.15rem 0.95rem 1rem;
+    border-left: 3px solid var(--row-hue);
+    border-radius: var(--radius-m);
+    background: color-mix(in srgb, var(--row-hue) 7%, var(--surface));
+    transition: background 0.15s ease, transform 0.15s ease;
+  }
+  .summary-row:hover {
+    background: color-mix(in srgb, var(--row-hue) 11%, var(--surface));
+    transform: translateY(-1px);
+  }
+  .row-num {
+    flex: none;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    font-weight: 600;
+    line-height: 1.4;
+    color: var(--row-hue);
+    background: color-mix(in srgb, var(--row-hue) 14%, var(--surface));
+    padding: 0.22rem 0.5rem;
+    border-radius: 7px;
+    margin-top: 0.12rem;
+  }
+  .row-body {
+    min-width: 0;
+  }
+  .row-text {
+    margin: 0;
+    font-size: 0.95rem;
+    line-height: 1.65;
+    color: var(--text);
+    overflow-wrap: anywhere;
+  }
+  .row-label {
+    color: var(--row-hue);
+    font-weight: 700;
+    margin-right: 0.4rem;
+  }
+
+  /* ---- resources chips ---- */
+  .resource-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 1.5rem;
+  }
+  .resource-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    padding: 0.32rem 0.75rem;
+    border-radius: 999px;
+    border: 1px solid var(--line-strong);
+    background: var(--surface);
+    color: var(--text);
+    text-decoration: none;
+    transition: border-color 0.15s ease, color 0.15s ease;
+  }
+  .resource-chip:hover {
+    border-color: var(--accent);
+    color: var(--accent-strong);
+  }
+  .chip-ext {
+    color: var(--accent);
+    font-size: 0.68rem;
+  }
+
+  /* ---- notes / prose ---- */
+  .notes-block {
+    margin-top: 2.5rem;
+  }
+  .notes-eyebrow {
+    margin-bottom: 0.75rem;
   }
   .linked-block {
     margin-top: 3.5rem;
@@ -173,5 +473,19 @@ const dateStr = entry.data.date.toLocaleDateString('en-US', {
   }
   .bottom-back {
     margin-top: 3rem;
+  }
+
+  @media (max-width: 640px) {
+    .summary-row {
+      gap: 10px;
+      padding: 0.8rem 0.9rem 0.8rem 0.75rem;
+    }
+    .row-num {
+      font-size: 0.62rem;
+      padding: 0.16rem 0.38rem;
+    }
+    .row-text {
+      font-size: 0.9rem;
+    }
   }
 </style>

@@ -11,10 +11,11 @@ What it does:
         from the filename)
       - the arXiv id (explicit `arXiv:`/`arxiv.org` reference in the body,
         or a bare id in the filename/body)
-  * Emits src/content/reviews/<slug>.md with the reviews frontmatter
-    (source: autosweep, summary placeholder, links: []) and an EMPTY body
-    template. It deliberately NEVER copies note prose — internal notes
-    contain private research commentary that must not be published.
+  * Emits src/content/reviews/<slug>.md with the full reviews frontmatter
+    (source: autosweep, summary/summary_ko placeholders, topic/links/resources
+    stubs, and a bilingual 13-item analysis block with every value TODO) plus a
+    minimal body template. It deliberately NEVER copies note prose — internal
+    notes contain private research commentary that must not be published.
   * Refuses (exit 1) if the output slug already exists.
   * Prints the created path on success.
 
@@ -41,22 +42,33 @@ ARXIV_BARE_RE = re.compile(r"(?<![\d.])(" + ARXIV_CORE + r")(?:v\d+)?(?![\d.])")
 
 SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
+# Allowed values for the `topic` frontmatter field (reading-list sections).
+TOPIC_VALUES = (
+    "diffusion-llm | kv-cache | hybrid-architecture | post-training | "
+    "on-device | architecture | compression | serving"
+)
+
+# The 13 analysis keys, FIXED ORDER — must match src/content.config.ts.
+ANALYSIS_KEYS = (
+    "background",
+    "problem",
+    "prior_limits",
+    "goal",
+    "method",
+    "key_idea",
+    "validation",
+    "results",
+    "comparison",
+    "significance",
+    "limitations",
+    "future_work",
+    "resources",
+)
+
 BODY_TEMPLATE = """
-## What it does
+## Notes
 
-<!-- TODO: 2-4 sentences, public-paper facts only. -->
-
-## How it works
-
-<!-- TODO: the core mechanism, as stated in the paper. -->
-
-## Why it matters
-
-<!-- TODO: where it sits in the efficient-inference landscape. -->
-
-## Open questions
-
-<!-- TODO: honest open threads a reader could pick up. -->
+<!-- TODO: optional free-form notes; the structured 13-item analysis lives in the frontmatter. -->
 """
 
 
@@ -163,8 +175,16 @@ def main() -> None:
         lines.append(f"arxivId: {yaml_str(arxiv_id)}")
     lines.append(f"date: {date.isoformat()}")
     lines.append("tags: [" + ", ".join(yaml_str(t) for t in tags) + "]")
-    lines.append('summary: "TODO one-line summary"')
-    lines.append("links: []")
+    lines.append(f"topic: ''  # TODO: one of {TOPIC_VALUES}")
+    lines.append('summary: "TODO one-line summary (English)"')
+    lines.append("summary_ko: 'TODO'")
+    lines.append("links: []  # slugs of related reviews already on the site")
+    lines.append("resources: []  # verified primary links only ({label, url}); curl -sI 200 before adding")
+    lines.append("analysis:")
+    for lang in ("ko", "en"):
+        lines.append(f"  {lang}:")
+        for key in ANALYSIS_KEYS:
+            lines.append(f"    {key}: 'TODO'")
     lines.append('source: "autosweep"')
     lines.append("---")
     content = "\n".join(lines) + "\n" + BODY_TEMPLATE
