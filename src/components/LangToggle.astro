@@ -1,0 +1,76 @@
+---
+/**
+ * Site-wide EN|한국어 toggle.
+ * Contract (used by reviews + study pages):
+ *  - localStorage 'site-lang' ∈ {'en','ko'}, default 'en' (legacy 'review-lang' migrated).
+ *  - <html data-lang="..."> carries the current language.
+ *  - Static bilingual text: `.lang-en` shown by default, `.lang-ko` hidden;
+ *    html[data-lang="ko"] flips both.
+ *  - JS-rendered text: read window.siteLang(), re-render on the
+ *    'site-langchange' window event (detail: { lang }).
+ * Multiple instances per page are fine — one shared handler.
+ */
+---
+
+<div class="lang-toggle" role="group" aria-label="Language">
+  <button type="button" data-set-lang="en" class="lt-btn">EN</button>
+  <button type="button" data-set-lang="ko" class="lt-btn">한국어</button>
+</div>
+
+<script is:inline>
+  (() => {
+    window.siteLang = () => document.documentElement.dataset.lang || 'en';
+    if (window.__siteLangInit) {
+      // subsequent instances: just sync button states
+      document.querySelectorAll('[data-set-lang]').forEach((b) =>
+        b.classList.toggle('active', b.dataset.setLang === window.siteLang())
+      );
+      return;
+    }
+    window.__siteLangInit = true;
+    const apply = (lang, persist) => {
+      document.documentElement.dataset.lang = lang;
+      if (persist) localStorage.setItem('site-lang', lang);
+      document.querySelectorAll('[data-set-lang]').forEach((b) =>
+        b.classList.toggle('active', b.dataset.setLang === lang)
+      );
+      window.dispatchEvent(new CustomEvent('site-langchange', { detail: { lang } }));
+    };
+    const stored =
+      localStorage.getItem('site-lang') || localStorage.getItem('review-lang') || 'en';
+    apply(stored === 'ko' ? 'ko' : 'en', false);
+    document.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-set-lang]');
+      if (b) apply(b.dataset.setLang, true);
+    });
+  })();
+</script>
+
+<style is:global>
+  .lang-toggle {
+    display: inline-flex;
+    gap: 4px;
+    padding: 3px;
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    background: var(--surface);
+  }
+  .lt-btn {
+    font-family: var(--font-sans);
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 0.3em 0.95em;
+    border-radius: 999px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+  .lt-btn.active { background: var(--text); color: var(--bg); }
+  .lt-btn:not(.active):hover { color: var(--text); }
+
+  .lang-ko { display: none; }
+  html[data-lang='ko'] .lang-ko { display: revert; }
+  html[data-lang='ko'] .lang-en { display: none; }
+</style>

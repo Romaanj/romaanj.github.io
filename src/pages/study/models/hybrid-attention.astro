@@ -1,0 +1,1105 @@
+---
+import Base from '../../../layouts/Base.astro';
+import LangToggle from '../../../components/LangToggle.astro';
+
+// Qwen3.5-27B text_config (verified from HF Qwen/Qwen3.5-27B config.json, 2026-07-04):
+// 64 layers, layer_types = 16 × [linear, linear, linear, full];
+// full attention: 24 Q / 4 KV heads × head_dim 256, attn_output_gate, partial_rotary 0.25;
+// linear (Gated DeltaNet): 16 K / 48 V heads × 128, conv kernel 4, mamba_ssm_dtype float32;
+// hidden 5,120; FFN 17,408 dense (mlp_only_layers []); vocab 248,320; native ctx 262,144.
+const NL = 64;
+const layers = Array.from({ length: NL }, (_, i) => {
+  const full = (i + 1) % 4 === 0; // indices 3, 7, …, 63 are full_attention
+  const n = i + 1;
+  return {
+    i,
+    full,
+    tipEn: full
+      ? `Layer ${n} — Gated Attention (full, GQA). 24 Q / 4 KV heads × 256; softmax over the whole prefix; KV cache +4 KB per token per layer — grows with T. Then dense SwiGLU FFN 5,120 → 17,408.`
+      : `Layer ${n} — Gated DeltaNet (linear). q/k: 16 heads × 128, v: 48 heads × 128; recurrent state 48 × 128 × 128 fp32 ≈ 3 MB — constant in T. Then dense SwiGLU FFN 5,120 → 17,408.`,
+    tipKo: full
+      ? `Layer ${n} — Gated Attention (full, GQA). 24 Q / 4 KV heads × 256; 전체 prefix에 softmax; KV cache가 layer당 token마다 +4 KB — T에 비례해 증가. 이후 dense SwiGLU FFN 5,120 → 17,408.`
+      : `Layer ${n} — Gated DeltaNet (linear). q/k 16 heads × 128, v 48 heads × 128; recurrent state 48 × 128 × 128 fp32 ≈ 3 MB — T와 무관하게 고정. 이후 dense SwiGLU FFN 5,120 → 17,408.`,
+  };
+});
+---
+
+<Base
+  title="Hybrid attention anatomy: Qwen3.5 — Junwon Lee"
+  description="Interactive tear-down of Qwen3.5's hybrid linear + full attention stack: the 3:1 Gated DeltaNet / Gated Attention interleave, both token mixers tensor by tensor, and the KV-cache-vs-recurrent-state memory race."
+>
+  <div class="hyb-page">
+    <section class="section">
+      <div class="container">
+        <p class="eyebrow">Study · Model anatomy</p>
+        <h1>
+          <span class="lang-en">Inside Qwen3.5: a hybrid linear + full attention LLM</span>
+          <span class="lang-ko">Qwen3.5 해부: linear + full attention 하이브리드 LLM</span>
+        </h1>
+        <p class="lede">
+          <span class="lang-en">
+            Qwen3.5 answers the KV-cache problem architecturally: three of every four layers
+            replace softmax attention with a <em>Gated DeltaNet</em> whose memory is a fixed-size
+            matrix, and the remaining fourth keeps full attention as random-access memory over the
+            context. Walk the 64-layer interleave, open both token mixers, then race their memory
+            footprints out to 262K tokens.
+          </span>
+          <span class="lang-ko">
+            Qwen3.5는 KV cache 문제를 아키텍처로 푼다: 4개 layer 중 3개는 softmax attention을
+            고정 크기 행렬 메모리를 갖는 <em>Gated DeltaNet</em>으로 대체하고, 나머지 1개는 컨텍스트
+            전체를 임의 접근(random-access)할 수 있는 full attention으로 남겨 둔다. 64-layer
+            인터리브를 훑고, 두 token mixer를 열어 본 뒤, 262K token까지 메모리 경주를 돌려 보자.
+          </span>
+        </p>
+
+        <div class="toggle-row"><LangToggle /></div>
+
+        <div class="jump-row">
+          <a class="tag" href="#stack-view">1 · Layer-stack map</a>
+          <a class="tag" href="#mixer-view">2 · Two mixers</a>
+          <a class="tag" href="#memory-view">3 · Memory race</a>
+          <a class="tag" href="#why-view">4 · Why hybridize</a>
+        </div>
+
+        <div class="config-note">
+          <span class="config-lead">
+            <span class="lang-en">Config on this page — Qwen3.5-27B (dense), read from the
+            published <code>config.json</code> on 2026-07-04:</span>
+            <span class="lang-ko">이 페이지의 config — Qwen3.5-27B (dense), 공개
+            <code>config.json</code>에서 2026-07-04에 직접 확인:</span>
+          </span>
+          <span class="tag accent">64 layers = 16 × (3 linear + 1 full)</span>
+          <span class="tag">d_model 5,120</span>
+          <span class="tag">full: 24 Q / 4 KV heads × 256</span>
+          <span class="tag">linear: 16 K / 48 V heads × 128</span>
+          <span class="tag">FFN 17,408 (dense SwiGLU)</span>
+          <span class="tag">vocab 248,320</span>
+          <span class="tag accent">native ctx 262,144</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 1 · LAYER-STACK MAP ============ -->
+    <section class="section-tight" id="stack-view">
+      <div class="container">
+        <h2 class="viz-h">
+          <span class="lang-en">1 · The layer stack: 48 linear + 16 full</span>
+          <span class="lang-ko">1 · 레이어 스택: linear 48 + full 16</span>
+        </h2>
+        <p class="viz-sub">
+          <span class="lang-en">The whole depth as one strip — exactly the
+            <code>layer_types</code> list from the config. Hover any layer for its mixer and
+            shapes; click to open the mixer internals below.</span>
+          <span class="lang-ko">모델 전체 깊이를 한 줄로 — config의 <code>layer_types</code>
+            리스트 그대로다. layer에 hover하면 mixer 종류와 shape가 보이고, 클릭하면 아래
+            mixer 내부로 이동한다.</span>
+        </p>
+
+        <div class="viz-frame">
+          <div class="hyb-scroll">
+          <svg viewBox="0 0 740 208" role="img" aria-label="Qwen3.5-27B layer stack: 64 layers, repeating 3 Gated DeltaNet then 1 Gated Attention, each followed by a dense SwiGLU FFN" style="width:100%; height:auto; min-width:720px;">
+            <text class="stitle" x="20" y="20">layer_types — 16 × ( 3 × Gated DeltaNet → 1 × Gated Attention )</text>
+
+            {layers.map((l) => (
+              <a href="#mixer-view" class="cell-link" aria-label={`Layer ${l.i + 1}: ${l.full ? 'Gated Attention (full)' : 'Gated DeltaNet (linear)'}`}>
+                <rect
+                  class={`lcell ${l.full ? 'lc-full' : 'lc-lin'}`}
+                  x={18 + l.i * 11} y="38" width="9" height="46" rx="2"
+                  data-tip={l.tipEn} data-tip-ko={l.tipKo}
+                ></rect>
+              </a>
+            ))}
+
+            {[1, 16, 32, 48, 64].map((n) => (
+              <text class="mlabel" x={18 + (n - 1) * 11 + 4.5} y="98" text-anchor="middle">{n}</text>
+            ))}
+
+            <!-- block braces every 4 layers -->
+            {Array.from({ length: 16 }, (_, b) => (
+              <rect x={18 + b * 44} y="86" width="42" height="2" rx="1" fill={b % 2 ? '#d1cfc5' : '#b9b7ad'}></rect>
+            ))}
+
+            <g data-tip="Every one of the 64 layers is followed by the same dense SwiGLU FFN: gate/up 5,120 → 17,408, down 17,408 → 5,120. mlp_only_layers is empty and there are no MoE params in the 27B config — the MoE variants live elsewhere in the family (e.g. Qwen3.5-397B-A17B)."
+               data-tip-ko="64개 layer 전부 동일한 dense SwiGLU FFN이 뒤따른다: gate/up 5,120 → 17,408, down 17,408 → 5,120. 27B config에는 mlp_only_layers가 비어 있고 MoE 파라미터가 없다 — MoE는 패밀리의 다른 모델(예: Qwen3.5-397B-A17B) 몫이다.">
+              <rect class="sbox sbox-warm" x="18" y="110" width="704" height="30" rx="7"></rect>
+              <text class="ssub" x="370" y="129" text-anchor="middle">× 64 — dense SwiGLU FFN after every mixer: 5,120 → 17,408 → 5,120 (no MoE in the 27B config)</text>
+            </g>
+
+            <g transform="translate(18, 160)">
+              <rect class="lcell lc-lin" x="0" y="0" width="12" height="12" rx="2"></rect>
+              <text class="ssub" x="18" y="10">Gated DeltaNet (linear) × 48 — state 3 MB/layer, constant</text>
+              <rect class="lcell lc-full" x="330" y="0" width="12" height="12" rx="2"></rect>
+              <text class="ssub" x="348" y="10">Gated Attention (full, GQA) × 16 — KV +4 KB/token/layer</text>
+            </g>
+            <text class="smono" x="18" y="196">full_attention_interval: 4 → 75% of the stack never touches the KV cache</text>
+          </svg>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 2 · TWO MIXERS ============ -->
+    <section class="section-tight" id="mixer-view">
+      <div class="container">
+        <h2 class="viz-h">
+          <span class="lang-en">2 · The two token mixers, side by side</span>
+          <span class="lang-ko">2 · 두 token mixer 나란히 보기</span>
+        </h2>
+        <p class="viz-sub">
+          <span class="lang-en">Same input, same output shape, opposite memory contracts. Hover
+            every box for the exact op and its cost.</span>
+          <span class="lang-ko">입력도 출력 shape도 같지만 메모리 계약은 정반대다. 각 박스에
+            hover하면 정확한 연산과 비용이 보인다.</span>
+        </p>
+
+        <div class="viz-frame">
+          <div class="mixer-grid">
+            <!-- ===== full attention ===== -->
+            <div>
+              <div class="mixer-head mh-full">
+                <span class="lang-en">Gated Attention — full softmax · × 16 layers</span>
+                <span class="lang-ko">Gated Attention — full softmax · 16개 layer</span>
+              </div>
+              <div class="hyb-scroll">
+              <svg viewBox="0 0 440 660" role="img" aria-label="Gated Attention block: RMSNorm, GQA projections 24 Q and 4 KV heads of 256 dims, partial RoPE, softmax attention over the KV cache, sigmoid output gate, output projection" style="width:100%; height:auto; min-width:400px;">
+                <defs>
+                  <marker id="arrH" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+                    <path d="M0,0 L10,5 L0,10 z" fill="#87857c"></path>
+                  </marker>
+                </defs>
+
+                <g data-tip="Hidden states entering the mixer." data-tip-ko="mixer로 들어오는 hidden states.">
+                  <rect class="sbox" x="100" y="12" width="240" height="40" rx="9"></rect>
+                  <text class="stitle" x="220" y="29" text-anchor="middle">X — hidden states</text>
+                  <text class="smono" x="220" y="45" text-anchor="middle">[L × 5,120] BF16</text>
+                </g>
+                <line class="flowline" x1="220" y1="52" x2="220" y2="68" marker-end="url(#arrH)"></line>
+
+                <g data-tip="Pre-norm RMSNorm before the projections." data-tip-ko="projection 앞의 pre-norm RMSNorm.">
+                  <rect class="sbox sbox-warm" x="100" y="70" width="240" height="30" rx="8"></rect>
+                  <text class="stitle sm" x="220" y="89" text-anchor="middle">RMSNorm</text>
+                </g>
+
+                <path class="flowline-thin" d="M220,100 V114 H74 V128" fill="none"></path>
+                <line class="flowline-thin" x1="220" y1="114" x2="220" y2="128"></line>
+                <path class="flowline-thin" d="M220,114 H366 V128" fill="none"></path>
+
+                <g data-tip="W_Q: 5,120 → 24 heads × 256 = 6,144 (31.5 M weights)." data-tip-ko="W_Q: 5,120 → 24 heads × 256 = 6,144 (가중치 31.5 M).">
+                  <rect class="sbox" x="12" y="130" width="124" height="58" rx="9"></rect>
+                  <text class="stitle sm" x="74" y="150" text-anchor="middle">W_Q 5120→6144</text>
+                  <text class="smono" x="74" y="166" text-anchor="middle">24 heads × 256</text>
+                  <text class="smono" x="74" y="180" text-anchor="middle">31.5 M</text>
+                </g>
+                <g data-tip="W_K: 5,120 → 4 KV heads × 256 = 1,024 (5.24 M). GQA: one K head serves 6 query heads." data-tip-ko="W_K: 5,120 → 4 KV heads × 256 = 1,024 (5.24 M). GQA: K head 하나가 query head 6개를 담당.">
+                  <rect class="sbox" x="158" y="130" width="124" height="58" rx="9"></rect>
+                  <text class="stitle sm" x="220" y="150" text-anchor="middle">W_K 5120→1024</text>
+                  <text class="smono" x="220" y="166" text-anchor="middle">4 KV heads × 256</text>
+                  <text class="smono" x="220" y="180" text-anchor="middle">5.24 M</text>
+                </g>
+                <g data-tip="W_V: 5,120 → 4 KV heads × 256 = 1,024 (5.24 M). K and V are what the cache stores — 4 KB per token per layer in BF16." data-tip-ko="W_V: 5,120 → 4 KV heads × 256 = 1,024 (5.24 M). cache에 저장되는 것이 바로 K와 V — BF16 기준 layer당 token마다 4 KB.">
+                  <rect class="sbox" x="304" y="130" width="124" height="58" rx="9"></rect>
+                  <text class="stitle sm" x="366" y="150" text-anchor="middle">W_V 5120→1024</text>
+                  <text class="smono" x="366" y="166" text-anchor="middle">4 KV heads × 256</text>
+                  <text class="smono" x="366" y="180" text-anchor="middle">5.24 M</text>
+                </g>
+
+                <line class="flowline-thin" x1="74" y1="188" x2="74" y2="206"></line>
+                <line class="flowline-thin" x1="220" y1="188" x2="220" y2="206"></line>
+
+                <g data-tip="Partial RoPE: partial_rotary_factor 0.25 — only the first 64 of 256 dims per head are rotated (rope_theta 10,000,000)." data-tip-ko="Partial RoPE: partial_rotary_factor 0.25 — head당 256 dims 중 앞 64 dims만 회전 (rope_theta 10,000,000).">
+                  <rect class="sbox sbox-warm" x="12" y="208" width="270" height="28" rx="8"></rect>
+                  <text class="ssub" x="147" y="226" text-anchor="middle">partial RoPE — first 64 / 256 dims of Q, K</text>
+                </g>
+
+                <line class="flowline" x1="147" y1="236" x2="147" y2="260" marker-end="url(#arrH)"></line>
+                <line class="flowline" x1="366" y1="188" x2="366" y2="260" marker-end="url(#arrH)"></line>
+
+                <g data-tip="Softmax attention over the full prefix: every past token's K/V must be kept. Cost per query grows with T; the KV cache is the price of exact, position-addressable recall." data-tip-ko="prefix 전체에 대한 softmax attention: 과거 모든 token의 K/V를 보관해야 한다. query당 비용이 T에 비례해 증가 — KV cache는 정확한 위치 지정 recall의 대가다.">
+                  <rect class="sbox sbox-accent" x="30" y="262" width="380" height="74" rx="11"></rect>
+                  <text class="stitle taccent" x="220" y="284" text-anchor="middle">softmax attention (causal)</text>
+                  <text class="smono" x="220" y="303" text-anchor="middle">softmax(Q Kᵀ / √256 + M) V → [L × 24 × 256]</text>
+                  <text class="ssub" x="220" y="321" text-anchor="middle">reads ALL cached K/V — 1 KV head : 6 Q heads</text>
+                </g>
+
+                <!-- KV cache side chip -->
+                <g data-tip="KV cache per layer: 2 (K,V) × 4 heads × 256 × 2 B = 4,096 B per token. It grows linearly with context length T." data-tip-ko="layer당 KV cache: 2 (K,V) × 4 heads × 256 × 2 B = token당 4,096 B. context 길이 T에 선형으로 증가.">
+                  <rect class="kv-chip" x="284" y="344" width="146" height="46" rx="9"></rect>
+                  <text class="stitle sm taccent" x="357" y="363" text-anchor="middle">KV cache</text>
+                  <text class="smono" x="357" y="380" text-anchor="middle">+4 KB / token — grows</text>
+                </g>
+                <path class="loopline" d="M366,336 V344" marker-end="url(#arrH)"></path>
+
+                <line class="flowline" x1="147" y1="336" x2="147" y2="398" marker-end="url(#arrH)"></line>
+
+                <g data-tip="Output gate (attn_output_gate: true in config): a sigmoid gate g projected from the same input, applied elementwise to the attention output before W_O — the 'Gated' in Gated Attention." data-tip-ko="Output gate (config의 attn_output_gate: true): 같은 입력에서 projection한 sigmoid gate g를 attention 출력에 elementwise 적용한 뒤 W_O로 — Gated Attention의 'Gated'가 이것.">
+                  <rect class="sbox sbox-warm" x="40" y="400" width="240" height="42" rx="9"></rect>
+                  <text class="stitle sm" x="160" y="418" text-anchor="middle">output gate — σ(g) ⊙ out</text>
+                  <text class="smono" x="160" y="434" text-anchor="middle">g: [L × 6,144]</text>
+                </g>
+                <line class="flowline" x1="160" y1="442" x2="160" y2="462" marker-end="url(#arrH)"></line>
+
+                <g data-tip="W_O: 6,144 → 5,120 (31.5 M weights). Concatenated head outputs back to d_model." data-tip-ko="W_O: 6,144 → 5,120 (가중치 31.5 M). head 출력을 이어 붙여 d_model로 복원.">
+                  <rect class="sbox" x="40" y="464" width="240" height="42" rx="9"></rect>
+                  <text class="stitle sm" x="160" y="482" text-anchor="middle">W_O — [6,144 × 5,120]</text>
+                  <text class="smono" x="160" y="498" text-anchor="middle">→ [L × 5,120] · 31.5 M</text>
+                </g>
+                <line class="flowline" x1="160" y1="506" x2="160" y2="526" marker-end="url(#arrH)"></line>
+
+                <g data-tip="Every layer — linear or full — is followed by the same dense SwiGLU FFN." data-tip-ko="linear든 full이든 모든 layer 뒤에는 동일한 dense SwiGLU FFN이 온다.">
+                  <rect class="sbox sbox-warm" x="40" y="528" width="240" height="42" rx="9"></rect>
+                  <text class="stitle sm" x="160" y="546" text-anchor="middle">dense SwiGLU FFN</text>
+                  <text class="smono" x="160" y="562" text-anchor="middle">5,120 → 17,408 → 5,120</text>
+                </g>
+
+                <text class="smono" x="220" y="606" text-anchor="middle">memory that scales with context: KV cache — 4 KB × T per layer</text>
+                <text class="smono taccent" x="220" y="626" text-anchor="middle">16 layers × 4 KB = 64 KB per token, forever growing</text>
+              </svg>
+              </div>
+            </div>
+
+            <!-- ===== gated deltanet ===== -->
+            <div>
+              <div class="mixer-head mh-lin">
+                <span class="lang-en">Gated DeltaNet — linear, delta rule · × 48 layers</span>
+                <span class="lang-ko">Gated DeltaNet — linear, delta rule · 48개 layer</span>
+              </div>
+              <div class="hyb-scroll">
+              <svg viewBox="0 0 440 660" role="img" aria-label="Gated DeltaNet block: RMSNorm, q k v projections of 16 key and 48 value heads of 128 dims, short causal convolution, L2 norm, delta-rule state update with constant-size state matrix, output gate, output projection" style="width:100%; height:auto; min-width:400px;">
+                <g data-tip="Same input as the full-attention mixer." data-tip-ko="full-attention mixer와 동일한 입력.">
+                  <rect class="sbox" x="100" y="12" width="240" height="40" rx="9"></rect>
+                  <text class="stitle" x="220" y="29" text-anchor="middle">X — hidden states</text>
+                  <text class="smono" x="220" y="45" text-anchor="middle">[L × 5,120] BF16</text>
+                </g>
+                <line class="flowline" x1="220" y1="52" x2="220" y2="68" marker-end="url(#arrH)"></line>
+
+                <g data-tip="Pre-norm RMSNorm before the projections." data-tip-ko="projection 앞의 pre-norm RMSNorm.">
+                  <rect class="sbox sbox-warm" x="100" y="70" width="240" height="30" rx="8"></rect>
+                  <text class="stitle sm" x="220" y="89" text-anchor="middle">RMSNorm</text>
+                </g>
+
+                <path class="flowline-thin" d="M220,100 V114 H74 V128" fill="none"></path>
+                <line class="flowline-thin" x1="220" y1="114" x2="220" y2="128"></line>
+                <path class="flowline-thin" d="M220,114 H366 V128" fill="none"></path>
+
+                <g data-tip="q: 5,120 → 16 heads × 128 = 2,048 (10.5 M). Queries read the state." data-tip-ko="q: 5,120 → 16 heads × 128 = 2,048 (10.5 M). query가 state를 읽는다.">
+                  <rect class="sbox" x="12" y="130" width="124" height="58" rx="9"></rect>
+                  <text class="stitle sm" x="74" y="150" text-anchor="middle">q 5120→2048</text>
+                  <text class="smono" x="74" y="166" text-anchor="middle">16 heads × 128</text>
+                  <text class="smono" x="74" y="180" text-anchor="middle">10.5 M</text>
+                </g>
+                <g data-tip="k: 5,120 → 16 heads × 128 = 2,048 (10.5 M). Each key head is shared by 3 value heads (48 / 16)." data-tip-ko="k: 5,120 → 16 heads × 128 = 2,048 (10.5 M). key head 하나를 value head 3개가 공유 (48 / 16).">
+                  <rect class="sbox" x="158" y="130" width="124" height="58" rx="9"></rect>
+                  <text class="stitle sm" x="220" y="150" text-anchor="middle">k 5120→2048</text>
+                  <text class="smono" x="220" y="166" text-anchor="middle">16 heads × 128</text>
+                  <text class="smono" x="220" y="180" text-anchor="middle">10.5 M</text>
+                </g>
+                <g data-tip="v: 5,120 → 48 heads × 128 = 6,144 (31.5 M). Alongside q/k/v, tiny per-head projections produce the decay gate α_t and write strength β_t." data-tip-ko="v: 5,120 → 48 heads × 128 = 6,144 (31.5 M). q/k/v와 함께 head별 소형 projection이 decay gate α_t와 write strength β_t를 만든다.">
+                  <rect class="sbox" x="304" y="130" width="124" height="58" rx="9"></rect>
+                  <text class="stitle sm" x="366" y="150" text-anchor="middle">v 5120→6144</text>
+                  <text class="smono" x="366" y="166" text-anchor="middle">48 heads × 128</text>
+                  <text class="smono" x="366" y="180" text-anchor="middle">31.5 M · +α, β gates</text>
+                </g>
+
+                <line class="flowline-thin" x1="74" y1="188" x2="74" y2="206"></line>
+                <line class="flowline-thin" x1="220" y1="188" x2="220" y2="206"></line>
+                <line class="flowline-thin" x1="366" y1="188" x2="366" y2="206"></line>
+
+                <g data-tip="Short causal Conv1d, kernel 4 (linear_conv_kernel_dim), depthwise over the 10,240 q/k/v channels — cheap local mixing in place of positional encoding. Its rolling buffer is 4 × 10,240 values ≈ 80 KB." data-tip-ko="짧은 causal Conv1d, kernel 4 (linear_conv_kernel_dim), q/k/v 10,240개 채널에 depthwise — positional encoding을 대신하는 값싼 local mixing. rolling buffer는 4 × 10,240 값 ≈ 80 KB.">
+                  <rect class="sbox sbox-warm" x="12" y="208" width="416" height="28" rx="8"></rect>
+                  <text class="ssub" x="220" y="226" text-anchor="middle">causal Conv1d (kernel 4, depthwise, 10,240 ch) + SiLU</text>
+                </g>
+
+                <g data-tip="L2 normalization on q and k — replaces softmax's normalization and keeps the recurrence stable." data-tip-ko="q, k에 L2 normalization — softmax의 정규화를 대신하며 recurrence를 안정화한다.">
+                  <rect class="sbox sbox-warm" x="12" y="244" width="270" height="28" rx="8"></rect>
+                  <text class="ssub" x="147" y="262" text-anchor="middle">L2-norm on q, k (per head, dim 128)</text>
+                </g>
+
+                <line class="flowline" x1="147" y1="272" x2="147" y2="294" marker-end="url(#arrH)"></line>
+                <line class="flowline" x1="366" y1="236" x2="366" y2="294" marker-end="url(#arrH)"></line>
+
+                <g data-tip="The delta rule: α_t decays old memory, β_t writes the prediction error (v − S·k) into the rank-1 direction k. One matrix S per value head — 128 × 128 = 16,384 floats — regardless of how long the context is. mamba_ssm_dtype: float32 in the config." data-tip-ko="delta rule: α_t가 기존 메모리를 감쇠시키고, β_t가 예측 오차 (v − S·k)를 rank-1 방향 k에 기록한다. value head당 행렬 S 하나 — 128 × 128 = 16,384 floats — context 길이와 무관. config의 mamba_ssm_dtype: float32.">
+                  <rect class="sbox sbox-lin" x="30" y="296" width="380" height="90" rx="11"></rect>
+                  <text class="stitle tlin" x="220" y="318" text-anchor="middle">delta-rule state update (per head)</text>
+                  <text class="smono" x="220" y="338" text-anchor="middle">S ← α_t·S + β_t·(v_t − S·k_t)·k_tᵀ</text>
+                  <text class="smono" x="220" y="356" text-anchor="middle">o_t = S·q_t  ·  S ∈ ℝ^(128 × 128) per v-head</text>
+                  <text class="ssub" x="220" y="374" text-anchor="middle">read + write the SAME fixed matrix at every step</text>
+                </g>
+
+                <!-- state side chip -->
+                <g data-tip="Recurrent state per layer: 48 heads × 128 × 128 × 4 B (fp32) = 3,145,728 B = 3 MB — plus the ≈80 KB conv buffer. Constant: token 1 and token 262,144 cost the same." data-tip-ko="layer당 recurrent state: 48 heads × 128 × 128 × 4 B (fp32) = 3,145,728 B = 3 MB — 여기에 conv buffer ≈80 KB. 상수: token 1이든 token 262,144든 비용이 같다.">
+                  <rect class="st-chip" x="284" y="394" width="146" height="46" rx="9"></rect>
+                  <text class="stitle sm tlin" x="357" y="413" text-anchor="middle">recurrent state</text>
+                  <text class="smono" x="357" y="430" text-anchor="middle">3 MB / layer — constant</text>
+                </g>
+                <path class="stateline" d="M366,386 V394" marker-end="url(#arrH)"></path>
+
+                <line class="flowline" x1="147" y1="386" x2="147" y2="398" marker-end="url(#arrH)"></line>
+
+                <g data-tip="Output gate: a sigmoid gate projected from x, applied elementwise before the output projection — the 'Gated' in Gated DeltaNet." data-tip-ko="Output gate: x에서 projection한 sigmoid gate를 출력 projection 전에 elementwise 적용 — Gated DeltaNet의 'Gated'.">
+                  <rect class="sbox sbox-warm" x="40" y="400" width="240" height="42" rx="9"></rect>
+                  <text class="stitle sm" x="160" y="418" text-anchor="middle">output gate — σ(g) ⊙ o</text>
+                  <text class="smono" x="160" y="434" text-anchor="middle">g: [L × 6,144]</text>
+                </g>
+                <line class="flowline" x1="160" y1="442" x2="160" y2="462" marker-end="url(#arrH)"></line>
+
+                <g data-tip="Output projection: 48 × 128 = 6,144 → 5,120 (31.5 M weights) — same output width as the attention mixer's W_O input." data-tip-ko="Output projection: 48 × 128 = 6,144 → 5,120 (가중치 31.5 M) — attention mixer의 W_O 입력과 같은 폭.">
+                  <rect class="sbox" x="40" y="464" width="240" height="42" rx="9"></rect>
+                  <text class="stitle sm" x="160" y="482" text-anchor="middle">W_out — [6,144 × 5,120]</text>
+                  <text class="smono" x="160" y="498" text-anchor="middle">→ [L × 5,120] · 31.5 M</text>
+                </g>
+                <line class="flowline" x1="160" y1="506" x2="160" y2="526" marker-end="url(#arrH)"></line>
+
+                <g data-tip="Identical dense SwiGLU FFN as after the full-attention layers." data-tip-ko="full-attention layer 뒤와 동일한 dense SwiGLU FFN.">
+                  <rect class="sbox sbox-warm" x="40" y="528" width="240" height="42" rx="9"></rect>
+                  <text class="stitle sm" x="160" y="546" text-anchor="middle">dense SwiGLU FFN</text>
+                  <text class="smono" x="160" y="562" text-anchor="middle">5,120 → 17,408 → 5,120</text>
+                </g>
+
+                <text class="smono" x="220" y="606" text-anchor="middle">memory that scales with context: none — S is 128×128 per head, always</text>
+                <text class="smono tlin" x="220" y="626" text-anchor="middle">48 layers × ~3.1 MB ≈ 148 MB total, at ANY context length</text>
+              </svg>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 3 · MEMORY RACE ============ -->
+    <section class="section-tight" id="memory-view">
+      <div class="container">
+        <h2 class="viz-h">
+          <span class="lang-en">3 · The memory race: KV cache vs recurrent state</span>
+          <span class="lang-ko">3 · 메모리 경주: KV cache vs recurrent state</span>
+        </h2>
+        <p class="viz-sub">
+          <span class="lang-en">Drag the context-length slider or step through the milestones.
+            Full-attention layers pay 4 KB per token per layer; Gated DeltaNet layers pay a flat
+            ~3.1 MB each, once. The counterfactual is the same model with all 64 layers full.</span>
+          <span class="lang-ko">context 길이 slider를 움직이거나 milestone을 넘겨 보자.
+            full-attention layer는 layer당 token마다 4 KB를 내고, Gated DeltaNet layer는 layer당
+            ~3.1 MB를 한 번만 낸다. 비교 대상은 64개 layer 전부 full attention인 가상의 동일
+            모델이다.</span>
+        </p>
+
+        <div class="viz-frame">
+          <div class="dt-controls">
+            <button class="btn ghost btn-sm" id="btnReset" type="button">⟲ Reset</button>
+            <button class="btn ghost btn-sm" id="btnPrev" type="button">← Prev</button>
+            <button class="btn btn-sm" id="btnNext" type="button">Next →</button>
+            <button class="btn ghost btn-sm" id="btnPlay" type="button">▶ Play</button>
+            <span class="dt-step" id="raceStep">Step 0 / 5 — 512 tokens</span>
+          </div>
+
+          <div class="mask-modes">
+            <button class="mode-btn on" id="modeZoom" type="button">0 – 4K — the crossover</button>
+            <button class="mode-btn" id="modeFull" type="button">0 – 262K — native context</button>
+          </div>
+
+          <div class="hyb-scroll">
+          <svg id="raceSvg" viewBox="0 0 740 360" role="img" aria-label="Memory versus context length: hybrid total, all-full-attention counterfactual, and the constant linear-state floor" style="width:100%; height:auto; min-width:680px;">
+            <!-- axes -->
+            <line x1="70" y1="310" x2="700" y2="310" stroke="#d1cfc5" stroke-width="1.5"></line>
+            <line x1="70" y1="40" x2="70" y2="310" stroke="#d1cfc5" stroke-width="1.5"></line>
+            <text class="mlabel" x="385" y="345" text-anchor="middle">context length T (tokens)</text>
+            <text class="mlabel" x="24" y="175" transform="rotate(-90 24 175)" text-anchor="middle">memory (bytes)</text>
+
+            <g id="xTicks">
+              <text class="mlabel xt" x="70" y="326" text-anchor="middle">0</text>
+              <text class="mlabel xt" x="227.5" y="326" text-anchor="middle">1K</text>
+              <text class="mlabel xt" x="385" y="326" text-anchor="middle">2K</text>
+              <text class="mlabel xt" x="542.5" y="326" text-anchor="middle">3K</text>
+              <text class="mlabel xt" x="700" y="326" text-anchor="middle">4K</text>
+            </g>
+            <g id="yTicks">
+              <text class="mlabel yt" x="62" y="314" text-anchor="end">0</text>
+              <text class="mlabel yt" x="62" y="246.5" text-anchor="end">320 MB</text>
+              <text class="mlabel yt" x="62" y="179" text-anchor="end">640 MB</text>
+              <text class="mlabel yt" x="62" y="111.5" text-anchor="end">960 MB</text>
+              <text class="mlabel yt" x="62" y="44" text-anchor="end">1.25 GB</text>
+            </g>
+
+            <!-- curves (zoom-mode defaults; JS redraws) -->
+            <line id="lnAF"  class="curve-af"  x1="70" y1="310" x2="700" y2="94"></line>
+            <line id="lnHyb" class="curve-hyb" x1="70" y1="278.8" x2="700" y2="224.8"></line>
+            <line id="lnSt"  class="curve-st"  x1="70" y1="278.8" x2="700" y2="278.8"></line>
+
+            <!-- crossover marker -->
+            <g id="crossG">
+              <circle id="crossDot" cx="191.2" cy="268.4" r="5" fill="none" stroke="#141413" stroke-width="1.6"></circle>
+              <text class="mlabel" id="crossLbl" x="199" y="258">crossover · T = 788</text>
+            </g>
+
+            <!-- cursor -->
+            <line id="cursor" x1="148.8" y1="40" x2="148.8" y2="310" stroke="#141413" stroke-width="1" stroke-dasharray="3 4" opacity="0.6"></line>
+            <circle id="dotAF"  cx="148.8" cy="283" r="5.5" class="dot-af"></circle>
+            <circle id="dotHyb" cx="148.8" cy="272" r="5.5" class="dot-hyb"></circle>
+            <text class="smono" id="lblAF"  x="158" y="280">all-full 128 MB</text>
+            <text class="smono" id="lblHyb" x="158" y="300">hybrid 180 MB</text>
+
+            <!-- legend -->
+            <g transform="translate(80, 52)">
+              <line class="curve-hyb" x1="0" y1="0" x2="26" y2="0"></line>
+              <text class="ssub" x="32" y="4">hybrid: 16 full layers × 4 KB·T + 148 MB state</text>
+              <line class="curve-af" x1="0" y1="18" x2="26" y2="18"></line>
+              <text class="ssub" x="32" y="22">counterfactual: 64 full layers × 4 KB·T</text>
+              <line class="curve-st" x1="0" y1="36" x2="26" y2="36"></line>
+              <text class="ssub" x="32" y="40">48 linear layers' state — flat 148 MB</text>
+            </g>
+          </svg>
+          </div>
+
+          <div class="slider-row">
+            <span class="smono slider-lbl">T</span>
+            <input type="range" id="ctxSlider" min="0" max="1000" value="125" aria-label="Context length" />
+            <span class="smono" id="sliderVal">512 tok</span>
+          </div>
+
+          <p class="dt-caption" id="raceCaption"><span class="lang-en">Below the crossover the hybrid actually holds
+            <b>more</b> memory: 48 linear layers carry a fixed 148 MB of fp32 state while 16 full
+            layers have written only 512 × 64 KB = 32 MB of KV. The all-full model sits at 128 MB.
+            Recurrent state is a fixed cost, paid up front.</span><span class="lang-ko">crossover 아래에서는
+            hybrid가 오히려 메모리를 <b>더</b> 쓴다: linear layer 48개가 고정 148 MB의 fp32 state를
+            들고 있는 동안, full layer 16개가 쓴 KV는 512 × 64 KB = 32 MB뿐이다. all-full 모델은
+            128 MB. recurrent state는 선불로 내는 고정비다.</span></p>
+
+          <div class="dt-meters" id="raceMeters"></div>
+
+          <noscript>
+            <p class="viz-sub">
+              <span class="lang-en">With JavaScript enabled this chart is a live explorer — a context
+                slider, milestones and a zoomable crossover view. You are seeing the static 0–4K
+                view: the hybrid line starts 148 MB up but climbs 4× slower and crosses the all-full
+                line at T = 788 tokens.</span>
+              <span class="lang-ko">JavaScript가 켜져 있으면 이 차트는 라이브 explorer가 된다 —
+                context slider, milestone, 확대 가능한 crossover 뷰까지. 지금 보이는 것은 정적인
+                0–4K 뷰다: hybrid 선은 148 MB 위에서 출발하지만 4× 느리게 올라가
+                T = 788 tokens에서 all-full 선과 교차한다.</span>
+            </p>
+          </noscript>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 4 · WHY HYBRIDIZE ============ -->
+    <section class="section-tight" id="why-view">
+      <div class="container">
+        <h2 class="viz-h">
+          <span class="lang-en">4 · Why not 64 linear layers? The recall tax</span>
+          <span class="lang-ko">4 · 왜 64개 전부 linear가 아닐까? recall의 대가</span>
+        </h2>
+        <p class="viz-sub">
+          <span class="lang-en">If constant-size state were free, every layer would be linear.
+            The published record says it is not free — exact recall is what you pay.</span>
+          <span class="lang-ko">고정 크기 state가 공짜라면 모든 layer가 linear였을 것이다.
+            공개된 결과들은 공짜가 아니라고 말한다 — 대가는 exact recall이다.</span>
+        </p>
+
+        <div class="card-grid why-grid">
+          <div class="card">
+            <h3>Gated DeltaNet <span class="smono-inline">arXiv 2412.06464</span></h3>
+            <p>
+              <span class="lang-en">The mixer itself. Gating gives fast memory erasure, the delta
+                rule gives targeted updates; the paper reports gains over Mamba2/DeltaNet on
+                in-context retrieval among other axes — and its <em>hybrid</em> variants (adding
+                attention layers) reach both better training efficiency and better task scores
+                than pure linear stacks.</span>
+              <span class="lang-ko">mixer 그 자체. gating은 빠른 memory 삭제를, delta rule은
+                표적 업데이트를 준다. 논문은 in-context retrieval을 포함한 여러 축에서
+                Mamba2/DeltaNet 대비 향상을 보고하며, attention layer를 섞은 <em>hybrid</em>
+                변형이 순수 linear 스택보다 학습 효율과 태스크 점수 모두 낫다고 보고한다.</span>
+            </p>
+          </div>
+          <div class="card">
+            <h3>MiniMax-01 <span class="smono-inline">arXiv 2501.08313</span></h3>
+            <p>
+              <span class="lang-en">Hybrid at 456B production scale — and pointedly <em>not</em>
+                pure linear: one softmax-attention block is kept after every seven lightning
+                (linear) attention blocks. Periodic full attention is what preserves long-context
+                retrieval behavior at a 7:1 dilution.</span>
+              <span class="lang-ko">456B 프로덕션 규모의 hybrid — 그리고 의도적으로 순수
+                linear가 <em>아니다</em>: lightning (linear) attention 블록 7개마다
+                softmax-attention 블록 1개를 남긴다. 7:1 희석에서도 long-context retrieval을
+                지켜주는 것이 주기적 full attention이다.</span>
+            </p>
+          </div>
+          <div class="card">
+            <h3>Qwen3-Next → Qwen3.5 <span class="smono-inline">3 : 1</span></h3>
+            <p>
+              <span class="lang-en">Qwen settled at a denser 3:1 — the same
+                <code>full_attention_interval: 4</code> in Qwen3-Next-80B-A3B and every published
+                Qwen3.5 config. The Qwen3-Next release reports ~10× inference throughput beyond
+                32K context vs the all-full-attention Qwen3-32B (different sizes, so indicative,
+                not an ablation).</span>
+              <span class="lang-ko">Qwen은 더 촘촘한 3:1에 안착했다 — Qwen3-Next-80B-A3B와 공개된
+                모든 Qwen3.5 config의 <code>full_attention_interval: 4</code>가 그것이다.
+                Qwen3-Next 릴리스는 32K 이상 context에서 all-full인 Qwen3-32B 대비 약 10×
+                추론 throughput을 보고한다 (모델 크기가 달라 방향성 지표이지 ablation은 아니다).</span>
+            </p>
+          </div>
+        </div>
+
+        <p class="why-note">
+          <span class="lang-en">The mechanism behind the tax: a delta-rule state is 16,384 floats
+            per head — a <em>lossy compression</em> of an unbounded past. Needle-in-a-haystack-style
+            probes ask for verbatim, position-addressable lookup, which is exactly what a fixed-size
+            state cannot guarantee and what softmax attention over a KV cache does natively. The
+            interleaved full layers give every fourth layer a true random-access read of the whole
+            context; the linear layers in between handle the bulk of sequence mixing at O(1) memory
+            per token.</span>
+          <span class="lang-ko">이 대가의 메커니즘: delta-rule state는 head당 16,384개 float —
+            무한한 과거의 <em>손실 압축</em>이다. needle-in-a-haystack류 프로브는 위치 지정
+            원문 lookup을 요구하는데, 이는 고정 크기 state가 보장할 수 없는 것이자 KV cache 위의
+            softmax attention이 기본으로 해내는 것이다. 인터리브된 full layer는 4개 layer마다
+            컨텍스트 전체에 대한 진짜 random-access 읽기를 제공하고, 사이의 linear layer들이
+            token당 O(1) 메모리로 시퀀스 혼합의 대부분을 처리한다.</span>
+        </p>
+      </div>
+    </section>
+
+    <!-- ============ PROSE ============ -->
+    <section class="section">
+      <div class="container">
+        <div class="prose">
+          <h2>
+            <span class="lang-en">Reading the diagram</span>
+            <span class="lang-ko">다이어그램 읽는 법</span>
+          </h2>
+
+          <h3><span class="lang-en">One stack, two memory contracts</span>
+              <span class="lang-ko">하나의 스택, 두 개의 메모리 계약</span></h3>
+          <p>
+            <span class="lang-en">
+              The strip in view 1 is the config's <code>layer_types</code> verbatim: 16 repeats of
+              three Gated DeltaNet layers followed by one Gated Attention layer. Both mixers take
+              [L × 5,120] in and give [L × 5,120] out, and both are followed by the identical dense
+              SwiGLU FFN (5,120 → 17,408) — the residual stream cannot tell them apart. What
+              differs is what each layer must <em>remember</em> to serve the next token: the full
+              layer appends 4 KB of K/V per token and keeps it forever; the DeltaNet layer
+              overwrites a fixed 3 MB matrix in place.
+            </span>
+            <span class="lang-ko">
+              뷰 1의 스트립은 config의 <code>layer_types</code> 그대로다: Gated DeltaNet 3개 +
+              Gated Attention 1개가 16번 반복된다. 두 mixer 모두 [L × 5,120]을 받아 [L × 5,120]을
+              내놓고, 뒤에는 동일한 dense SwiGLU FFN (5,120 → 17,408)이 붙는다 — residual stream
+              입장에서는 구분이 안 된다. 다른 것은 다음 token을 위해 각 layer가 <em>기억해야
+              하는 것</em>이다: full layer는 token마다 4 KB의 K/V를 덧붙여 영원히 보관하고,
+              DeltaNet layer는 고정된 3 MB 행렬을 제자리에서 덮어쓴다.
+            </span>
+          </p>
+
+          <h3><span class="lang-en">The delta rule is an online learner</span>
+              <span class="lang-ko">delta rule은 온라인 학습기다</span></h3>
+          <p>
+            <span class="lang-en">
+              Read the update S ← α·S + β·(v − S·k)·kᵀ as one step of online regression: the state
+              predicts S·k for the incoming key, the error (v − S·k) is written back along k with
+              learning rate β, and α forgets. That error-correcting write is why DeltaNet-family
+              mixers retrieve better than plain additive linear attention (S ← S + v·kᵀ) — a new
+              value for an old key <em>replaces</em> the stale association instead of piling on top
+              of it. The short kernel-4 convolution and the L2-norm on q/k are the two small
+              stabilizers that make the recurrence trainable at scale.
+            </span>
+            <span class="lang-ko">
+              업데이트 S ← α·S + β·(v − S·k)·kᵀ는 온라인 회귀의 한 스텝으로 읽으면 된다: state가
+              들어온 key에 대해 S·k를 예측하고, 오차 (v − S·k)를 학습률 β로 k 방향에 되써 넣고,
+              α가 망각을 담당한다. 이 오차-수정형 쓰기 덕분에 DeltaNet 계열이 단순 덧셈형 linear
+              attention (S ← S + v·kᵀ)보다 retrieval에 강하다 — 같은 key의 새 value가 낡은 연합
+              위에 쌓이는 게 아니라 <em>교체</em>된다. kernel 4짜리 짧은 convolution과 q/k의
+              L2-norm은 이 recurrence를 대규모로 학습 가능하게 만드는 두 개의 안정장치다.
+            </span>
+          </p>
+
+          <h3><span class="lang-en">The arithmetic that decides the ratio</span>
+              <span class="lang-ko">비율을 결정하는 산수</span></h3>
+          <p>
+            <span class="lang-en">
+              Per layer, the trade is 3,227,648 bytes of constant state (3 MB matrix + 80 KB conv
+              buffer) against 4,096 bytes of KV per token — they tie at <strong>788 tokens</strong>.
+              Everything past that is profit, and it compounds: at the native 262,144-token context
+              the hybrid holds 16.1 GB where an all-full sibling would hold 64 GB. The asymptotic
+              ratio is simply the layer ratio, 16/64 = 4×. Notice what the ratio does <em>not</em>
+              change: the 16 full layers still grow linearly. The hybrid divides the KV-cache
+              problem by four; it does not delete it.
+            </span>
+            <span class="lang-ko">
+              layer당 거래는 상수 state 3,227,648 bytes (3 MB 행렬 + 80 KB conv buffer) 대
+              token당 KV 4,096 bytes — <strong>788 tokens</strong>에서 동점이 된다. 그 이후는
+              전부 이득이고 복리로 쌓인다: 네이티브 262,144 token context에서 hybrid는 16.1 GB,
+              all-full 형제 모델은 64 GB를 든다. 점근 비율은 layer 비율 그대로 16/64 = 4×다.
+              이 비율이 바꾸지 <em>못하는</em> 것도 보인다: full layer 16개는 여전히 선형으로
+              자란다. hybrid는 KV cache 문제를 4로 나눌 뿐, 지우지는 않는다.
+            </span>
+          </p>
+        </div>
+
+        <div class="eff-note band-dark">
+          <h3>
+            <span class="lang-en">Why this matters for efficiency work</span>
+            <span class="lang-ko">효율화 연구에 왜 중요한가</span>
+          </h3>
+          <p>
+            <span class="lang-en">
+              Hybridization moves the serving bottleneck rather than removing it. First, the whole
+              long-context memory budget now concentrates in 16 layers — any per-layer KV technique
+              (quantization, eviction, offloading) applies to a 4× smaller surface, but its
+              quality effect concentrates too, because those 16 layers are the model's only exact
+              recall path. Second, the linear layers turn decode into a state-update workload —
+              fixed-size fp32 state, read-modify-write every token — whose batching and kernel
+              behavior is closer to an RNN than to attention. Third, the crossover logic runs in
+              reverse for short sequences: under ~800 tokens the hybrid is the <em>heavier</em>
+              model. Architecture choices like this are context-length bets, and the config tells
+              you exactly where the bet breaks even.
+            </span>
+            <span class="lang-ko">
+              하이브리드화는 serving 병목을 없애는 게 아니라 옮긴다. 첫째, long-context 메모리
+              예산 전체가 이제 16개 layer에 집중된다 — layer 단위 KV 기법(quantization, eviction,
+              offloading)의 적용 면적은 4× 줄지만, 그 16개 layer가 모델의 유일한 exact recall
+              경로라서 품질 영향도 함께 집중된다. 둘째, linear layer들은 decode를 state-update
+              워크로드로 바꾼다 — 고정 크기 fp32 state를 token마다 read-modify-write — batching과
+              kernel 특성이 attention보다 RNN에 가깝다. 셋째, 짧은 시퀀스에서는 crossover 논리가
+              거꾸로 돈다: ~800 token 아래에서는 hybrid가 오히려 <em>더 무거운</em> 모델이다.
+              이런 아키텍처 선택은 context-length에 대한 베팅이고, config가 그 손익분기점을
+              정확히 알려 준다.
+            </span>
+          </p>
+          <div class="eff-chips">
+            <span class="eff-chip">KV: 64 KB/token (16 full layers) vs 256 KB all-full</span>
+            <span class="eff-chip">state: 48 × ~3.1 MB ≈ 148 MB, constant</span>
+            <span class="eff-chip">break-even: T = 788 tokens</span>
+            <span class="eff-chip">native 262K: 16.1 GB vs 64 GB — 3.96×</span>
+          </div>
+        </div>
+
+        <div class="prose">
+          <h2>
+            <span class="lang-en">Going deeper</span>
+            <span class="lang-ko">더 깊이 보기</span>
+          </h2>
+          <ul class="deeper-list">
+            <li><a class="arrow-link" href="https://huggingface.co/Qwen/Qwen3.5-27B" target="_blank" rel="noopener">Qwen3.5-27B — model card &amp; config.json (the numbers on this page)</a></li>
+            <li><a class="arrow-link" href="https://huggingface.co/Qwen/Qwen3-Next-80B-A3B-Instruct" target="_blank" rel="noopener">Qwen3-Next-80B-A3B — where the 3:1 hybrid layout debuted</a></li>
+            <li><a class="arrow-link" href="https://arxiv.org/abs/2412.06464" target="_blank" rel="noopener">Gated DeltaNet — gated delta rule for linear transformers (arXiv 2412.06464)</a></li>
+            <li><a class="arrow-link" href="https://arxiv.org/abs/2501.08313" target="_blank" rel="noopener">MiniMax-01 — lightning attention hybrid at 456B scale (arXiv 2501.08313)</a></li>
+            <li><a class="arrow-link" href="/reviews/gated-deltanet/">This site's review: Gated DeltaNet</a></li>
+            <li><a class="arrow-link" href="/reviews/minimax-01/">This site's review: MiniMax-01</a></li>
+          </ul>
+          <p class="fine-print">
+            <span class="lang-en">
+              All shapes and byte counts on this page come from the published
+              <code>Qwen/Qwen3.5-27B</code> <code>config.json</code> (fetched 2026-07-04):
+              64 layers with <code>full_attention_interval&nbsp;4</code>; full attention 24 Q / 4 KV
+              heads × 256 with <code>attn_output_gate</code> and partial RoPE (factor 0.25); Gated
+              DeltaNet 16 K / 48 V heads × 128, conv kernel 4, <code>mamba_ssm_dtype float32</code>;
+              hidden 5,120; dense FFN 17,408; vocab 248,320; native context 262,144. KV bytes assume
+              BF16; state bytes use fp32 per the config; the conv-buffer estimate assumes BF16.
+              The 27B config also declares a 1-layer multi-token-prediction (MTP) head and a vision
+              encoder — both outside this page's scope. MoE FFNs appear in other family members
+              (e.g. Qwen3.5-397B-A17B), not in the dense 27B. The all-full-attention counterfactual
+              is arithmetic, not a released model.
+            </span>
+            <span class="lang-ko">
+              이 페이지의 모든 shape와 byte 수치는 공개된 <code>Qwen/Qwen3.5-27B</code>
+              <code>config.json</code>(2026-07-04 확인)에서 나왔다: 64 layers,
+              <code>full_attention_interval&nbsp;4</code>; full attention은 24 Q / 4 KV heads × 256에
+              <code>attn_output_gate</code>와 partial RoPE (factor 0.25); Gated DeltaNet은 16 K /
+              48 V heads × 128, conv kernel 4, <code>mamba_ssm_dtype float32</code>; hidden 5,120;
+              dense FFN 17,408; vocab 248,320; native context 262,144. KV byte는 BF16 기준, state
+              byte는 config대로 fp32, conv buffer 추정치는 BF16 가정이다. 27B config에는 1-layer
+              multi-token-prediction (MTP) head와 vision encoder도 선언되어 있으나 이 페이지 범위
+              밖이다. MoE FFN은 dense 27B가 아니라 패밀리의 다른 모델(예: Qwen3.5-397B-A17B)에
+              있다. all-full-attention 비교 모델은 산술적 가정이지 실제 릴리스가 아니다.
+            </span>
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <div id="hybTip" aria-hidden="true"></div>
+  </div>
+</Base>
+
+<style is:global>
+  /* ---- page chrome ---- */
+  .hyb-page .toggle-row { margin: 1.2rem 0 0; }
+  .hyb-page .jump-row { display: flex; gap: 0.6rem; flex-wrap: wrap; margin: 1.4rem 0 0; }
+  .hyb-page .jump-row .tag { transition: border-color 0.2s, color 0.2s; }
+  .hyb-page .jump-row .tag:hover { border-color: var(--accent); color: var(--accent-strong); }
+  .hyb-page .config-note {
+    margin-top: 1.4rem; display: flex; flex-wrap: wrap; gap: 0.45rem; align-items: center;
+    font-size: 0.88rem; color: var(--text-secondary);
+  }
+  .hyb-page .config-lead { flex-basis: 100%; margin-bottom: 0.15rem; }
+  .hyb-page .viz-h { margin-bottom: 0.4rem; }
+  .hyb-page .viz-sub { color: var(--text-secondary); max-width: 48em; margin: 0 0 0.4rem; }
+  .hyb-page .hyb-scroll { overflow-x: auto; }
+
+  /* ---- shared SVG vocabulary ---- */
+  .hyb-page svg text { font-family: var(--font-sans); fill: var(--text); }
+  .hyb-page .stitle { font-size: 13px; font-weight: 600; }
+  .hyb-page .stitle.sm { font-size: 12px; }
+  .hyb-page .ssub { font-size: 11px; fill: var(--text-secondary); }
+  .hyb-page .smono { font-family: var(--font-mono); font-size: 10.5px; fill: var(--text-secondary); }
+  .hyb-page .mlabel { font-family: var(--font-mono); font-size: 9.5px; fill: var(--text-tertiary); }
+  .hyb-page .taccent { fill: var(--accent-strong); }
+  .hyb-page .tlin { fill: var(--swatch-sky); }
+  .hyb-page .smono-inline { font-family: var(--font-mono); font-size: 0.72em; color: var(--text-tertiary); font-weight: 400; }
+
+  .hyb-page .sbox { fill: #ffffff; stroke: var(--line-strong); stroke-width: 1.3; }
+  .hyb-page .sbox-warm { fill: var(--surface-warm); stroke: var(--line); }
+  .hyb-page .sbox-accent { fill: #fdf6f2; stroke: var(--accent); stroke-dasharray: 5 4; stroke-width: 1.4; }
+  .hyb-page .sbox-lin { fill: #f3f7fb; stroke: var(--swatch-sky); stroke-dasharray: 5 4; stroke-width: 1.4; }
+  .hyb-page .kv-chip { fill: #fdf6f2; stroke: var(--accent); stroke-width: 1.4; }
+  .hyb-page .st-chip { fill: #f3f7fb; stroke: var(--swatch-sky); stroke-width: 1.4; }
+
+  .hyb-page .flowline { stroke: var(--text-tertiary); stroke-width: 1.6; fill: none; }
+  .hyb-page .flowline-thin { stroke: var(--line-strong); stroke-width: 1.4; fill: none; }
+  .hyb-page .loopline { stroke: var(--accent); stroke-width: 1.5; fill: none; stroke-dasharray: 5 4; }
+  .hyb-page .stateline { stroke: var(--swatch-sky); stroke-width: 1.5; fill: none; stroke-dasharray: 5 4; }
+
+  /* ---- layer-stack strip ---- */
+  .hyb-page .lcell { transition: opacity 0.15s; cursor: pointer; }
+  .hyb-page .lc-lin { fill: var(--swatch-sky); opacity: 0.82; }
+  .hyb-page .lc-full { fill: var(--accent); }
+  .hyb-page .cell-link:hover .lcell { opacity: 1; stroke: var(--text); stroke-width: 1.4; }
+
+  /* ---- mixer grid ---- */
+  .hyb-page .mixer-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2rem; }
+  @media (min-width: 980px) {
+    .hyb-page .mixer-grid { grid-template-columns: 1fr 1fr; align-items: start; }
+  }
+  .hyb-page .mixer-head {
+    font-weight: 600; font-size: 0.92rem; padding: 0.5em 1em; border-radius: var(--radius-s);
+    margin-bottom: 0.9rem; border: 1px solid var(--line);
+  }
+  .hyb-page .mh-full { background: #fdf6f2; border-color: var(--accent); color: var(--accent-strong); }
+  .hyb-page .mh-lin { background: #f3f7fb; border-color: var(--swatch-sky); color: #46739c; }
+
+  /* ---- memory race ---- */
+  .hyb-page .dt-controls { display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; margin-bottom: 1rem; }
+  .hyb-page .btn-sm { padding: 0.45em 1.1em; font-size: 0.85rem; }
+  .hyb-page .btn[disabled] { opacity: 0.4; pointer-events: none; }
+  .hyb-page .dt-step {
+    font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-secondary);
+    margin-left: auto; white-space: nowrap;
+  }
+  .hyb-page .mask-modes { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.9rem; }
+  .hyb-page .mode-btn {
+    font-family: var(--font-sans); font-size: 0.78rem; font-weight: 600; cursor: pointer;
+    padding: 0.4em 1em; border-radius: 999px; border: 1px solid var(--line-strong);
+    background: var(--surface); color: var(--text-secondary); transition: all 0.2s;
+  }
+  .hyb-page .mode-btn.on { background: var(--text); border-color: var(--text); color: var(--bg); }
+  .hyb-page .mode-btn:not(.on):hover { border-color: var(--accent); color: var(--accent-strong); }
+
+  .hyb-page .curve-hyb { stroke: var(--accent-strong); stroke-width: 2.4; fill: none; }
+  .hyb-page .curve-af { stroke: var(--swatch-slate); stroke-width: 2; stroke-dasharray: 7 5; fill: none; }
+  .hyb-page .curve-st { stroke: var(--swatch-sky); stroke-width: 2; fill: none; }
+  .hyb-page .dot-hyb { fill: var(--accent-strong); }
+  .hyb-page .dot-af { fill: var(--swatch-slate); }
+
+  .hyb-page .slider-row { display: flex; align-items: center; gap: 0.8rem; margin: 0.9rem 0 1rem; }
+  .hyb-page .slider-lbl { font-size: 0.8rem; color: var(--text-tertiary); font-family: var(--font-mono); }
+  .hyb-page #ctxSlider { flex: 1; accent-color: var(--accent-strong); }
+  .hyb-page #sliderVal { font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-secondary); white-space: nowrap; min-width: 7em; text-align: right; }
+
+  .hyb-page .dt-caption {
+    margin: 0 0 0.8rem; padding: 0.9rem 1.1rem; min-height: 4.4em;
+    background: var(--surface-warm); border-left: 3px solid var(--accent);
+    border-radius: 0 var(--radius-s) var(--radius-s) 0; font-size: 0.95rem;
+  }
+  .hyb-page .dt-meters { font-family: var(--font-mono); font-size: 0.78rem; color: var(--text-secondary); }
+  .hyb-page .dt-meters b { color: var(--accent-strong); }
+
+  /* ---- why hybridize ---- */
+  .hyb-page .why-grid { margin-top: 1.4rem; }
+  .hyb-page .why-grid .card p { font-size: 0.92rem; line-height: 1.65; }
+  .hyb-page .why-note {
+    margin: 1.6rem 0 0; padding: 0.9rem 1.1rem; max-width: 60em;
+    background: var(--surface-warm); border-left: 3px solid var(--swatch-sky);
+    border-radius: 0 var(--radius-s) var(--radius-s) 0;
+    font-size: 0.93rem; color: var(--text-secondary); line-height: 1.7;
+  }
+
+  /* ---- efficiency note ---- */
+  .hyb-page .eff-note {
+    border-radius: var(--radius-l); padding: clamp(1.4rem, 3vw, 2.2rem);
+    margin: 3rem 0; max-width: 860px;
+  }
+  .hyb-page .eff-note h3 { color: var(--text-on-dark); margin-bottom: 0.7rem; }
+  .hyb-page .eff-note p { font-size: 0.97rem; line-height: 1.7; }
+  .hyb-page .eff-chips { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1.1rem; }
+  .hyb-page .eff-chip {
+    font-family: var(--font-mono); font-size: 0.74rem; color: var(--text-on-dark);
+    border: 1px solid var(--line-on-dark); border-radius: 999px; padding: 0.35em 0.9em;
+    background: #1d1d1b;
+  }
+
+  .hyb-page .deeper-list { list-style: none; padding: 0; margin: 0.6rem 0 1.6rem; display: flex; flex-direction: column; gap: 0.55rem; }
+  .hyb-page .deeper-list .arrow-link { text-decoration: none; }
+  .hyb-page .fine-print { font-size: 0.85rem; color: var(--text-tertiary); }
+
+  /* ---- tooltip ---- */
+  #hybTip {
+    position: fixed; z-index: 60; max-width: 300px; pointer-events: none;
+    background: var(--surface-dark); color: var(--text-on-dark);
+    font-family: var(--font-sans); font-size: 0.78rem; line-height: 1.5;
+    padding: 0.5rem 0.75rem; border-radius: 8px; opacity: 0;
+    transition: opacity 0.15s; box-shadow: 0 8px 24px rgba(20, 20, 19, 0.25);
+  }
+</style>
+
+<script>
+  // ============ shared tooltip (bilingual: data-tip / data-tip-ko) ============
+  const tip = document.getElementById('hybTip');
+  const curLang = () => (window.siteLang ? window.siteLang() : 'en');
+  document.querySelectorAll('[data-tip]').forEach((el) => {
+    el.addEventListener('mousemove', (e) => {
+      if (!tip) return;
+      const ko = el.getAttribute('data-tip-ko');
+      tip.textContent = (curLang() === 'ko' && ko ? ko : el.getAttribute('data-tip')) || '';
+      tip.style.opacity = '1';
+      const x = Math.min(e.clientX + 14, window.innerWidth - 316);
+      tip.style.left = x + 'px';
+      tip.style.top = e.clientY + 18 + 'px';
+    });
+    el.addEventListener('mouseleave', () => {
+      if (tip) tip.style.opacity = '0';
+    });
+  });
+
+  // ============ memory race ============
+  // Constants derived from the verified Qwen3.5-27B config (see fine print):
+  const KV_HYB = 65536;        // 16 full layers × 4,096 B per token
+  const KV_AF = 262144;        // 64 full layers × 4,096 B per token
+  const STATE_CONST = 154927104; // 48 × (3,145,728 B fp32 state + 81,920 B conv buffer)
+  const CROSS_T = 788;         // 3,227,648 / 4,096 — per-layer AND whole-model break-even
+
+  const MODES = {
+    zoom: { tMax: 4096, bMax: 1.25 * 1024 * 1024 * 1024, xt: ['0', '1K', '2K', '3K', '4K'], yt: ['0', '320 MB', '640 MB', '960 MB', '1.25 GB'] },
+    full: { tMax: 262144, bMax: 64 * 1024 * 1024 * 1024, xt: ['0', '64K', '128K', '192K', '262K'], yt: ['0', '16 GB', '32 GB', '48 GB', '64 GB'] },
+  };
+
+  const X0 = 70, X1 = 700, Y0 = 310, Y1 = 40;
+
+  const hybBytes = (t) => KV_HYB * t + STATE_CONST;
+  const afBytes = (t) => KV_AF * t;
+
+  function fmtB(b) {
+    const G = 1073741824, M = 1048576, K = 1024;
+    if (b >= G) return (b / G).toFixed(b < 10 * G ? 2 : 1) + ' GB';
+    if (b >= M) return Math.round(b / M) + ' MB';
+    return Math.round(b / K) + ' KB';
+  }
+  function fmtT(t) {
+    return t.toLocaleString('en-US') + ' tok';
+  }
+
+  const MILESTONES = [
+    {
+      t: 512, mode: 'zoom',
+      en: 'Below the crossover the hybrid actually holds <b>more</b> memory: 48 linear layers carry a fixed 148 MB of fp32 state while 16 full layers have written only 512 × 64 KB = 32 MB of KV. The all-full model sits at 128 MB. Recurrent state is a fixed cost, paid up front.',
+      ko: 'crossover 아래에서는 hybrid가 오히려 메모리를 <b>더</b> 쓴다: linear layer 48개가 고정 148 MB의 fp32 state를 들고 있는 동안, full layer 16개가 쓴 KV는 512 × 64 KB = 32 MB뿐이다. all-full 모델은 128 MB. recurrent state는 선불로 내는 고정비다.',
+    },
+    {
+      t: 788, mode: 'zoom',
+      en: '<b>Crossover: 3,227,648 B of per-layer state ÷ 4,096 B/token of per-layer KV = 788 tokens.</b> The same T = 788 is where the whole-model totals tie (≈ 197 MB each), because both sides scale by the same 48 layers. Every token after this one is where the hybrid earns its keep.',
+      ko: '<b>Crossover: layer당 state 3,227,648 B ÷ layer당 KV 4,096 B/token = 788 tokens.</b> 모델 전체 총량도 같은 T = 788에서 동점이 된다 (각각 ≈ 197 MB) — 양쪽 다 같은 48개 layer로 스케일하기 때문. 이 지점 이후의 모든 token이 hybrid가 밥값을 하는 구간이다.',
+    },
+    {
+      t: 4096, mode: 'zoom',
+      en: '4K context: hybrid = 256 MB KV + 148 MB state = <b>404 MB</b> vs <b>1 GB</b> all-full — already 2.5×. From here the gap grows by 192 KB per token, forever: that is the 48 layers that stopped paying rent.',
+      ko: '4K context: hybrid = KV 256 MB + state 148 MB = <b>404 MB</b> vs all-full <b>1 GB</b> — 벌써 2.5×다. 여기서부터 격차는 token마다 192 KB씩 영원히 벌어진다: 임대료를 그만 낸 48개 layer의 몫이다.',
+    },
+    {
+      t: 32768, mode: 'full',
+      en: '32K: 2 GB + 148 MB ≈ <b>2.15 GB</b> vs <b>8 GB</b> — 3.7×. The constant state is already rounding noise; from here on the budget is entirely the 16 full-attention layers.',
+      ko: '32K: 2 GB + 148 MB ≈ <b>2.15 GB</b> vs <b>8 GB</b> — 3.7×. 고정 state는 이미 반올림 오차 수준이고, 이제 예산은 전부 full-attention layer 16개의 것이다.',
+    },
+    {
+      t: 131072, mode: 'full',
+      en: '128K: 8 GB + 0.14 GB vs 32 GB. Note the slopes ARE the layer ratio — <b>64 KB/token vs 256 KB/token = 16 / 64 full layers</b>. Hybridization divides the KV problem by 4; it does not delete it.',
+      ko: '128K: 8 GB + 0.14 GB vs 32 GB. 기울기가 곧 layer 비율이다 — <b>64 KB/token vs 256 KB/token = full layer 16 / 64</b>. 하이브리드화는 KV 문제를 4로 나눌 뿐, 지우지 않는다.',
+    },
+    {
+      t: 262144, mode: 'full',
+      en: 'Native max, 262,144 tokens: <b>16.1 GB vs 64 GB — 3.96×</b>, asymptotically 4×. The 48 linear layers still hold the same 148 MB they held at T = 0. This flat blue line is the entire architectural argument.',
+      ko: '네이티브 최대 262,144 tokens: <b>16.1 GB vs 64 GB — 3.96×</b>, 점근적으로 4×. linear layer 48개는 T = 0일 때 들고 있던 148 MB를 여전히 그대로 들고 있다. 이 평평한 파란 선이 아키텍처 논증의 전부다.',
+    },
+  ];
+
+  let mode = 'zoom';
+  let T = 512;
+  let step = 0;       // -1 = free slider
+  let timer = null;
+
+  const $ = (id) => document.getElementById(id);
+  const xFor = (t) => X0 + (t / MODES[mode].tMax) * (X1 - X0);
+  const yFor = (b) => Y0 - Math.min(1, b / MODES[mode].bMax) * (Y0 - Y1);
+
+  function setLine(id, t0, b0, t1, b1) {
+    const ln = $(id);
+    if (!ln) return;
+    ln.setAttribute('x1', xFor(t0)); ln.setAttribute('y1', yFor(b0));
+    ln.setAttribute('x2', xFor(t1)); ln.setAttribute('y2', yFor(b1));
+  }
+
+  function drawStatic() {
+    const m = MODES[mode];
+    setLine('lnAF', 0, 0, m.tMax, afBytes(m.tMax));
+    setLine('lnHyb', 0, STATE_CONST, m.tMax, hybBytes(m.tMax));
+    setLine('lnSt', 0, STATE_CONST, m.tMax, STATE_CONST);
+    document.querySelectorAll('#xTicks .xt').forEach((el, i) => { el.textContent = m.xt[i]; });
+    document.querySelectorAll('#yTicks .yt').forEach((el, i) => { el.textContent = m.yt[i]; });
+    const cg = $('crossG');
+    if (cg) {
+      cg.style.display = mode === 'zoom' ? '' : 'none';
+      const cd = $('crossDot'), cl = $('crossLbl');
+      if (cd) { cd.setAttribute('cx', xFor(CROSS_T)); cd.setAttribute('cy', yFor(afBytes(CROSS_T))); }
+      if (cl) { cl.setAttribute('x', xFor(CROSS_T) + 8); cl.setAttribute('y', yFor(afBytes(CROSS_T)) - 10); }
+    }
+  }
+
+  function drawCursor() {
+    const x = xFor(T);
+    const bh = hybBytes(T), ba = afBytes(T);
+    const cur = $('cursor');
+    if (cur) { cur.setAttribute('x1', x); cur.setAttribute('x2', x); }
+    const dA = $('dotAF'), dH = $('dotHyb');
+    if (dA) { dA.setAttribute('cx', x); dA.setAttribute('cy', yFor(ba)); }
+    if (dH) { dH.setAttribute('cx', x); dH.setAttribute('cy', yFor(bh)); }
+    const anchorEnd = x > 540;
+    const lx = anchorEnd ? x - 10 : x + 10;
+    const lA = $('lblAF'), lH = $('lblHyb');
+    if (lA) {
+      lA.setAttribute('x', lx); lA.setAttribute('text-anchor', anchorEnd ? 'end' : 'start');
+      lA.setAttribute('y', Math.max(58, yFor(ba) - 9));
+      lA.textContent = 'all-full ' + fmtB(ba);
+    }
+    if (lH) {
+      lH.setAttribute('x', lx); lH.setAttribute('text-anchor', anchorEnd ? 'end' : 'start');
+      lH.setAttribute('y', Math.min(Y0 - 4, yFor(bh) + 16));
+      lH.textContent = 'hybrid ' + fmtB(bh);
+    }
+    const sv = $('sliderVal');
+    if (sv) sv.textContent = fmtT(T);
+  }
+
+  function renderMeters() {
+    const el = $('raceMeters');
+    if (!el) return;
+    const bh = hybBytes(T), ba = afBytes(T);
+    const ratio = ba > 0 ? (ba / bh).toFixed(2) : '—';
+    el.innerHTML =
+      'T = <b>' + T.toLocaleString('en-US') + '</b> · full-attn KV ' + fmtB(KV_HYB * T) +
+      ' + linear state ' + fmtB(STATE_CONST) + ' (const) = hybrid <b>' + fmtB(bh) + '</b>' +
+      ' · all-full ' + fmtB(ba) + ' · ratio <b>' + ratio + '×</b>';
+  }
+
+  function renderCaption() {
+    const cap = $('raceCaption');
+    if (!cap) return;
+    const lang = curLang();
+    if (step >= 0) {
+      cap.innerHTML = MILESTONES[step][lang === 'ko' ? 'ko' : 'en'];
+    } else {
+      const bh = hybBytes(T), ba = afBytes(T);
+      const r = (ba / bh).toFixed(2);
+      cap.innerHTML = lang === 'ko'
+        ? 'T = <b>' + T.toLocaleString('en-US') + '</b> tokens: hybrid <b>' + fmtB(bh) + '</b> vs all-full <b>' + fmtB(ba) + '</b> — ' + r + '×. (milestone 해설은 Prev/Next로)'
+        : 'At T = <b>' + T.toLocaleString('en-US') + '</b> tokens: hybrid <b>' + fmtB(bh) + '</b> vs all-full <b>' + fmtB(ba) + '</b> — ' + r + '×. (Use Prev/Next for the milestone commentary.)';
+    }
+    const st = $('raceStep');
+    if (st) {
+      st.textContent = step >= 0
+        ? 'Step ' + step + ' / ' + (MILESTONES.length - 1) + ' — ' + MILESTONES[step].t.toLocaleString('en-US') + ' tokens'
+        : 'free — ' + T.toLocaleString('en-US') + ' tokens';
+    }
+  }
+
+  function setMode(m) {
+    if (mode === m) return;
+    mode = m;
+    const mz = $('modeZoom'), mf = $('modeFull');
+    if (mz) mz.classList.toggle('on', m === 'zoom');
+    if (mf) mf.classList.toggle('on', m === 'full');
+    T = Math.min(T, MODES[mode].tMax);
+    drawStatic();
+    syncSlider();
+    drawCursor();
+    renderMeters();
+    renderCaption();
+  }
+
+  function syncSlider() {
+    const s = $('ctxSlider');
+    if (s) s.value = String(Math.round((T / MODES[mode].tMax) * 1000));
+  }
+
+  function goStep(i) {
+    step = Math.max(0, Math.min(MILESTONES.length - 1, i));
+    const ms = MILESTONES[step];
+    if (ms.mode !== mode) {
+      mode = ms.mode;
+      const mz = $('modeZoom'), mf = $('modeFull');
+      if (mz) mz.classList.toggle('on', mode === 'zoom');
+      if (mf) mf.classList.toggle('on', mode === 'full');
+      drawStatic();
+    }
+    T = ms.t;
+    syncSlider();
+    drawCursor();
+    renderMeters();
+    renderCaption();
+    const bp = $('btnPrev'), bn = $('btnNext');
+    if (bp) bp.toggleAttribute('disabled', step === 0);
+    if (bn) bn.toggleAttribute('disabled', step === MILESTONES.length - 1);
+  }
+
+  function stopPlay() {
+    if (timer !== null) { clearInterval(timer); timer = null; }
+    const p = $('btnPlay');
+    if (p) p.textContent = '▶ Play';
+  }
+
+  const slider = $('ctxSlider');
+  if (slider) {
+    slider.addEventListener('input', () => {
+      stopPlay();
+      step = -1;
+      T = Math.max(16, Math.round((Number(slider.value) / 1000) * MODES[mode].tMax));
+      drawCursor();
+      renderMeters();
+      renderCaption();
+      const bp = $('btnPrev'), bn = $('btnNext');
+      if (bp) bp.removeAttribute('disabled');
+      if (bn) bn.removeAttribute('disabled');
+    });
+  }
+
+  const mzBtn = $('modeZoom'), mfBtn = $('modeFull');
+  if (mzBtn) mzBtn.addEventListener('click', () => { stopPlay(); step = -1; setMode('zoom'); });
+  if (mfBtn) mfBtn.addEventListener('click', () => { stopPlay(); step = -1; setMode('full'); });
+
+  const bPrev = $('btnPrev'), bNext = $('btnNext'), bReset = $('btnReset'), bPlay = $('btnPlay');
+  if (bPrev) bPrev.addEventListener('click', () => { stopPlay(); goStep(step < 0 ? 0 : step - 1); });
+  if (bNext) bNext.addEventListener('click', () => { stopPlay(); goStep(step < 0 ? 0 : step + 1); });
+  if (bReset) bReset.addEventListener('click', () => { stopPlay(); goStep(0); });
+  if (bPlay) {
+    bPlay.addEventListener('click', () => {
+      if (timer !== null) { stopPlay(); return; }
+      if (step < 0 || step >= MILESTONES.length - 1) goStep(0);
+      bPlay.textContent = '❚❚ Pause';
+      timer = setInterval(() => {
+        if (step >= MILESTONES.length - 1) { stopPlay(); return; }
+        goStep(step + 1);
+      }, 2600);
+    });
+  }
+
+  window.addEventListener('site-langchange', () => {
+    renderCaption();
+  });
+
+  goStep(0);
+</script>

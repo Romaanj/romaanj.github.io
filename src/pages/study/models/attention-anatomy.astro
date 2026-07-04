@@ -1,0 +1,1129 @@
+---
+import Base from '../../../layouts/Base.astro';
+import LangToggle from '../../../components/LangToggle.astro';
+
+// Static default for the wiring view: MHA (32 Q heads, 32 KV heads).
+// Geometry mirrored by the JS renderer — keep in sync.
+const NQ = 32;
+const wireQ = Array.from({ length: NQ }, (_, i) => ({
+  i,
+  x: 30 + 22 * i,
+  cx: 39 + 22 * i,
+}));
+---
+
+<Base
+  title="Attention-head anatomy: MHA, MQA, GQA, MLA — Junwon Lee"
+  description="Interactive anatomy of attention-head sharing: MHA, MQA, GQA and DeepSeek's Multi-head Latent Attention — head wiring, a KV-bytes calculator with real model configs, and the low-rank + decoupled-RoPE trick, matrix by matrix."
+>
+  <div class="att-page">
+    <!-- ============ HERO ============ -->
+    <section class="section">
+      <div class="container">
+        <div class="hero-top">
+          <p class="eyebrow">Study · Model anatomy</p>
+          <LangToggle />
+        </div>
+        <h1>
+          <span class="lang-en">Attention-head anatomy: one cache, four wirings</span>
+          <span class="lang-ko">Attention head 해부: 하나의 cache, 네 가지 배선</span>
+        </h1>
+        <p class="lede">
+          <span class="lang-en">
+            MHA, MQA, GQA and MLA are one design decision seen from four points: how many
+            query heads share each cached K/V. Turn the dial from 32 private K/V pairs down
+            to a single shared latent, put real model configs through the bytes calculator,
+            then open DeepSeek's Multi-head Latent Attention matrix by matrix.
+          </span>
+          <span class="lang-ko">
+            MHA·MQA·GQA·MLA는 별개의 네 설계가 아니라 하나의 결정 — cache된 K/V 하나를
+            몇 개의 query head가 공유하는가 — 를 네 지점에서 본 것이다. 32개의 전용 K/V
+            pair에서 하나의 shared latent까지 다이얼을 돌려 보고, 실제 모델 config를 byte
+            계산기에 넣어 본 뒤, DeepSeek의 Multi-head Latent Attention을 matrix 단위로
+            열어 본다.
+          </span>
+        </p>
+
+        <div class="jump-row">
+          <a class="tag" href="#wiring">1 · Head wiring</a>
+          <a class="tag" href="#calc">2 · KV-bytes calculator</a>
+          <a class="tag" href="#mla">3 · MLA deep-dive</a>
+          <a class="tag" href="#tradeoff">4 · Trade-offs</a>
+        </div>
+
+        <div class="config-note">
+          <span class="config-lead">
+            <span class="lang-en">Verified reference configs used on this page (official
+              config.json / papers):</span>
+            <span class="lang-ko">이 페이지에서 사용하는 검증된 기준 config (공식
+              config.json / 논문):</span>
+          </span>
+          <span class="tag">Llama-2-7B — MHA · 32Q/32KV</span>
+          <span class="tag">Llama-3-8B — GQA · 32Q/8KV</span>
+          <span class="tag">Mistral-7B — GQA · 32Q/8KV</span>
+          <span class="tag accent">DeepSeek-V2/V3 — MLA · c 512 + rope 64</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 1 · HEAD WIRING ============ -->
+    <section class="section-tight" id="wiring">
+      <div class="container">
+        <h2 class="viz-h">
+          <span class="lang-en">1 · Head wiring — one dial from MHA to MQA</span>
+          <span class="lang-ko">1 · Head 배선 — MHA에서 MQA까지 하나의 다이얼</span>
+        </h2>
+        <p class="viz-sub">
+          <span class="lang-en">Hover a query head to see exactly which cached K/V it reads.
+            Drag the KV-heads dial: 32 is MHA, 1 is MQA, everything between is GQA. MLA
+            replaces the K/V row with a shared latent.</span>
+          <span class="lang-ko">query head 위에 hover하면 그 head가 읽는 cache된 K/V가
+            표시된다. KV-heads 다이얼을 움직여 보자: 32면 MHA, 1이면 MQA, 그 사이는 전부
+            GQA다. MLA는 K/V 행 자체를 shared latent로 바꾼다.</span>
+        </p>
+
+        <div class="viz-frame">
+          <div class="wire-controls">
+            <div class="mode-row" role="group" aria-label="Attention variant">
+              <button class="mode-btn on" data-var="mha" type="button">MHA</button>
+              <button class="mode-btn" data-var="gqa" type="button">GQA</button>
+              <button class="mode-btn" data-var="mqa" type="button">MQA</button>
+              <button class="mode-btn" data-var="mla" type="button">MLA</button>
+            </div>
+            <div class="dial-wrap" id="dialWrap">
+              <label class="dial-label" for="kvDial">
+                <span class="lang-en">KV heads</span><span class="lang-ko">KV heads</span>
+              </label>
+              <span class="dial-col">
+                <input type="range" id="kvDial" min="0" max="5" step="1" value="0" />
+                <span class="dial-ticks" aria-hidden="true">
+                  <span>32</span><span>16</span><span>8</span><span>4</span><span>2</span><span>1</span>
+                </span>
+              </span>
+            </div>
+          </div>
+
+          <div class="att-scroll">
+            <svg id="wireSvgEl" viewBox="0 0 760 300" role="img"
+              aria-label="Wiring between 32 query heads and their K/V sources for MHA, GQA, MQA and MLA"
+              style="width:100%; height:auto; min-width:740px;">
+              <g id="wireDyn">
+                <text class="rowlab" x="30" y="40">Q heads — 32 × d_h 128</text>
+                <text class="rowlab" x="30" y="256">K/V heads — what the cache stores</text>
+                {wireQ.map((q) => (
+                  <line class="wline" data-line={q.i} x1={q.cx} y1="96" x2={q.cx} y2="196" />
+                ))}
+                {wireQ.map((q) => (
+                  <rect class="qh" data-q={q.i} x={q.x} y="64" width="18" height="30" rx="4" />
+                ))}
+                {wireQ.map((q) => (
+                  <rect class="kvh" data-kv={q.i} x={q.x} y="198" width="18" height="30" rx="4" />
+                ))}
+              </g>
+            </svg>
+          </div>
+
+          <div class="wire-stats" id="wireStats">
+            <span class="stat-chip">32 KV heads</span>
+            <span class="stat-chip">2 × 32 × 128 = <b>8,192</b> elts / token / layer</span>
+            <span class="stat-chip"><b>16 KB</b> FP16 / token / layer</span>
+          </div>
+
+          <p class="cap" id="wireCap">
+            <span class="lang-en">MHA — every query head owns a private K/V pair. Nothing is
+              shared: 32 K and 32 V vectors are cached per token per layer, 8,192 elements
+              (16 KB in FP16). This is the quality reference all sharing schemes are measured
+              against.</span>
+            <span class="lang-ko">MHA — 모든 query head가 전용 K/V pair를 가진다. 아무것도
+              공유되지 않으므로 token·layer당 K 32개와 V 32개, 8,192개 원소(FP16 기준
+              16 KB)가 cache된다. 모든 sharing 방식의 품질 기준점이다.</span>
+          </p>
+
+          <noscript>
+            <p class="viz-sub">
+              <span class="lang-en">With JavaScript enabled this diagram morphs between MHA,
+                GQA, MQA and MLA; the static view shows MHA (32 K/V heads).</span>
+              <span class="lang-ko">JavaScript가 켜져 있으면 이 다이어그램은 MHA·GQA·MQA·MLA
+                사이를 전환한다. 정적 화면은 MHA(32 K/V heads)를 보여준다.</span>
+            </p>
+          </noscript>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 2 · KV-BYTES CALCULATOR ============ -->
+    <section class="section-tight" id="calc">
+      <div class="container">
+        <h2 class="viz-h">
+          <span class="lang-en">2 · KV-bytes calculator</span>
+          <span class="lang-ko">2 · KV-byte 계산기</span>
+        </h2>
+        <p class="viz-sub">
+          <span class="lang-en">Pick a real model or move the sliders; the bars compare what
+            the four variants would cache for the same backbone shape.</span>
+          <span class="lang-ko">실제 모델 preset을 고르거나 slider를 움직여 보자. 막대는 같은
+            backbone 형상에서 네 방식이 각각 cache하게 될 양을 비교한다.</span>
+        </p>
+
+        <div class="viz-frame">
+          <div class="pre-row" role="group" aria-label="Model presets">
+            <button class="pre-chip" data-pre="0" type="button">Llama-2-7B · MHA</button>
+            <button class="pre-chip on" data-pre="1" type="button">Llama-3-8B · GQA</button>
+            <button class="pre-chip" data-pre="2" type="button">Mistral-7B · GQA</button>
+            <button class="pre-chip" data-pre="3" type="button">DeepSeek-V2 · MLA</button>
+            <button class="pre-chip" data-pre="4" type="button">DeepSeek-V3 · MLA</button>
+          </div>
+
+          <div class="calc-grid">
+            <div class="calc-controls">
+              <div class="ctl-row">
+                <span class="ctl-label"><span class="lang-en">layers</span><span class="lang-ko">layers</span></span>
+                <input type="range" id="slLayers" min="1" max="96" step="1" value="32" />
+                <span class="ctl-val" id="vLayers">32</span>
+              </div>
+              <div class="ctl-row">
+                <span class="ctl-label"><span class="lang-en">Q heads</span><span class="lang-ko">Q heads</span></span>
+                <input type="range" id="slQ" min="1" max="128" step="1" value="32" />
+                <span class="ctl-val" id="vQ">32</span>
+              </div>
+              <div class="ctl-row">
+                <span class="ctl-label"><span class="lang-en">KV heads</span><span class="lang-ko">KV heads</span></span>
+                <input type="range" id="slK" min="1" max="32" step="1" value="8" />
+                <span class="ctl-val" id="vK">8</span>
+              </div>
+              <div class="ctl-row">
+                <span class="ctl-label">head_dim</span>
+                <input type="range" id="slD" min="0" max="4" step="1" value="2" />
+                <span class="ctl-val" id="vD">128</span>
+              </div>
+              <div class="ctl-row">
+                <span class="ctl-label"><span class="lang-en">context L</span><span class="lang-ko">context L</span></span>
+                <input type="range" id="slC" min="0" max="7" step="1" value="3" />
+                <span class="ctl-val" id="vC">8K</span>
+              </div>
+              <div class="ctl-row dt-row">
+                <span class="ctl-label">dtype</span>
+                <span class="dt-chips" role="group" aria-label="KV dtype">
+                  <button class="dt-chip on" data-dt="fp16" type="button">FP16</button>
+                  <button class="dt-chip" data-dt="int8" type="button">INT8</button>
+                  <button class="dt-chip" data-dt="int4" type="button">INT4</button>
+                </span>
+              </div>
+            </div>
+
+            <div class="calc-out">
+              <div class="formula" id="fEq">KV bytes/token = 2 × 32 layers × 8 kv_heads × 128 head_dim × 2 B = 131,072 B
+MLA row: 32 layers × (d_c 512 + d_R 64) × 2 B = 36,864 B</div>
+
+              <div class="bar-row">
+                <span class="bar-name">MHA<i class="bar-sub">kv = Q</i></span>
+                <span class="bar-track"><i class="bar-fill f-mha" id="barMha" style="width:100%"></i></span>
+                <span class="bar-val" id="valMha"><b>512 KB</b>/tok · <b>4.0 GB</b> @ L</span>
+              </div>
+              <div class="bar-row">
+                <span class="bar-name">GQA<i class="bar-sub" id="gqaSub">kv = 8</i></span>
+                <span class="bar-track"><i class="bar-fill f-gqa" id="barGqa" style="width:25%"></i></span>
+                <span class="bar-val" id="valGqa"><b>128 KB</b>/tok · <b>1.0 GB</b> @ L</span>
+              </div>
+              <div class="bar-row">
+                <span class="bar-name">MQA<i class="bar-sub">kv = 1</i></span>
+                <span class="bar-track"><i class="bar-fill f-mqa" id="barMqa" style="width:3.2%"></i></span>
+                <span class="bar-val" id="valMqa"><b>16 KB</b>/tok · <b>128 MB</b> @ L</span>
+              </div>
+              <div class="bar-row">
+                <span class="bar-name">MLA<i class="bar-sub">512 + 64</i></span>
+                <span class="bar-track"><i class="bar-fill f-mla" id="barMla" style="width:7.1%"></i></span>
+                <span class="bar-val" id="valMla"><b>36 KB</b>/tok · <b>288 MB</b> @ L</span>
+              </div>
+
+              <p class="cap cap-sm" id="calCap">
+                <span class="lang-en">Llama-3-8B: GQA with 32 Q / 8 KV heads — a 4× cache cut
+                  vs the same backbone with MHA, straight from the official config.</span>
+                <span class="lang-ko">Llama-3-8B: 32 Q / 8 KV head의 GQA — 공식 config 그대로,
+                  같은 backbone을 MHA로 둘 때보다 cache가 4× 작다.</span>
+              </p>
+              <p class="fine-inline">
+                <span class="lang-en">MLA row always uses DeepSeek's published dims (d_c 512 +
+                  d_R 64) regardless of the head sliders; the dtype is applied uniformly, so
+                  low-bit MLA rows are hypothetical what-ifs, shown for comparison only.
+                  1 KB = 1,024 B.</span>
+                <span class="lang-ko">MLA 행은 head slider와 무관하게 DeepSeek이 공개한 차원
+                  (d_c 512 + d_R 64)을 사용한다. dtype은 일괄 적용되므로 저비트 MLA 행은
+                  비교용 가상 수치일 뿐이다. 1 KB = 1,024 B.</span>
+              </p>
+            </div>
+          </div>
+
+          <noscript>
+            <p class="viz-sub">
+              <span class="lang-en">The calculator needs JavaScript; the static numbers show
+                the Llama-3-8B preset at 8K context, FP16.</span>
+              <span class="lang-ko">계산기는 JavaScript가 필요하다. 정적 수치는 Llama-3-8B
+                preset(8K context, FP16)이다.</span>
+            </p>
+          </noscript>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 3 · MLA DEEP-DIVE ============ -->
+    <section class="section-tight" id="mla">
+      <div class="container">
+        <h2 class="viz-h">
+          <span class="lang-en">3 · MLA deep-dive — the low-rank trick, matrix by matrix</span>
+          <span class="lang-ko">3 · MLA 딥다이브 — low-rank 트릭을 matrix 단위로</span>
+        </h2>
+        <p class="viz-sub">
+          <span class="lang-en">DeepSeek-V2 shapes: hidden 5,120, 128 heads × 128, latent
+            d_c = 512, decoupled RoPE key d_R = 64, 60 layers. Step through the pipeline.</span>
+          <span class="lang-ko">DeepSeek-V2 형상: hidden 5,120, 128 heads × 128, latent
+            d_c = 512, decoupled RoPE key d_R = 64, 60 layers. 파이프라인을 단계별로 넘겨
+            보자.</span>
+        </p>
+
+        <div class="viz-frame">
+          <div class="dt-controls">
+            <button class="btn ghost btn-sm" id="mReset" type="button">⟲ Reset</button>
+            <button class="btn ghost btn-sm" id="mPrev" type="button">← Prev</button>
+            <button class="btn btn-sm" id="mNext" type="button">Next →</button>
+            <button class="btn ghost btn-sm" id="mPlay" type="button">▶ Play</button>
+            <span class="dt-step" id="mStep">Step 0 / 6 — Overview</span>
+          </div>
+
+          <div class="att-scroll">
+            <svg viewBox="0 0 880 480" role="img"
+              aria-label="MLA dataflow: down-projection to a 512-dim latent, up-projections, weight absorption, decoupled RoPE key, and what is cached"
+              style="width:100%; height:auto; min-width:860px;">
+              <defs>
+                <marker id="arrA" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                  <path d="M0,0 L10,5 L0,10 z" fill="#87857c"></path>
+                </marker>
+              </defs>
+
+              <g class="mg" id="g-h">
+                <rect class="sbox" x="20" y="60" width="130" height="46" rx="9"></rect>
+                <text class="stitle sm" x="85" y="80" text-anchor="middle">h_t — hidden state</text>
+                <text class="smono" x="85" y="98" text-anchor="middle">[1 × 5,120]</text>
+              </g>
+
+              <g class="mg" id="g-down">
+                <line class="flowline" x1="150" y1="83" x2="196" y2="83" marker-end="url(#arrA)"></line>
+                <rect class="sbox" x="200" y="60" width="160" height="46" rx="9"></rect>
+                <text class="stitle sm" x="280" y="80" text-anchor="middle">W^DKV — down-proj</text>
+                <text class="smono" x="280" y="98" text-anchor="middle">[5,120 × 512] · 9× squeeze</text>
+              </g>
+
+              <g class="mg" id="g-c">
+                <line class="flowline" x1="360" y1="83" x2="396" y2="83" marker-end="url(#arrA)"></line>
+                <rect class="sbox sbox-accent" x="400" y="60" width="120" height="46" rx="9"></rect>
+                <text class="stitle sm taccent" x="460" y="80" text-anchor="middle">c^KV — latent</text>
+                <text class="smono" x="460" y="98" text-anchor="middle">[1 × 512] · cached</text>
+              </g>
+
+              <g class="mg" id="g-bad">
+                <circle class="badc" cx="578" cy="83" r="16"></circle>
+                <text class="smono" x="578" y="87" text-anchor="middle">R_t</text>
+                <line class="badx" x1="566" y1="71" x2="590" y2="95"></line>
+                <line class="badx" x1="590" y1="71" x2="566" y2="95"></line>
+                <text class="ssub" x="578" y="120" text-anchor="middle">naive RoPE here?</text>
+                <text class="ssub" x="578" y="134" text-anchor="middle">position-dependent ✗</text>
+              </g>
+
+              <g class="mg" id="g-up">
+                <line class="flowline" x1="520" y1="76" x2="636" y2="48" marker-end="url(#arrA)"></line>
+                <line class="flowline" x1="520" y1="90" x2="636" y2="126" marker-end="url(#arrA)"></line>
+                <rect class="sbox" x="640" y="24" width="220" height="44" rx="9"></rect>
+                <text class="stitle sm" x="750" y="43" text-anchor="middle">W^UK — [512 × 128·128]</text>
+                <text class="smono" x="750" y="60" text-anchor="middle">→ k_i (nope) · 128 heads × 128</text>
+                <rect class="sbox" x="640" y="104" width="220" height="44" rx="9"></rect>
+                <text class="stitle sm" x="750" y="123" text-anchor="middle">W^UV — [512 × 128·128]</text>
+                <text class="smono" x="750" y="140" text-anchor="middle">→ v_i · 128 heads × 128</text>
+              </g>
+
+              <g class="mg" id="g-absorb">
+                <line class="absline" x1="750" y1="24" x2="750" y2="12"></line>
+                <text class="ssub tabs" x="750" y="8" text-anchor="middle">absorbed into the query path (W^UQ·W^UK, offline)</text>
+                <line class="absline" x1="750" y1="148" x2="750" y2="160"></line>
+                <text class="ssub tabs" x="750" y="172" text-anchor="middle">absorbed into W^O (output path, offline)</text>
+              </g>
+
+              <g class="mg" id="g-fix">
+                <path class="flowline" d="M85,106 V222 H156" fill="none" marker-end="url(#arrA)"></path>
+                <rect class="sbox" x="160" y="200" width="170" height="44" rx="9"></rect>
+                <text class="stitle sm" x="245" y="219" text-anchor="middle">W^KR — [5,120 × 64]</text>
+                <text class="smono" x="245" y="236" text-anchor="middle">decoupled key proj</text>
+                <line class="flowline" x1="330" y1="222" x2="350" y2="222" marker-end="url(#arrA)"></line>
+                <circle class="ropec" cx="372" cy="222" r="16"></circle>
+                <text class="smono" x="372" y="226" text-anchor="middle">R_t</text>
+                <line class="flowline" x1="388" y1="222" x2="408" y2="222" marker-end="url(#arrA)"></line>
+                <rect class="sbox sbox-rope" x="412" y="200" width="120" height="44" rx="9"></rect>
+                <text class="stitle sm" x="472" y="219" text-anchor="middle">k^R — [1 × 64]</text>
+                <text class="smono" x="472" y="236" text-anchor="middle">cached · RoPE'd</text>
+                <text class="ssub" x="552" y="208">one RoPE key per token, shared by all 128 heads</text>
+                <text class="smono" x="552" y="226">score_i = q_i·k_i + q^R_i·k^R</text>
+                <text class="ssub" x="552" y="242">(nope, position-free) + (rope, 64-dim)</text>
+              </g>
+
+              <g class="mg" id="g-cache">
+                <line class="absline" x1="472" y1="244" x2="472" y2="276"></line>
+                <line class="absline" x1="460" y1="106" x2="460" y2="276"></line>
+                <rect class="sbox sbox-cache" x="20" y="280" width="840" height="180" rx="12"></rect>
+                <text class="stitle" x="40" y="308">cached per token, per layer: c^KV (512) + k^R (64) = 576 elements = 1,152 B FP16</text>
+                <rect x="40" y="324" width="780" height="15" rx="3" fill="#d4a27f" opacity="0.75"></rect>
+                <text class="smono" x="46" y="336" fill="#141413">MHA at 128 heads: 2·128·128 = 32,768 elts → 65,536 B / layer</text>
+                <rect x="40" y="349" width="14" height="15" rx="3" fill="#c15f3c"></rect>
+                <text class="smono" x="62" y="361">MLA: 576 elts → 1,152 B / layer — 57× less</text>
+                <text class="ssub" x="40" y="393">× 60 layers (DeepSeek-V2): 67.5 KB / token — a 236B-param MoE caching about half of what a 7B GQA model does (128 KB)</text>
+                <text class="smono" x="40" y="420">paper: “KV cache equal to GQA with only 2.25 groups” · “reduces the KV cache by 93.3%” (vs DeepSeek 67B)</text>
+                <text class="ssub" x="40" y="444">576 = 2.25 × (2 × 128): the arithmetic behind the 2.25-group claim</text>
+              </g>
+            </svg>
+          </div>
+
+          <p class="cap" id="mlaCap">
+            <span class="lang-en">Multi-head Latent Attention in one picture: instead of
+              caching per-head K and V, DeepSeek-V2 caches one 512-dim latent c^KV plus one
+              64-dim RoPE key per token — everything else is rebuilt, or folded into other
+              weight matrices, at compute time. Step through to see how.</span>
+            <span class="lang-ko">Multi-head Latent Attention 한눈에 보기: head별 K·V를
+              cache하는 대신 DeepSeek-V2는 token마다 512-dim latent c^KV와 64-dim RoPE key
+              하나만 cache한다 — 나머지는 계산 시점에 복원되거나 다른 weight matrix에
+              흡수된다. Step을 넘기며 확인해 보자.</span>
+          </p>
+
+          <noscript>
+            <p class="viz-sub">
+              <span class="lang-en">With JavaScript the diagram is a 7-step walkthrough;
+                without it you see the full dataflow at once.</span>
+              <span class="lang-ko">JavaScript가 있으면 7단계 walkthrough로 동작하며, 없으면
+                전체 dataflow가 한 번에 표시된다.</span>
+            </p>
+          </noscript>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 4 · TRADE-OFF PANEL ============ -->
+    <section class="section-tight" id="tradeoff">
+      <div class="container">
+        <h2 class="viz-h">
+          <span class="lang-en">4 · What the papers actually claim</span>
+          <span class="lang-ko">4 · 논문이 실제로 주장하는 것</span>
+        </h2>
+        <p class="viz-sub">
+          <span class="lang-en">Published quality-vs-memory evidence only — qualitative where
+            numbers aren't independently verified.</span>
+          <span class="lang-ko">공개된 quality-vs-memory 근거만 담았다 — 독립 검증되지 않은
+            수치는 정성적으로만 서술한다.</span>
+        </p>
+
+        <div class="card-grid to-grid">
+          <div class="card">
+            <h3>MHA <span class="to-year">2017</span></h3>
+            <p>
+              <span class="lang-en">The reference point. Every head keeps a private K/V pair,
+                so cache traffic scales with the full head count: at Llama-2-7B shape that is
+                512 KB per token — 4 GB of cache at 8K context before batching.</span>
+              <span class="lang-ko">기준점. 모든 head가 전용 K/V pair를 가지므로 cache가
+                전체 head 수에 비례한다. Llama-2-7B 형상에서는 token당 512 KB — batching
+                이전에 8K context만으로 4 GB다.</span>
+            </p>
+            <span class="ev-chip">2 · 32 L · 32 kv · 128 · 2 B = 512 KB/token</span>
+          </div>
+          <div class="card">
+            <h3>MQA <span class="to-year">Shazeer 2019</span></h3>
+            <p>
+              <span class="lang-en">One K/V head serves every query head. The paper's claim:
+                decoding is much faster because the K/V tensors shrink by the head count, with
+                “only minor quality degradation” — the aggressive endpoint of the dial.</span>
+              <span class="lang-ko">하나의 K/V head가 모든 query head를 담당한다. 논문의
+                주장: K/V tensor가 head 수만큼 줄어 decoding이 크게 빨라지고 품질 저하는
+                “only minor quality degradation” 수준 — 다이얼의 가장 공격적인 끝점이다.</span>
+            </p>
+            <span class="ev-chip">arXiv 1911.02150 · 32× smaller cache vs MHA-32</span>
+          </div>
+          <div class="card">
+            <h3>GQA <span class="to-year">Ainslie et al. 2023</span></h3>
+            <p>
+              <span class="lang-en">Groups of query heads share K/V heads. Uptraining T5-XXL
+                with 8 KV groups for just 5% of pre-training compute gave “quality close to
+                multi-head attention with comparable speed to MQA” — the result that made
+                8-group GQA the open-model default (Llama-3, Mistral).</span>
+              <span class="lang-ko">query head들이 그룹 단위로 K/V head를 공유한다. T5-XXL을
+                8개 KV group으로 pre-training compute의 5%만 들여 uptraining하자 “quality
+                close to multi-head attention with comparable speed to MQA” — 이 결과가
+                8-group GQA를 open 모델의 기본값(Llama-3, Mistral)으로 만들었다.</span>
+            </p>
+            <span class="ev-chip">arXiv 2305.13245 · GQA-8, α = 0.05 uptraining</span>
+          </div>
+          <div class="card">
+            <h3>MLA <span class="to-year">DeepSeek-V2 2024</span></h3>
+            <p>
+              <span class="lang-en">All heads share one low-rank latent. The paper reports a
+                93.3% KV-cache reduction versus DeepSeek 67B, a cache “equal to GQA with only
+                2.25 groups”, and — in its own ablations — quality above MHA. That last claim
+                is paper-reported; treat it as the authors' measurement, not settled fact.</span>
+              <span class="lang-ko">모든 head가 하나의 low-rank latent를 공유한다. 논문은
+                DeepSeek 67B 대비 93.3%의 KV cache 절감, “GQA 2.25 group과 동일한” cache,
+                그리고 자체 ablation에서 MHA보다 높은 품질을 보고한다. 마지막 주장은 저자
+                측정치이므로 확정된 사실이 아니라 논문 보고 수치로 받아들이자.</span>
+            </p>
+            <span class="ev-chip">arXiv 2405.04434 · 576 elts/layer/token</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ PROSE ============ -->
+    <section class="section">
+      <div class="container">
+        <div class="prose">
+          <h2>
+            <span class="lang-en">Reading the diagram</span>
+            <span class="lang-ko">다이어그램 읽기</span>
+          </h2>
+
+          <h3>
+            <span class="lang-en">One dial, not four designs</span>
+            <span class="lang-ko">네 가지 설계가 아니라 하나의 다이얼</span>
+          </h3>
+          <p>
+            <span class="lang-en">
+              The wiring view makes the family relationship literal: fix 32 query heads and
+              slide the number of K/V heads. At 32 every query head has a private K/V pair
+              (MHA); at 1 a single K/V head serves all of them (MQA); every stop between is
+              GQA with group size 32/kv. Nothing else about attention changes — same scores,
+              same softmax, same output projection. The only thing the dial moves is how many
+              K and V vectors must be written to, stored in, and read back from the KV cache.
+            </span>
+            <span class="lang-ko">
+              배선 뷰는 이 가족 관계를 문자 그대로 보여준다: query head 32개를 고정하고 K/V
+              head 수만 움직여 보자. 32면 head마다 전용 K/V pair(MHA), 1이면 하나의 K/V
+              head가 전부를 담당(MQA), 그 사이 모든 지점이 group 크기 32/kv의 GQA다.
+              attention의 다른 부분은 아무것도 변하지 않는다 — score도, softmax도, output
+              projection도 같다. 다이얼이 움직이는 것은 오직 KV cache에 쓰고, 저장하고,
+              다시 읽어야 하는 K·V vector의 개수뿐이다.
+            </span>
+          </p>
+
+          <h3>
+            <span class="lang-en">The formula is the whole story</span>
+            <span class="lang-ko">공식 하나가 전부다</span>
+          </h3>
+          <p>
+            <span class="lang-en">
+              Per token, the cache costs 2 · layers · kv_heads · head_dim · bytes — the 2 is
+              K and V. Every architecture choice on this page attacks exactly one factor:
+              MQA/GQA shrink kv_heads (Llama-2-7B's 512 KB/token becomes Llama-3-8B's
+              128 KB/token), quantization shrinks bytes (the orthogonal axis — see the KIVI
+              review), and MLA replaces the whole 2 · kv_heads · head_dim block with a fixed
+              576 elements per layer. That is why a 236B-parameter DeepSeek-V2 caches
+              67.5 KB/token while a 7B GQA model caches 128 KB.
+            </span>
+            <span class="lang-ko">
+              token당 cache 비용은 2 · layers · kv_heads · head_dim · bytes이고, 여기서 2는
+              K와 V다. 이 페이지의 모든 아키텍처 선택은 정확히 한 인자씩 공략한다:
+              MQA/GQA는 kv_heads를 줄이고(Llama-2-7B의 512 KB/token이 Llama-3-8B에서는
+              128 KB/token), quantization은 bytes를 줄이며(직교 축 — KIVI 리뷰 참고), MLA는
+              2 · kv_heads · head_dim 항 전체를 layer당 고정 576개 원소로 바꿔 버린다.
+              236B parameter의 DeepSeek-V2가 7B GQA 모델(128 KB)보다 작은 67.5 KB/token만
+              cache하는 이유가 이것이다.
+            </span>
+          </p>
+
+          <h3>
+            <span class="lang-en">MLA changes what is cached, not how much of it</span>
+            <span class="lang-ko">MLA는 '얼마나'가 아니라 '무엇을' cache하는가를 바꾼다</span>
+          </h3>
+          <p>
+            <span class="lang-en">
+              MQA and GQA still cache keys and values — just fewer of them. MLA caches a
+              different object: a 512-dim low-rank latent from which per-head K and V are
+              linearly reconstructed. Because the reconstruction is linear, W<sup>UK</sup>
+              folds into the query path and W<sup>UV</sup> into W<sup>O</sup> offline, so
+              per-head K/V never materialize at decode time. The one obstacle is RoPE: a
+              position-dependent rotation between W<sup>UK</sup> and the latent would make
+              the folded product change every step. DeepSeek's fix is to carry position in a
+              separate 64-dim key, shared across heads, and add the two dot products — the
+              "decoupled RoPE" that costs 64 extra cached elements and saves the whole trick.
+            </span>
+            <span class="lang-ko">
+              MQA와 GQA는 여전히 key·value를 cache한다 — 개수만 줄일 뿐이다. MLA는 cache하는
+              대상 자체가 다르다: head별 K·V를 선형으로 복원할 수 있는 512-dim low-rank
+              latent다. 복원이 선형이기 때문에 W<sup>UK</sup>는 query 경로에,
+              W<sup>UV</sup>는 W<sup>O</sup>에 offline으로 흡수(absorption)되어 decode
+              시점에는 head별 K/V가 아예 실체화되지 않는다. 유일한 걸림돌이 RoPE다:
+              position에 의존하는 회전이 W<sup>UK</sup>와 latent 사이에 끼면 흡수된 곱이
+              step마다 달라진다. DeepSeek의 해법은 position 정보를 모든 head가 공유하는
+              별도의 64-dim key에 실어 두 dot product를 더하는 것 — cache 원소 64개를 더
+              내고 트릭 전체를 살리는 "decoupled RoPE"다.
+            </span>
+          </p>
+        </div>
+
+        <div class="eff-note band-dark">
+          <h3>
+            <span class="lang-en">Why the KV cache is the axis that matters</span>
+            <span class="lang-ko">왜 KV cache가 핵심 축인가</span>
+          </h3>
+          <p>
+            <span class="lang-en">
+              Decoding is memory-bound: each generated token must read the weights plus the
+              entire KV cache of every preceding token, and the cache — not compute — is what
+              caps batch size on a fixed-memory GPU. Head sharing is one of three orthogonal
+              levers on the same bytes: this page's axis shrinks the <em>head</em> factor
+              (MHA → MQA/GQA → MLA), quantization shrinks the <em>bytes-per-element</em>
+              factor, and hybrid/linear attention attacks the <em>sequence-length</em> factor.
+              Because they multiply, they compose: a GQA model with a quantized cache, or an
+              MLA model inside a hybrid stack, pays the product of the discounts.
+            </span>
+            <span class="lang-ko">
+              decoding은 memory-bound다: token 하나를 생성할 때마다 weight 전체에 더해 앞선
+              모든 token의 KV cache를 읽어야 하고, 고정 메모리 GPU에서 batch 크기를 막는
+              것은 연산이 아니라 cache다. head sharing은 같은 byte에 걸린 세 개의 직교
+              레버 중 하나다: 이 페이지의 축은 <em>head</em> 인자를 줄이고(MHA → MQA/GQA →
+              MLA), quantization은 <em>bytes-per-element</em> 인자를, hybrid/linear
+              attention은 <em>sequence length</em> 인자를 공략한다. 곱으로 작용하므로 서로
+              합성된다: cache를 quantize한 GQA 모델, hybrid stack 안의 MLA 모델은 할인율의
+              곱을 그대로 가져간다.
+            </span>
+          </p>
+          <div class="eff-chips">
+            <span class="eff-chip">bytes = 2 · layers · kv_heads · head_dim · b/elt · L</span>
+            <span class="eff-chip">heads × bits × length — three multiplying levers</span>
+            <span class="eff-chip">MLA: 576 elts/layer, whatever the head count</span>
+          </div>
+        </div>
+
+        <div class="prose">
+          <h2>
+            <span class="lang-en">Going deeper</span>
+            <span class="lang-ko">더 깊이 가기</span>
+          </h2>
+          <ul class="deeper-list">
+            <li><a class="arrow-link" href="https://arxiv.org/abs/1911.02150" target="_blank" rel="noopener">Fast Transformer Decoding: One Write-Head is All You Need — MQA (Shazeer, 2019)</a></li>
+            <li><a class="arrow-link" href="https://arxiv.org/abs/2305.13245" target="_blank" rel="noopener">GQA: Training Generalized Multi-Query Models from Multi-Head Checkpoints (Ainslie et al., 2023)</a></li>
+            <li><a class="arrow-link" href="https://arxiv.org/abs/2405.04434" target="_blank" rel="noopener">DeepSeek-V2 — Multi-head Latent Attention (2024)</a></li>
+            <li><a class="arrow-link" href="/study/models/hybrid-attention/">Hybrid attention — removing the sequence-length axis</a></li>
+            <li><a class="arrow-link" href="/reviews/kivi/">KIVI review — quantization, the orthogonal bytes-per-element axis</a></li>
+            <li><a class="arrow-link" href="/study/quantization/kv-quant-dataflow/">KV-cache quantization, byte by byte</a></li>
+          </ul>
+          <p class="fine-print">
+            <span class="lang-en">Configs verified against official sources (July 2026):
+              Llama-2-7B (32 layers, 32Q/32KV, hidden 4,096), Llama-3-8B and Mistral-7B-v0.1
+              (32 layers, 32Q/8KV), DeepSeek-V2 (60 layers, 128 heads, kv_lora_rank 512,
+              qk_rope_head_dim 64), DeepSeek-V3 (61 layers, otherwise same MLA dims). Mistral
+              v0.1's sliding-window attention is not modeled by the calculator. Quality
+              claims are quoted from the respective papers.</span>
+            <span class="lang-ko">config는 공식 소스로 검증했다(2026년 7월): Llama-2-7B
+              (32 layers, 32Q/32KV, hidden 4,096), Llama-3-8B·Mistral-7B-v0.1 (32 layers,
+              32Q/8KV), DeepSeek-V2 (60 layers, 128 heads, kv_lora_rank 512,
+              qk_rope_head_dim 64), DeepSeek-V3 (61 layers, 나머지 MLA 차원 동일). Mistral
+              v0.1의 sliding-window attention은 계산기에 반영하지 않았다. 품질 주장은 각
+              논문에서 인용했다.</span>
+          </p>
+        </div>
+      </div>
+    </section>
+  </div>
+</Base>
+
+<style is:global>
+  /* ---- page chrome ---- */
+  .att-page .hero-top { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 0.4rem; }
+  .att-page .jump-row { display: flex; gap: 0.6rem; flex-wrap: wrap; margin: 1.6rem 0 0; }
+  .att-page .jump-row .tag { transition: border-color 0.2s, color 0.2s; }
+  .att-page .jump-row .tag:hover { border-color: var(--accent); color: var(--accent-strong); }
+  .att-page .config-note {
+    margin-top: 1.4rem; display: flex; flex-wrap: wrap; gap: 0.45rem; align-items: center;
+    font-size: 0.88rem; color: var(--text-secondary);
+  }
+  .att-page .config-lead { flex-basis: 100%; margin-bottom: 0.15rem; }
+  .att-page .viz-h { margin-bottom: 0.4rem; }
+  .att-page .viz-sub { color: var(--text-secondary); max-width: 48em; margin: 0 0 0.4rem; }
+  .att-page .att-scroll { overflow-x: auto; }
+
+  /* ---- shared SVG vocabulary ---- */
+  .att-page svg text { font-family: var(--font-sans); fill: var(--text); }
+  .att-page .stitle { font-size: 13px; font-weight: 600; }
+  .att-page .stitle.sm { font-size: 12px; }
+  .att-page .ssub { font-size: 11px; fill: var(--text-secondary); }
+  .att-page .smono { font-family: var(--font-mono); font-size: 10.5px; fill: var(--text-secondary); }
+  .att-page .taccent { fill: var(--accent-strong); }
+  .att-page .tabs { fill: var(--accent-strong); font-style: italic; }
+  .att-page .rowlab { font-size: 12px; font-weight: 600; fill: var(--text-secondary); }
+  .att-page .sbox { fill: #ffffff; stroke: var(--line-strong); stroke-width: 1.3; }
+  .att-page .sbox-accent { fill: #fdf6f2; stroke: var(--accent); stroke-width: 1.5; }
+  .att-page .sbox-rope { fill: #f5f2f8; stroke: var(--swatch-heather); stroke-width: 1.5; }
+  .att-page .sbox-cache { fill: var(--surface-warm); stroke: var(--accent); stroke-dasharray: 6 5; stroke-width: 1.4; }
+  .att-page .flowline { stroke: var(--text-tertiary); stroke-width: 1.6; fill: none; }
+  .att-page .absline { stroke: var(--accent); stroke-width: 1.4; stroke-dasharray: 5 4; }
+  .att-page .badc { fill: #fdf6f2; stroke: var(--accent-strong); stroke-width: 1.4; stroke-dasharray: 3 3; }
+  .att-page .badx { stroke: var(--accent-strong); stroke-width: 2; opacity: 0.85; }
+  .att-page .ropec { fill: #f5f2f8; stroke: var(--swatch-heather); stroke-width: 1.5; }
+
+  /* ---- wiring view ---- */
+  .att-page .wire-controls { display: flex; flex-wrap: wrap; gap: 1.2rem 2rem; align-items: center; margin-bottom: 1rem; }
+  .att-page .mode-row { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+  .att-page .mode-btn {
+    font-family: var(--font-sans); font-size: 0.78rem; font-weight: 600; cursor: pointer;
+    padding: 0.4em 1.1em; border-radius: 999px; border: 1px solid var(--line-strong);
+    background: var(--surface); color: var(--text-secondary); transition: all 0.2s;
+  }
+  .att-page .mode-btn.on { background: var(--text); border-color: var(--text); color: var(--bg); }
+  .att-page .mode-btn:not(.on):hover { border-color: var(--accent); color: var(--accent-strong); }
+  .att-page .dial-wrap { display: flex; align-items: center; gap: 0.8rem; }
+  .att-page .dial-wrap.off { opacity: 0.35; pointer-events: none; }
+  .att-page .dial-label { font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); white-space: nowrap; }
+  .att-page .dial-col { display: inline-flex; flex-direction: column; gap: 2px; }
+  .att-page #kvDial { width: 190px; accent-color: var(--accent); }
+  .att-page .dial-ticks {
+    display: flex; justify-content: space-between; width: 184px; margin: 0 3px;
+    pointer-events: none;
+    font-family: var(--font-mono); font-size: 0.62rem; color: var(--text-tertiary);
+  }
+  .att-page .qh { fill: #ffffff; stroke: var(--line-strong); stroke-width: 1.2; cursor: pointer; transition: fill 0.15s; }
+  .att-page .qh.hot { fill: var(--accent); stroke: var(--accent-strong); }
+  .att-page .kvh { fill: var(--swatch-kraft); opacity: 0.8; stroke: var(--line-strong); stroke-width: 1.1; }
+  .att-page .kvh.hot { fill: var(--accent); opacity: 1; stroke: var(--accent-strong); }
+  .att-page .kvh.solo { fill: var(--accent); opacity: 0.9; }
+  .att-page .wline { stroke: var(--line-strong); stroke-width: 1.1; }
+  .att-page .wline.hot { stroke: var(--accent); stroke-width: 2; }
+  .att-page .latbar { fill: #fdf6f2; stroke: var(--accent); stroke-width: 1.6; }
+  .att-page .latbar.hot { fill: var(--accent-soft, #f6e2d7); }
+  .att-page .ropebar { fill: #f5f2f8; stroke: var(--swatch-heather); stroke-width: 1.5; }
+  .att-page .ropebar.hot { fill: #ece4f3; }
+  .att-page .wire-stats { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.8rem 0 0; }
+  .att-page .stat-chip {
+    font-family: var(--font-mono); font-size: 0.74rem; color: var(--text-secondary);
+    border: 1px solid var(--line); border-radius: 999px; padding: 0.3em 0.85em;
+    background: var(--surface);
+  }
+  .att-page .stat-chip b { color: var(--accent-strong); }
+
+  /* ---- caption bars ---- */
+  .att-page .cap {
+    margin: 0.9rem 0 0; padding: 0.85rem 1.05rem; min-height: 4.2em;
+    background: var(--surface-warm); border-left: 3px solid var(--accent);
+    border-radius: 0 var(--radius-s, 8px) var(--radius-s, 8px) 0;
+    font-size: 0.92rem; color: var(--text-secondary);
+  }
+  .att-page .cap-sm { min-height: 3.2em; font-size: 0.86rem; }
+
+  /* ---- calculator ---- */
+  .att-page .pre-row { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1.3rem; }
+  .att-page .pre-chip {
+    font-family: var(--font-mono); font-size: 0.74rem; cursor: pointer;
+    padding: 0.4em 0.9em; border-radius: 999px; border: 1px solid var(--line-strong);
+    background: var(--surface); color: var(--text-secondary); transition: all 0.2s;
+  }
+  .att-page .pre-chip.on { background: var(--text); border-color: var(--text); color: var(--bg); }
+  .att-page .pre-chip:not(.on):hover { border-color: var(--accent); color: var(--accent-strong); }
+  .att-page .calc-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.6rem; }
+  @media (min-width: 900px) { .att-page .calc-grid { grid-template-columns: 320px minmax(0, 1fr); align-items: start; } }
+  .att-page .ctl-row { display: grid; grid-template-columns: 78px 1fr 52px; gap: 0.7rem; align-items: center; margin-bottom: 0.75rem; }
+  .att-page .ctl-label { font-size: 0.78rem; font-weight: 600; color: var(--text-secondary); }
+  .att-page .ctl-row input[type='range'] { width: 100%; accent-color: var(--accent); }
+  .att-page .ctl-val { font-family: var(--font-mono); font-size: 0.78rem; color: var(--text); text-align: right; }
+  .att-page .dt-chips { display: flex; gap: 0.4rem; grid-column: 2 / 4; }
+  .att-page .dt-chip {
+    font-family: var(--font-mono); font-size: 0.72rem; cursor: pointer;
+    padding: 0.32em 0.8em; border-radius: 999px; border: 1px solid var(--line-strong);
+    background: var(--surface); color: var(--text-secondary); transition: all 0.2s;
+  }
+  .att-page .dt-chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .att-page .formula {
+    font-family: var(--font-mono); font-size: 0.76rem; line-height: 1.7; white-space: pre-wrap;
+    color: var(--text-secondary); background: var(--surface-warm);
+    border: 1px solid var(--line); border-radius: var(--radius-s, 8px);
+    padding: 0.7rem 0.9rem; margin-bottom: 1.1rem; overflow-x: auto;
+  }
+  .att-page .bar-row { display: grid; grid-template-columns: 64px minmax(0, 1fr) 210px; gap: 0.7rem; align-items: center; margin-bottom: 0.55rem; }
+  .att-page .bar-name { font-size: 0.82rem; font-weight: 700; }
+  .att-page .bar-sub { display: block; font-family: var(--font-mono); font-size: 0.62rem; font-style: normal; color: var(--text-tertiary); }
+  .att-page .bar-track { display: block; height: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 5px; overflow: hidden; }
+  .att-page .bar-fill { display: block; height: 100%; min-width: 2px; border-radius: 4px; transition: width 0.35s var(--ease-out, ease-out); }
+  .att-page .f-mha { background: var(--swatch-slate); }
+  .att-page .f-gqa { background: var(--swatch-kraft); }
+  .att-page .f-mqa { background: var(--swatch-olive); }
+  .att-page .f-mla { background: var(--accent); }
+  .att-page .bar-val { font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-secondary); white-space: nowrap; }
+  .att-page .bar-val b { color: var(--text); font-size: 0.8rem; }
+  .att-page .fine-inline { font-size: 0.76rem; color: var(--text-tertiary); margin: 0.7rem 0 0; }
+  @media (max-width: 640px) {
+    .att-page .bar-row { grid-template-columns: 48px minmax(0, 1fr); }
+    .att-page .bar-val { grid-column: 2; }
+  }
+
+  /* ---- MLA deep-dive ---- */
+  .att-page .dt-controls { display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; margin-bottom: 1.2rem; }
+  .att-page .btn-sm { padding: 0.45em 1.1em; font-size: 0.85rem; }
+  .att-page .btn[disabled] { opacity: 0.4; pointer-events: none; }
+  .att-page .dt-step { font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-secondary); margin-left: auto; white-space: nowrap; }
+  .att-page .mg { transition: opacity 0.35s; }
+  .att-page .mg.dimmed { opacity: 0.14; }
+
+  /* ---- trade-off cards ---- */
+  .att-page .to-grid { margin-top: 1.4rem; }
+  .att-page .to-grid .card h3 { display: flex; align-items: baseline; gap: 0.6rem; }
+  .att-page .to-year { font-family: var(--font-mono); font-size: 0.68rem; font-weight: 400; color: var(--text-tertiary); }
+  .att-page .to-grid .card p { font-size: 0.9rem; line-height: 1.65; color: var(--text-secondary); margin: 0.6rem 0 0.8rem; }
+  .att-page .ev-chip {
+    display: inline-block; font-family: var(--font-mono); font-size: 0.68rem;
+    color: var(--accent-strong); border: 1px solid var(--line); border-radius: 999px;
+    padding: 0.3em 0.8em; background: var(--surface-warm);
+  }
+
+  /* ---- dark band + misc ---- */
+  .att-page .eff-note { border-radius: var(--radius-l, 16px); padding: clamp(1.4rem, 3vw, 2.2rem); margin: 3rem 0; max-width: 880px; }
+  .att-page .eff-note h3 { color: var(--text-on-dark); margin-bottom: 0.7rem; }
+  .att-page .eff-note p { font-size: 0.97rem; line-height: 1.7; }
+  .att-page .eff-chips { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1.1rem; }
+  .att-page .eff-chip {
+    font-family: var(--font-mono); font-size: 0.74rem; color: var(--text-on-dark);
+    border: 1px solid var(--line-on-dark); border-radius: 999px; padding: 0.35em 0.9em;
+    background: #1d1d1b;
+  }
+  .att-page .deeper-list { list-style: none; padding: 0; margin: 0.6rem 0 1.6rem; display: flex; flex-direction: column; gap: 0.55rem; }
+  .att-page .deeper-list .arrow-link { text-decoration: none; }
+  .att-page .fine-print { font-size: 0.85rem; color: var(--text-tertiary); }
+</style>
+
+<script>
+  // ---------- bilingual caption helper: set BOTH spans, CSS shows the active one ----------
+  function setCap(el: HTMLElement | null, en: string, ko: string) {
+    if (!el) return;
+    const e = el.querySelector('.lang-en');
+    const k = el.querySelector('.lang-ko');
+    if (e) e.textContent = en;
+    if (k) k.textContent = ko;
+  }
+
+  // ================= 1 · HEAD WIRING =================
+  const NQ = 32;
+  const KVV = [32, 16, 8, 4, 2, 1];
+  const wireDyn = document.getElementById('wireDyn');
+  const wireStats = document.getElementById('wireStats');
+  const wireCap = document.getElementById('wireCap');
+  const dial = document.getElementById('kvDial') as HTMLInputElement | null;
+  const dialWrap = document.getElementById('dialWrap');
+  let wMode: 'std' | 'mla' = 'std';
+  let wKv = 32;
+
+  const qcx = (i: number) => 39 + 22 * i;
+  const qx = (i: number) => 30 + 22 * i;
+
+  function wireSvgStd(nkv: number): string {
+    const G = NQ / nkv;
+    let s = '<text class="rowlab" x="30" y="40">Q heads — 32 × d_h 128</text>';
+    s += '<text class="rowlab" x="30" y="256">K/V heads — what the cache stores</text>';
+    for (let i = 0; i < NQ; i++) {
+      const g = Math.floor(i / G);
+      const kcx = 39 + 22 * (g * G + (G - 1) / 2);
+      s += `<line class="wline" data-line="${i}" x1="${qcx(i)}" y1="96" x2="${kcx}" y2="196"></line>`;
+    }
+    for (let i = 0; i < NQ; i++) {
+      s += `<rect class="qh" data-q="${i}" x="${qx(i)}" y="64" width="18" height="30" rx="4"></rect>`;
+    }
+    for (let g = 0; g < nkv; g++) {
+      const c = 39 + 22 * (g * G + (G - 1) / 2);
+      const w = Math.min(48, 22 * G - 4);
+      s += `<rect class="kvh ${nkv === 1 ? 'solo' : ''}" data-kv="${g}" x="${c - w / 2}" y="198" width="${w}" height="30" rx="4"></rect>`;
+    }
+    return s;
+  }
+
+  function wireSvgMla(): string {
+    let s = '<text class="rowlab" x="30" y="40">Q heads — 32 shown for legibility (DeepSeek-V2 has 128)</text>';
+    s += '<text class="rowlab" x="30" y="256">shared latent — what the cache stores instead of K/V heads</text>';
+    for (let i = 0; i < NQ; i++) {
+      const lx = 180 + (i / (NQ - 1)) * 280;
+      s += `<line class="wline" data-line="${i}" x1="${qcx(i)}" y1="96" x2="${lx}" y2="196"></line>`;
+    }
+    for (let i = 0; i < NQ; i++) {
+      s += `<rect class="qh" data-q="${i}" x="${qx(i)}" y="64" width="18" height="30" rx="4"></rect>`;
+    }
+    s += '<rect class="latbar" data-kv="lat" x="170" y="198" width="300" height="30" rx="6"></rect>';
+    s += '<text class="smono" x="320" y="217" text-anchor="middle">c^KV — [512] latent, shared by ALL heads</text>';
+    s += '<text class="stitle sm" x="487" y="217">+</text>';
+    s += '<rect class="ropebar" data-kv="rope" x="500" y="198" width="130" height="30" rx="6"></rect>';
+    s += '<text class="smono" x="565" y="217" text-anchor="middle">k^R — [64] RoPE</text>';
+    s += '<text class="ssub" x="648" y="210">per-head K,V = W^UK/W^UV · c^KV,</text>';
+    s += '<text class="ssub" x="648" y="224">folded into Q-path / W^O at inference</text>';
+    return s;
+  }
+
+  const WIRE_CAPS: Record<string, { en: string; ko: string }> = {
+    mha: {
+      en: 'MHA — every query head owns a private K/V pair. Nothing is shared: 32 K and 32 V vectors are cached per token per layer, 8,192 elements (16 KB in FP16). This is the quality reference all sharing schemes are measured against.',
+      ko: 'MHA — 모든 query head가 전용 K/V pair를 가진다. 아무것도 공유되지 않으므로 token·layer당 K 32개와 V 32개, 8,192개 원소(FP16 기준 16 KB)가 cache된다. 모든 sharing 방식의 품질 기준점이다.',
+    },
+    mqa: {
+      en: 'MQA (Shazeer 2019) — one K/V head serves all 32 query heads: 256 elements (512 B FP16) per token per layer, a 32× cut. The paper reports much faster decoding with "only minor quality degradation".',
+      ko: 'MQA (Shazeer 2019) — K/V head 하나가 32개 query head 전부를 담당한다: token·layer당 256개 원소(FP16 512 B), 32× 절감. 논문은 "only minor quality degradation"과 함께 훨씬 빠른 decoding을 보고한다.',
+    },
+    mla: {
+      en: 'MLA (DeepSeek-V2) — the K/V row is gone. All heads share one 512-dim latent plus a 64-dim decoupled RoPE key: 576 cached elements (1,152 B FP16) per token per layer, independent of head count. Open the deep-dive below for the mechanism.',
+      ko: 'MLA (DeepSeek-V2) — K/V 행 자체가 사라졌다. 모든 head가 512-dim latent와 64-dim decoupled RoPE key를 공유한다: head 수와 무관하게 token·layer당 576개 원소(FP16 1,152 B)만 cache된다. 메커니즘은 아래 딥다이브에서.',
+    },
+  };
+  function gqaCap(nkv: number) {
+    const G = NQ / nkv;
+    return {
+      en: `GQA-${nkv} — ${nkv} K/V heads, each serving a group of ${G} query heads: ${(2 * nkv * 128).toLocaleString()} elements (${(2 * nkv * 128 * 2) / 1024} KB FP16) per token per layer. Llama-3-8B and Mistral-7B ship exactly this shape at kv = 8.`,
+      ko: `GQA-${nkv} — K/V head ${nkv}개가 각각 ${G}개 query head 그룹을 담당한다: token·layer당 ${(2 * nkv * 128).toLocaleString()}개 원소(FP16 ${(2 * nkv * 128 * 2) / 1024} KB). Llama-3-8B와 Mistral-7B가 정확히 kv = 8의 이 형상으로 출시됐다.`,
+    };
+  }
+
+  function wireStatsHtml(): string {
+    if (wMode === 'mla') {
+      return '<span class="stat-chip">latent 512 + rope 64</span>' +
+        '<span class="stat-chip"><b>576</b> elts / token / layer</span>' +
+        '<span class="stat-chip"><b>1,152 B</b> FP16 / token / layer</span>' +
+        '<span class="stat-chip">= GQA with <b>2.25</b> groups (paper)</span>';
+    }
+    const elts = 2 * wKv * 128;
+    const kb = (elts * 2) / 1024;
+    return `<span class="stat-chip">${wKv} KV head${wKv > 1 ? 's' : ''}</span>` +
+      `<span class="stat-chip">2 × ${wKv} × 128 = <b>${elts.toLocaleString()}</b> elts / token / layer</span>` +
+      `<span class="stat-chip"><b>${kb < 1 ? kb * 1024 + ' B' : kb + ' KB'}</b> FP16 / token / layer</span>`;
+  }
+
+  function renderWire() {
+    if (wireDyn) wireDyn.innerHTML = wMode === 'mla' ? wireSvgMla() : wireSvgStd(wKv);
+    if (wireStats) wireStats.innerHTML = wireStatsHtml();
+    document.querySelectorAll('.mode-btn').forEach((b) => {
+      const v = (b as HTMLElement).dataset.var;
+      const active =
+        wMode === 'mla' ? v === 'mla' : v === (wKv === 32 ? 'mha' : wKv === 1 ? 'mqa' : 'gqa');
+      b.classList.toggle('on', active);
+    });
+    if (dialWrap) dialWrap.classList.toggle('off', wMode === 'mla');
+    const c = wMode === 'mla' ? WIRE_CAPS.mla : wKv === 32 ? WIRE_CAPS.mha : wKv === 1 ? WIRE_CAPS.mqa : gqaCap(wKv);
+    setCap(wireCap, c.en, c.ko);
+  }
+
+  document.querySelectorAll('.mode-btn').forEach((b) => {
+    b.addEventListener('click', () => {
+      const v = (b as HTMLElement).dataset.var;
+      if (v === 'mla') wMode = 'mla';
+      else {
+        wMode = 'std';
+        wKv = v === 'mha' ? 32 : v === 'mqa' ? 1 : 8;
+        if (dial) dial.value = String(KVV.indexOf(wKv));
+      }
+      renderWire();
+    });
+  });
+  if (dial) {
+    dial.addEventListener('input', () => {
+      wMode = 'std';
+      wKv = KVV[Number(dial.value)];
+      renderWire();
+    });
+  }
+
+  // hover: delegate on the svg so re-renders keep working
+  const wireSvgEl = document.getElementById('wireSvgEl');
+  if (wireSvgEl) {
+    wireSvgEl.addEventListener('mouseover', (e) => {
+      const t = (e.target as Element).closest('[data-q]');
+      if (!t) return;
+      const q = Number(t.getAttribute('data-q'));
+      document.querySelectorAll('.att-page .hot').forEach((x) => x.classList.remove('hot'));
+      t.classList.add('hot');
+      const line = document.querySelector(`.att-page [data-line="${q}"]`);
+      if (line) line.classList.add('hot');
+      if (wMode === 'mla') {
+        document.querySelectorAll('.att-page [data-kv]').forEach((x) => x.classList.add('hot'));
+        setCap(
+          wireCap,
+          `Q head ${q} — like every other head — reads the same cached pair: the 512-dim latent c^KV (its per-head key/value are rebuilt from it through W^UK/W^UV, pre-folded into the query and output paths) plus the shared 64-dim RoPE key k^R.`,
+          `Q head ${q}도 다른 모든 head와 똑같이 cache된 한 쌍을 읽는다: 512-dim latent c^KV(head별 key/value는 W^UK/W^UV로 복원되며, query·output 경로에 미리 흡수됨)와 공유 64-dim RoPE key k^R.`
+        );
+      } else {
+        const G = NQ / wKv;
+        const g = Math.floor(q / G);
+        const kv = document.querySelector(`.att-page [data-kv="${g}"]`);
+        if (kv) kv.classList.add('hot');
+        setCap(
+          wireCap,
+          G === 1
+            ? `Q head ${q} reads its own private K/V head ${g} — no sharing (MHA). Its 2 × 128 cached elements serve exactly one query head.`
+            : `Q head ${q} reads K/V head ${g}, shared with ${G - 1} other query head${G > 2 ? 's' : ''} (heads ${g * G}–${(g + 1) * G - 1}). One cached 2 × 128 pair serves ${G} queries — the cache shrinks ${G}×, the attention math is unchanged.`,
+          G === 1
+            ? `Q head ${q}는 전용 K/V head ${g}를 읽는다 — 공유 없음(MHA). cache된 2 × 128 원소가 query head 하나만 담당한다.`
+            : `Q head ${q}는 K/V head ${g}를 읽고, 이를 ${G - 1}개의 다른 query head(heads ${g * G}–${(g + 1) * G - 1})와 공유한다. cache된 2 × 128 pair 하나가 ${G}개 query를 담당한다 — cache는 ${G}× 줄지만 attention 수식은 그대로다.`
+        );
+      }
+    });
+    wireSvgEl.addEventListener('mouseleave', () => {
+      document.querySelectorAll('.att-page .hot').forEach((x) => x.classList.remove('hot'));
+      renderWire();
+    });
+  }
+
+  // ================= 2 · KV-BYTES CALCULATOR =================
+  const CTX = [1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072];
+  const CTXL = ['1K', '2K', '4K', '8K', '16K', '32K', '64K', '128K'];
+  const HD = [64, 96, 128, 192, 256];
+  const DTB: Record<string, number> = { fp16: 2, int8: 1, int4: 0.5 };
+  const cal = { L: 32, Q: 32, K: 8, Di: 2, Ci: 3, dt: 'fp16' };
+
+  const PRESETS = [
+    { L: 32, Q: 32, K: 32, Di: 2, note: {
+      en: 'Llama-2-7B (official config: 32 layers, 32 Q = 32 KV heads, hidden 4,096): full MHA. 512 KB per token in FP16 — the baseline every sharing scheme is cut from.',
+      ko: 'Llama-2-7B (공식 config: 32 layers, 32 Q = 32 KV heads, hidden 4,096): 완전한 MHA. FP16에서 token당 512 KB — 모든 sharing 방식이 여기서 출발해 줄여 나가는 기준선이다.' } },
+    { L: 32, Q: 32, K: 8, Di: 2, note: {
+      en: 'Llama-3-8B: GQA with 32 Q / 8 KV heads — a 4× cache cut vs the same backbone with MHA, straight from the official config.',
+      ko: 'Llama-3-8B: 32 Q / 8 KV head의 GQA — 공식 config 그대로, 같은 backbone을 MHA로 둘 때보다 cache가 4× 작다.' } },
+    { L: 32, Q: 32, K: 8, Di: 2, note: {
+      en: 'Mistral-7B-v0.1: the same 32Q/8KV GQA shape as Llama-3-8B (its sliding-window attention additionally bounds live cache length — not modeled here).',
+      ko: 'Mistral-7B-v0.1: Llama-3-8B와 같은 32Q/8KV GQA 형상 (sliding-window attention이 live cache 길이를 추가로 제한하지만 여기서는 반영하지 않는다).' } },
+    { L: 60, Q: 128, K: 128, Di: 2, note: {
+      en: 'DeepSeek-V2 (236B MoE, 60 layers, 128 heads): MLA caches 67.5 KB/token. The MHA bar shows what 128 full heads would have cost — 3.75 MB/token, 57× more.',
+      ko: 'DeepSeek-V2 (236B MoE, 60 layers, 128 heads): MLA는 token당 67.5 KB만 cache한다. MHA 막대는 128개 full head였다면 들었을 비용 — token당 3.75 MB, 57× — 를 보여준다.' } },
+    { L: 61, Q: 128, K: 128, Di: 2, note: {
+      en: 'DeepSeek-V3 (671B MoE): identical MLA dims (512 + 64) over 61 layers — 68.6 KB/token. The cache design carried over unchanged from V2.',
+      ko: 'DeepSeek-V3 (671B MoE): 동일한 MLA 차원(512 + 64)을 61개 layer에 — token당 68.6 KB. cache 설계가 V2에서 그대로 이어졌다.' } },
+  ];
+
+  const $ = (id: string) => document.getElementById(id);
+  const slLayers = $('slLayers') as HTMLInputElement | null;
+  const slQ = $('slQ') as HTMLInputElement | null;
+  const slK = $('slK') as HTMLInputElement | null;
+  const slD = $('slD') as HTMLInputElement | null;
+  const slC = $('slC') as HTMLInputElement | null;
+
+  function fmtB(b: number): string {
+    if (b >= 1073741824) { const v = b / 1073741824; return (v >= 10 ? v.toFixed(0) : v.toFixed(2)) + ' GB'; }
+    if (b >= 1048576) { const v = b / 1048576; return (v >= 10 ? v.toFixed(0) : v.toFixed(1)) + ' MB'; }
+    if (b >= 1024) { const v = b / 1024; return (v >= 10 ? v.toFixed(0) : v.toFixed(1)) + ' KB'; }
+    return Math.round(b) + ' B';
+  }
+
+  function calcRender() {
+    const d = HD[cal.Di];
+    const ctx = CTX[cal.Ci];
+    const by = DTB[cal.dt];
+    const mha = 2 * cal.L * cal.Q * d * by;
+    const gqa = 2 * cal.L * cal.K * d * by;
+    const mqa = 2 * cal.L * 1 * d * by;
+    const mla = cal.L * 576 * by;
+    const mx = Math.max(mha, gqa, mqa, mla);
+
+    const set = (bar: string, val: string, pt: number) => {
+      const bEl = $(bar); const vEl = $(val);
+      if (bEl) bEl.style.width = Math.max(0.4, (pt / mx) * 100) + '%';
+      if (vEl) vEl.innerHTML = '<b>' + fmtB(pt) + '</b>/tok · <b>' + fmtB(pt * ctx) + '</b> @ L';
+    };
+    set('barMha', 'valMha', mha);
+    set('barGqa', 'valGqa', gqa);
+    set('barMqa', 'valMqa', mqa);
+    set('barMla', 'valMla', mla);
+
+    const gs = $('gqaSub'); if (gs) gs.textContent = 'kv = ' + cal.K;
+    const f = $('fEq');
+    if (f) f.textContent =
+      `KV bytes/token = 2 × ${cal.L} layers × ${cal.K} kv_heads × ${d} head_dim × ${by} B = ${gqa.toLocaleString()} B\n` +
+      `MLA row: ${cal.L} layers × (d_c 512 + d_R 64) × ${by} B = ${mla.toLocaleString()} B`;
+
+    const vL = $('vLayers'); if (vL) vL.textContent = String(cal.L);
+    const vQ = $('vQ'); if (vQ) vQ.textContent = String(cal.Q);
+    const vK = $('vK'); if (vK) vK.textContent = String(cal.K);
+    const vD = $('vD'); if (vD) vD.textContent = String(d);
+    const vC = $('vC'); if (vC) vC.textContent = CTXL[cal.Ci];
+    if (slK) { slK.max = String(cal.Q); slK.value = String(cal.K); }
+  }
+
+  if (slLayers) slLayers.addEventListener('input', () => { cal.L = Number(slLayers.value); calcRender(); });
+  if (slQ) slQ.addEventListener('input', () => { cal.Q = Number(slQ.value); cal.K = Math.min(cal.K, cal.Q); calcRender(); });
+  if (slK) slK.addEventListener('input', () => { cal.K = Math.min(Number(slK.value), cal.Q); calcRender(); });
+  if (slD) slD.addEventListener('input', () => { cal.Di = Number(slD.value); calcRender(); });
+  if (slC) slC.addEventListener('input', () => { cal.Ci = Number(slC.value); calcRender(); });
+  document.querySelectorAll('.dt-chip').forEach((b) => {
+    b.addEventListener('click', () => {
+      cal.dt = (b as HTMLElement).dataset.dt || 'fp16';
+      document.querySelectorAll('.dt-chip').forEach((x) => x.classList.toggle('on', x === b));
+      calcRender();
+    });
+  });
+  document.querySelectorAll('.pre-chip').forEach((b) => {
+    b.addEventListener('click', () => {
+      const p = PRESETS[Number((b as HTMLElement).dataset.pre)];
+      cal.L = p.L; cal.Q = p.Q; cal.K = p.K; cal.Di = p.Di;
+      if (slLayers) slLayers.value = String(p.L);
+      if (slQ) slQ.value = String(p.Q);
+      if (slD) slD.value = String(p.Di);
+      document.querySelectorAll('.pre-chip').forEach((x) => x.classList.toggle('on', x === b));
+      setCap($('calCap'), p.note.en, p.note.ko);
+      calcRender();
+    });
+  });
+  calcRender();
+
+  // ================= 3 · MLA DEEP-DIVE =================
+  const MG = ['g-h', 'g-down', 'g-c', 'g-bad', 'g-up', 'g-absorb', 'g-fix', 'g-cache'];
+  const MSTEPS: { name: string; lit: string[] | null; cap: { en: string; ko: string } }[] = [
+    { name: 'Overview', lit: null, cap: {
+      en: 'Multi-head Latent Attention in one picture: instead of caching per-head K and V, DeepSeek-V2 caches one 512-dim latent c^KV plus one 64-dim RoPE key per token — everything else is rebuilt, or folded into other weight matrices, at compute time. Step through to see how.',
+      ko: 'Multi-head Latent Attention 한눈에 보기: head별 K·V를 cache하는 대신 DeepSeek-V2는 token마다 512-dim latent c^KV와 64-dim RoPE key 하나만 cache한다 — 나머지는 계산 시점에 복원되거나 다른 weight matrix에 흡수된다. Step을 넘기며 확인해 보자.' } },
+    { name: 'Down-project', lit: ['g-h', 'g-down', 'g-c'], cap: {
+      en: 'W^DKV compresses the 5,120-dim hidden state 9× into a 512-dim latent c^KV — one vector per token, shared by all 128 heads. This low-rank bottleneck IS the compression; everything after it is bookkeeping to make attention still work.',
+      ko: 'W^DKV가 5,120-dim hidden state를 9× 압축해 512-dim latent c^KV로 만든다 — token당 vector 하나, 128개 head 전부가 공유한다. 이 low-rank bottleneck이 압축의 전부이고, 이후는 attention이 여전히 성립하게 만드는 장부 정리다.' } },
+    { name: 'Up-project', lit: ['g-c', 'g-up'], cap: {
+      en: 'At compute time W^UK and W^UV expand the latent back into 128 per-head keys and values of dim 128 each — 32,768 reconstructed elements flowing out of 576 cached ones. Nothing per-head is ever stored.',
+      ko: '계산 시점에 W^UK와 W^UV가 latent를 다시 head별 key·value 128개(각 dim 128)로 펼친다 — cache된 576개 원소에서 32,768개가 복원되어 나온다. head별 값은 어디에도 저장되지 않는다.' } },
+    { name: 'Weight absorption', lit: ['g-up', 'g-absorb'], cap: {
+      en: 'Because k_i = W^UK_i · c^KV is linear, the score q_i·k_i equals (q_i · W^UK_i) · c^KV — so W^UK folds into the query projection and W^UV into W^O, once, offline. At decode time queries multiply directly against the cached latent; the up-projections cost nothing per step.',
+      ko: 'k_i = W^UK_i · c^KV가 선형이므로 score q_i·k_i는 (q_i · W^UK_i) · c^KV와 같다 — 따라서 W^UK는 query projection에, W^UV는 W^O에 offline으로 한 번만 흡수된다. decode 시점에는 query가 cache된 latent와 곧바로 곱해지며, up-projection은 step당 비용이 없다.' } },
+    { name: 'Naive RoPE breaks it', lit: ['g-c', 'g-bad', 'g-up'], cap: {
+      en: 'RoPE is the obstacle: applying the position rotation R_t to the reconstructed key would put a position-DEPENDENT matrix between W^UK and c^KV. The folded product W^UQ·R_t·W^UK would change at every position — absorption dies, and with it the whole point of caching only the latent.',
+      ko: 'RoPE가 걸림돌이다: 복원된 key에 position 회전 R_t를 적용하면 W^UK와 c^KV 사이에 position 의존 matrix가 끼게 된다. 흡수된 곱 W^UQ·R_t·W^UK가 position마다 달라져 absorption이 무너지고, latent만 cache한다는 발상 자체가 무의미해진다.' } },
+    { name: 'Decoupled RoPE', lit: ['g-h', 'g-fix'], cap: {
+      en: "DeepSeek's fix: keep the reconstructed 128-dim key position-free ('nope'), and carry position in a separate 64-dim key k^R = RoPE(W^KR · h_t), shared across all 128 heads. The attention score is simply the sum of the two dot products — nope path (absorbable) + rope path (position-aware).",
+      ko: 'DeepSeek의 해법: 복원되는 128-dim key는 position 없이("nope") 두고, position 정보는 별도의 64-dim key k^R = RoPE(W^KR · h_t)에 실어 128개 head가 공유한다. attention score는 두 dot product의 합일 뿐이다 — nope 경로(흡수 가능) + rope 경로(position 반영).' } },
+    { name: 'What gets cached', lit: ['g-c', 'g-fix', 'g-cache'], cap: {
+      en: 'The cache stores only c^KV (512) + k^R (64) = 576 elements = 1,152 B FP16 per layer — 67.5 KB/token over 60 layers. The paper: a KV cache "equal to GQA with only 2.25 groups", 93.3% smaller than DeepSeek 67B — while its own ablations report quality above MHA.',
+      ko: 'cache에는 c^KV(512) + k^R(64) = 576개 원소, layer당 FP16 1,152 B만 저장된다 — 60개 layer 기준 token당 67.5 KB. 논문 표현으로는 "GQA 2.25 group과 동일한" KV cache이고 DeepSeek 67B보다 93.3% 작다 — 자체 ablation에서는 MHA보다 높은 품질을 보고한다.' } },
+  ];
+
+  const mlaCap = $('mlaCap');
+  const mStepEl = $('mStep');
+  const mPrev = $('mPrev'); const mNext = $('mNext');
+  const mPlay = $('mPlay'); const mReset = $('mReset');
+  let mCur = 0;
+  let mTimer: ReturnType<typeof setInterval> | null = null;
+
+  function mGo(i: number) {
+    mCur = Math.max(0, Math.min(MSTEPS.length - 1, i));
+    const st = MSTEPS[mCur];
+    MG.forEach((id) => {
+      const el = $(id);
+      if (el) el.classList.toggle('dimmed', st.lit !== null && !st.lit.includes(id));
+    });
+    setCap(mlaCap, st.cap.en, st.cap.ko);
+    if (mStepEl) mStepEl.textContent = 'Step ' + mCur + ' / ' + (MSTEPS.length - 1) + ' — ' + st.name;
+    if (mPrev) mPrev.toggleAttribute('disabled', mCur === 0);
+    if (mNext) mNext.toggleAttribute('disabled', mCur === MSTEPS.length - 1);
+  }
+  function mStop() {
+    if (mTimer !== null) { clearInterval(mTimer); mTimer = null; }
+    if (mPlay) mPlay.textContent = '▶ Play';
+  }
+  if (mPrev) mPrev.addEventListener('click', () => { mStop(); mGo(mCur - 1); });
+  if (mNext) mNext.addEventListener('click', () => { mStop(); mGo(mCur + 1); });
+  if (mReset) mReset.addEventListener('click', () => { mStop(); mGo(0); });
+  if (mPlay) {
+    mPlay.addEventListener('click', () => {
+      if (mTimer !== null) { mStop(); return; }
+      if (mCur === MSTEPS.length - 1) mGo(0);
+      mPlay.textContent = '❚❚ Pause';
+      mTimer = setInterval(() => {
+        if (mCur >= MSTEPS.length - 1) { mStop(); return; }
+        mGo(mCur + 1);
+      }, 3200);
+    });
+  }
+  mGo(0);
+</script>

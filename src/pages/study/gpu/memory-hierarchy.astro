@@ -1,5 +1,6 @@
 ---
 import Base from '../../../layouts/Base.astro';
+import LangToggle from '../../../components/LangToggle.astro';
 
 // Build-time geometry for the A100 die map (renders to static HTML, no JS needed).
 // 108 SMs drawn as two banks of 54 (9 cols x 6 rows) around the L2 band.
@@ -25,13 +26,27 @@ for (const bank of banks) {
 >
   <section class="section hero">
     <div class="container">
-      <p class="eyebrow">Study · GPU · Interactive</p>
-      <h1>Where the bytes live,<br /><em>and why decode waits for them.</em></h1>
+      <div class="hero-top">
+        <p class="eyebrow">Study · GPU · Interactive</p>
+        <LangToggle />
+      </div>
+      <h1>
+        <span class="lang-en">Where the bytes live,<br /><em>and why decode waits for them.</em></span>
+        <span class="lang-ko">byte는 어디에 사는가,<br /><em>그리고 decode는 왜 그 byte를 기다리는가.</em></span>
+      </h1>
       <p class="lede">
-        A datacenter GPU is a small city built around one shortage: bytes per second.
-        This is a guided tour of the NVIDIA A100-40GB — the floorplan, the memory ladder,
-        the roofline, and a single LLM decode step traced byte by byte — ending at the
-        number that rules inference: <span class="mono-inline">14&nbsp;GB ÷ 1.55&nbsp;TB/s ≈ 9&nbsp;ms per token</span>.
+        <span class="lang-en">
+          A datacenter GPU is a small city built around one shortage: bytes per second.
+          This is a guided tour of the NVIDIA A100-40GB — the floorplan, the memory ladder,
+          the roofline, and a single LLM decode step traced byte by byte — ending at the
+          number that rules inference: <span class="mono-inline">14&nbsp;GB ÷ 1.55&nbsp;TB/s ≈ 9&nbsp;ms per token</span>.
+        </span>
+        <span class="lang-ko">
+          데이터센터 GPU는 단 하나의 부족 자원, 초당 bytes를 중심으로 지어진 작은 도시다.
+          NVIDIA A100-40GB를 따라가는 가이드 투어 — floorplan, memory 사다리, roofline,
+          그리고 byte 단위로 추적한 LLM decode 한 스텝 — 의 끝에는 추론을 지배하는 숫자
+          <span class="mono-inline">14&nbsp;GB ÷ 1.55&nbsp;TB/s ≈ 9&nbsp;ms per token</span>이 있다.
+        </span>
       </p>
       <div class="spec-strip" aria-label="A100-40GB key specs">
         <div class="spec"><span class="spec-num">108</span><span class="spec-label">SMs</span></div>
@@ -57,8 +72,14 @@ for (const bank of banks) {
         <!-- ============ VIEW A · DIE MAP ============ -->
         <div class="panel" id="panel-die" data-panel="die">
           <div class="panel-head">
-            <h3>The floorplan: compute is an island, memory is the ocean around it</h3>
-            <p class="panel-sub">Simplified A100 die. Hover any region for its numbers; <strong>click an SM</strong> to zoom into its internals on the right.</p>
+            <h3>
+              <span class="lang-en">The floorplan: compute is an island, memory is the ocean around it</span>
+              <span class="lang-ko">Floorplan: compute는 섬이고, memory는 그 주위의 바다다</span>
+            </h3>
+            <p class="panel-sub">
+              <span class="lang-en">Simplified A100 die. Hover any region for its numbers; <strong>click an SM</strong> to zoom into its internals on the right.</span>
+              <span class="lang-ko">단순화한 A100 die. 영역에 hover하면 해당 숫자가 나오고, <strong>SM을 클릭</strong>하면 오른쪽에서 그 내부를 확대해 볼 수 있다.</span>
+            </p>
           </div>
           <div class="die-grid">
             <div class="die-svg-wrap">
@@ -111,7 +132,7 @@ for (const bank of banks) {
                 </p>
               </div>
               <div class="sm-detail">
-                <span class="card-kicker">Inside one SM <span id="sm-detail-which">(click any SM)</span></span>
+                <span class="card-kicker"><span class="lang-en">Inside one SM</span><span class="lang-ko">SM 하나의 내부</span> <span id="sm-detail-which"><span class="lang-en">(click any SM)</span><span class="lang-ko">(아무 SM이나 클릭)</span></span></span>
                 <svg viewBox="0 0 400 310" width="100%" role="img" aria-label="Inside one A100 SM: four processing blocks with warp scheduler, register file and tensor core, above a combined 192KB L1/shared memory">
                   <rect x="4" y="4" width="392" height="302" rx="8" class="smd-outline" />
                   {[0, 1, 2, 3].map((i) => (
@@ -139,10 +160,18 @@ for (const bank of banks) {
                   <text x="298" y="287" class="svg-label tiny mid">SFU · Tex</text>
                 </svg>
                 <p class="sm-detail-caption">
-                  Per SM: 4 processing blocks, each with a warp scheduler, a 64 KB register-file
-                  partition (256 KB total) and one tensor core (4 per SM, 432 on the die).
-                  All four share 192 KB of combined L1/shared storage — up to 164 KB usable
-                  as software-managed shared memory.
+                  <span class="lang-en">
+                    Per SM: 4 processing blocks, each with a warp scheduler, a 64 KB register-file
+                    partition (256 KB total) and one tensor core (4 per SM, 432 on the die).
+                    All four share 192 KB of combined L1/shared storage — up to 164 KB usable
+                    as software-managed shared memory.
+                  </span>
+                  <span class="lang-ko">
+                    SM당 processing block 4개 — 각각 warp scheduler 1개, 64 KB register-file
+                    파티션(총 256 KB), tensor core 1개(SM당 4개, die 전체 432개)를 가진다.
+                    네 블록이 L1/shared 통합 192 KB를 공유하며, 최대 164 KB를 소프트웨어가
+                    관리하는 shared memory로 쓸 수 있다.
+                  </span>
                 </p>
               </div>
             </div>
@@ -152,20 +181,26 @@ for (const bank of banks) {
         <!-- ============ VIEW B · HIERARCHY LADDER ============ -->
         <div class="panel" id="panel-ladder" data-panel="ladder">
           <div class="panel-head">
-            <h3>The ladder: every step up costs ~1000× capacity, buys ~10× speed</h3>
-            <p class="panel-sub">Log-scale bars — equal visual steps are multiplicative. Hover a level for what actually fits there during LLM inference.</p>
+            <h3>
+              <span class="lang-en">The ladder: every step up costs ~1000× capacity, buys ~10× speed</span>
+              <span class="lang-ko">사다리: 한 칸 오를 때마다 용량 ~1000×를 내주고 속도 ~10×를 산다</span>
+            </h3>
+            <p class="panel-sub">
+              <span class="lang-en">Log-scale bars — equal visual steps are multiplicative. Hover a level for what actually fits there during LLM inference.</span>
+              <span class="lang-ko">Log-scale 막대 — 시각적으로 같은 간격이 곱셈 배수다. 각 계층에 hover하면 LLM 추론 중 실제로 거기 들어가는 것이 보인다.</span>
+            </p>
           </div>
           <div class="ladder">
             <div class="ladder-legend">
-              <span><i class="sw sw-cap"></i> capacity</span>
-              <span><i class="sw sw-bw"></i> aggregate bandwidth</span>
-              <span><i class="sw sw-lat"></i> latency (shorter is better)</span>
+              <span><i class="sw sw-cap"></i> <span class="lang-en">capacity</span><span class="lang-ko">용량</span></span>
+              <span><i class="sw sw-bw"></i> <span class="lang-en">aggregate bandwidth</span><span class="lang-ko">합산 bandwidth</span></span>
+              <span><i class="sw sw-lat"></i> <span class="lang-en">latency (shorter is better)</span><span class="lang-ko">latency (짧을수록 좋음)</span></span>
             </div>
 
             <div class="rung" tabindex="0">
               <div class="rung-head">
                 <span class="rung-name">Registers</span>
-                <span class="rung-where">inside each SM partition</span>
+                <span class="rung-where"><span class="lang-en">inside each SM partition</span><span class="lang-ko">각 SM 파티션 내부</span></span>
               </div>
               <div class="bars">
                 <div class="bar-row"><span class="bar cap" style="width:29%"></span><span class="bar-val">256 KB / SM · ≈27 MB on die</span></div>
@@ -173,17 +208,25 @@ for (const bank of banks) {
                 <div class="bar-row"><span class="bar lat" style="width:13%"></span><span class="bar-val">≈1–2 cycles (≈1 ns)</span></div>
               </div>
               <div class="rung-fits">
-                <strong>What fits:</strong> only the accumulator fragments of the tile being
-                multiplied <em>right now</em> — each thread holds a few dozen 32-bit values.
-                Fun fact: the die-wide register file (≈27 MB) is two-thirds the size of L2,
-                and orders of magnitude faster.
+                <span class="lang-en">
+                  <strong>What fits:</strong> only the accumulator fragments of the tile being
+                  multiplied <em>right now</em> — each thread holds a few dozen 32-bit values.
+                  Fun fact: the die-wide register file (≈27 MB) is two-thirds the size of L2,
+                  and orders of magnitude faster.
+                </span>
+                <span class="lang-ko">
+                  <strong>들어가는 것:</strong> <em>지금 이 순간</em> 곱해지고 있는 tile의
+                  accumulator 조각뿐 — 스레드 하나가 32-bit 값 수십 개를 쥔다.
+                  재미있는 사실: die 전체 register file(≈27 MB)은 L2의 2/3 크기이면서
+                  몇 자릿수나 더 빠르다.
+                </span>
               </div>
             </div>
 
             <div class="rung" tabindex="0">
               <div class="rung-head">
                 <span class="rung-name">Shared memory / L1</span>
-                <span class="rung-where">per SM, software-managed</span>
+                <span class="rung-where"><span class="lang-en">per SM, software-managed</span><span class="lang-ko">SM당, 소프트웨어 관리</span></span>
               </div>
               <div class="bars">
                 <div class="bar-row"><span class="bar cap" style="width:25%"></span><span class="bar-val">192 KB combined / SM (≤164 KB shared) · ≈17.7 MB usable die-wide</span></div>
@@ -191,16 +234,23 @@ for (const bank of banks) {
                 <div class="bar-row"><span class="bar lat" style="width:36%"></span><span class="bar-val">≈20–30 cycles (≈20 ns)</span></div>
               </div>
               <div class="rung-fits">
-                <strong>What fits:</strong> the working tiles of a GEMM. A 128×128 FP16 tile is
-                32 KB, so double-buffered A- and B-tiles plus pipeline stages fill it. That's
-                ~0.0005% of a 7B model resident at once — everything else must stream.
+                <span class="lang-en">
+                  <strong>What fits:</strong> the working tiles of a GEMM. A 128×128 FP16 tile is
+                  32 KB, so double-buffered A- and B-tiles plus pipeline stages fill it. That's
+                  ~0.0005% of a 7B model resident at once — everything else must stream.
+                </span>
+                <span class="lang-ko">
+                  <strong>들어가는 것:</strong> GEMM의 작업 tile. 128×128 FP16 tile 하나가
+                  32 KB라, double-buffered A·B tile과 pipeline 스테이지만으로 가득 찬다.
+                  7B 모델의 ~0.0005%만 동시에 상주하는 셈 — 나머지는 전부 스트리밍해야 한다.
+                </span>
               </div>
             </div>
 
             <div class="rung" tabindex="0">
               <div class="rung-head">
                 <span class="rung-name">L2 cache</span>
-                <span class="rung-where">shared, two 20 MB partitions</span>
+                <span class="rung-where"><span class="lang-en">shared, two 20 MB partitions</span><span class="lang-ko">공유, 20 MB 파티션 × 2</span></span>
               </div>
               <div class="bars">
                 <div class="bar-row"><span class="bar cap" style="width:32%"></span><span class="bar-val">40 MB</span></div>
@@ -208,16 +258,23 @@ for (const bank of banks) {
                 <div class="bar-row"><span class="bar lat" style="width:68%"></span><span class="bar-val">≈200+ cycles (≈150–250 ns; far partition costs more)</span></div>
               </div>
               <div class="rung-fits">
-                <strong>What fits:</strong> barely one weight matrix — a single 4096×4096 FP16
-                projection is 33.5 MB. Or ~76 tokens' worth of a 7B model's KV cache
-                (≈524 KB per token). Weights stream <em>through</em> L2; they cannot live in it.
+                <span class="lang-en">
+                  <strong>What fits:</strong> barely one weight matrix — a single 4096×4096 FP16
+                  projection is 33.5 MB. Or ~76 tokens' worth of a 7B model's KV cache
+                  (≈524 KB per token). Weights stream <em>through</em> L2; they cannot live in it.
+                </span>
+                <span class="lang-ko">
+                  <strong>들어가는 것:</strong> weight 행렬 하나가 간신히 — 4096×4096 FP16
+                  projection 하나가 이미 33.5 MB다. 아니면 7B 모델 KV cache로 ~76 token 분량
+                  (token당 ≈524 KB). weight는 L2를 <em>통과해 흐를</em> 뿐, 거기 상주할 수 없다.
+                </span>
               </div>
             </div>
 
             <div class="rung" tabindex="0">
               <div class="rung-head">
                 <span class="rung-name">HBM2e</span>
-                <span class="rung-where">off-die, five active stacks</span>
+                <span class="rung-where"><span class="lang-en">off-die, five active stacks</span><span class="lang-ko">die 밖, 활성 스택 5개</span></span>
               </div>
               <div class="bars">
                 <div class="bar-row"><span class="bar cap" style="width:92%"></span><span class="bar-val">40 GB</span></div>
@@ -225,17 +282,32 @@ for (const bank of banks) {
                 <div class="bar-row"><span class="bar lat" style="width:89%"></span><span class="bar-val">≈400–500 ns</span></div>
               </div>
               <div class="rung-fits">
-                <strong>What fits:</strong> the model itself. A 7B model in FP16 is ~14 GB;
-                a 4k-token KV cache adds ~2 GB; the rest is activations, workspace, and
-                headroom. This is the <em>only</em> level that holds the weights — which is
-                why its 1.555 TB/s, not the 312 TFLOP/s, sets the decode speed limit.
+                <span class="lang-en">
+                  <strong>What fits:</strong> the model itself. A 7B model in FP16 is ~14 GB;
+                  a 4k-token KV cache adds ~2 GB; the rest is activations, workspace, and
+                  headroom. This is the <em>only</em> level that holds the weights — which is
+                  why its 1.555 TB/s, not the 312 TFLOP/s, sets the decode speed limit.
+                </span>
+                <span class="lang-ko">
+                  <strong>들어가는 것:</strong> 모델 그 자체. FP16 7B 모델이 ~14 GB, 4k-token
+                  KV cache가 ~2 GB를 더하고, 나머지는 activation·workspace·여유분이다.
+                  weight를 담는 <em>유일한</em> 계층이며, 그래서 decode 속도 한계를 정하는 것은
+                  312 TFLOP/s가 아니라 이곳의 1.555 TB/s다.
+                </span>
               </div>
             </div>
 
             <div class="ladder-note">
-              Bandwidths are aggregates across the die; per-byte latency is hidden by
-              parallelism, but <strong>bandwidth cannot be hidden</strong> — every byte of a
-              7B model must physically cross the HBM interface for every generated token.
+              <span class="lang-en">
+                Bandwidths are aggregates across the die; per-byte latency is hidden by
+                parallelism, but <strong>bandwidth cannot be hidden</strong> — every byte of a
+                7B model must physically cross the HBM interface for every generated token.
+              </span>
+              <span class="lang-ko">
+                Bandwidth는 die 전체 합산 수치다. byte당 latency는 병렬성으로 숨길 수 있지만
+                <strong>bandwidth는 숨길 수 없다</strong> — 생성되는 token마다 7B 모델의
+                모든 byte가 HBM 인터페이스를 물리적으로 건너야 한다.
+              </span>
             </div>
           </div>
         </div>
@@ -243,10 +315,19 @@ for (const bank of banks) {
         <!-- ============ VIEW C · ROOFLINE ============ -->
         <div class="panel" id="panel-roofline" data-panel="roofline">
           <div class="panel-head">
-            <h3>The roofline: two ceilings, and decode lives under the slanted one</h3>
+            <h3>
+              <span class="lang-en">The roofline: two ceilings, and decode lives under the slanted one</span>
+              <span class="lang-ko">Roofline: 천장은 두 개, decode는 기울어진 쪽 아래에 산다</span>
+            </h3>
             <p class="panel-sub">
-              Achievable FLOP/s = min(peak compute, bandwidth × arithmetic intensity). Log–log axes.
-              Drag the batch slider and switch weight precision to move the ● marker.
+              <span class="lang-en">
+                Achievable FLOP/s = min(peak compute, bandwidth × arithmetic intensity). Log–log axes.
+                Drag the batch slider and switch weight precision to move the ● marker.
+              </span>
+              <span class="lang-ko">
+                달성 가능 FLOP/s = min(peak compute, bandwidth × arithmetic intensity). Log–log 축.
+                batch 슬라이더를 움직이고 weight 정밀도를 바꾸면 ● 마커가 이동한다.
+              </span>
             </p>
           </div>
           <div class="roofline-grid">
@@ -306,12 +387,12 @@ for (const bank of banks) {
             </div>
             <div class="roofline-side">
               <div class="ctrl-block">
-                <span class="ctrl-label">Batch size B (weights amortize, AI ≈ B × FLOP-per-weight-byte)</span>
+                <span class="ctrl-label"><span class="lang-en">Batch size B (weights amortize, AI ≈ B × FLOP-per-weight-byte)</span><span class="lang-ko">Batch 크기 B (weight 읽기가 분할상환되어 AI ≈ B × FLOP-per-weight-byte)</span></span>
                 <input type="range" id="batch-slider" min="0" max="9" step="1" value="3" aria-label="Batch size, powers of two from 1 to 512" />
                 <div class="ctrl-scale"><span>1</span><span>8</span><span>64</span><span>512</span></div>
               </div>
               <div class="ctrl-block">
-                <span class="ctrl-label">Weight precision (weight-only quantization)</span>
+                <span class="ctrl-label"><span class="lang-en">Weight precision (weight-only quantization)</span><span class="lang-ko">Weight 정밀도 (weight-only quantization)</span></span>
                 <div class="quant-btns">
                   <button class="tag quant-btn is-active" data-bpw="2">FP16 · 2 B/w</button>
                   <button class="tag quant-btn" data-bpw="1">INT8 · 1 B/w</button>
@@ -319,18 +400,25 @@ for (const bank of banks) {
                 </div>
               </div>
               <div class="readout" id="rf-readout">
-                <div class="ro-row"><span>Arithmetic intensity</span><strong id="ro-ai">≈ 8 FLOP/B</strong></div>
-                <div class="ro-row"><span>Achievable</span><strong id="ro-tflops">≈ 12.4 TFLOP/s (4.0% of peak)</strong></div>
-                <div class="ro-row"><span>Aggregate decode ceiling</span><strong id="ro-toks">≈ 889 tok/s (8 seq × 111)</strong></div>
-                <div class="ro-row"><span>Regime</span><strong id="ro-regime" class="regime mem">memory-bound</strong></div>
+                <div class="ro-row"><span><span class="lang-en">Arithmetic intensity</span><span class="lang-ko">산술 강도 (AI)</span></span><strong id="ro-ai">≈ 8 FLOP/B</strong></div>
+                <div class="ro-row"><span><span class="lang-en">Achievable</span><span class="lang-ko">달성 가능</span></span><strong id="ro-tflops">≈ 12.4 TFLOP/s (4.0% of peak)</strong></div>
+                <div class="ro-row"><span><span class="lang-en">Aggregate decode ceiling</span><span class="lang-ko">합산 decode 상한</span></span><strong id="ro-toks">≈ 889 tok/s (8 seq × 111)</strong></div>
+                <div class="ro-row"><span><span class="lang-en">Regime</span><span class="lang-ko">동작 영역</span></span><strong id="ro-regime" class="regime mem">memory-bound</strong></div>
               </div>
               <div class="divider-math" id="rf-division">
-                <span class="dm-title">The division that sets the ceiling (per sequence)</span>
+                <span class="dm-title"><span class="lang-en">The division that sets the ceiling (per sequence)</span><span class="lang-ko">상한을 정하는 나눗셈 (sequence당)</span></span>
                 <code id="dm-code">14 GB weights ÷ 1.555 TB/s ≈ 9.0 ms/token → ~111 tok/s</code>
                 <p id="dm-note">
-                  At B=1 every generated token must read <em>all</em> weights once. Quantize
-                  FP16→INT4 and the same division reads 3.5 GB ÷ 1.555 TB/s ≈ 2.3 ms → ~440 tok/s:
-                  compression is a bandwidth multiplier, not a compute trick.
+                  <span class="lang-en">
+                    At B=1 every generated token must read <em>all</em> weights once. Quantize
+                    FP16→INT4 and the same division reads 3.5 GB ÷ 1.555 TB/s ≈ 2.3 ms → ~440 tok/s:
+                    compression is a bandwidth multiplier, not a compute trick.
+                  </span>
+                  <span class="lang-ko">
+                    B=1에서는 생성되는 token마다 <em>모든</em> weight를 한 번씩 읽어야 한다.
+                    FP16→INT4로 quantize하면 같은 나눗셈이 3.5 GB ÷ 1.555 TB/s ≈ 2.3 ms → ~440 tok/s가
+                    된다: 압축은 compute 트릭이 아니라 bandwidth 곱셈기다.
+                  </span>
                 </p>
               </div>
             </div>
@@ -340,10 +428,19 @@ for (const bank of banks) {
         <!-- ============ VIEW D · ONE DECODE STEP ============ -->
         <div class="panel" id="panel-trace" data-panel="trace">
           <div class="panel-head">
-            <h3>One decode step, traced: 15.4 GB in, one token out</h3>
+            <h3>
+              <span class="lang-en">One decode step, traced: 15.4 GB in, one token out</span>
+              <span class="lang-ko">Decode 한 스텝 추적: 15.4 GB가 들어가고 token 하나가 나온다</span>
+            </h3>
             <p class="panel-sub">
-              Llama-7B-class model (d=4096, 32 layers, FFN 11008, vocab 32k), FP16, 4096 tokens
-              of context, batch 1. Step through what actually moves.
+              <span class="lang-en">
+                Llama-7B-class model (d=4096, 32 layers, FFN 11008, vocab 32k), FP16, 4096 tokens
+                of context, batch 1. Step through what actually moves.
+              </span>
+              <span class="lang-ko">
+                Llama-7B급 모델 (d=4096, 32 layers, FFN 11008, vocab 32k), FP16, context 4096
+                tokens, batch 1. 실제로 무엇이 움직이는지 단계별로 따라가 보자.
+              </span>
             </p>
           </div>
           <div class="trace-grid">
@@ -403,29 +500,37 @@ for (const bank of banks) {
               </div>
               <div class="trace-counters">
                 <div class="tc-row">
-                  <span class="tc-name">bytes from HBM</span>
+                  <span class="tc-name"><span class="lang-en">bytes from HBM</span><span class="lang-ko">HBM에서 온 bytes</span></span>
                   <div class="tc-bar-wrap"><div class="tc-bar bytes" id="tc-bytes-bar" style="width:0%"></div></div>
                   <strong class="tc-val" id="tc-bytes">0 B</strong>
                 </div>
                 <div class="tc-row">
-                  <span class="tc-name">FLOPs done</span>
+                  <span class="tc-name"><span class="lang-en">FLOPs done</span><span class="lang-ko">수행한 FLOPs</span></span>
                   <div class="tc-bar-wrap"><div class="tc-bar flops" id="tc-flops-bar" style="width:0%"></div></div>
                   <strong class="tc-val" id="tc-flops">0</strong>
                 </div>
                 <div class="tc-row time">
-                  <span class="tc-name">time if BW-limited</span>
+                  <span class="tc-name"><span class="lang-en">time if BW-limited</span><span class="lang-ko">BW-limited일 때 시간</span></span>
                   <strong class="tc-val" id="tc-time-mem">0 ms</strong>
                 </div>
                 <div class="tc-row time">
-                  <span class="tc-name">time if compute-limited</span>
+                  <span class="tc-name"><span class="lang-en">time if compute-limited</span><span class="lang-ko">compute-limited일 때 시간</span></span>
                   <strong class="tc-val" id="tc-time-comp">0 ms</strong>
                 </div>
               </div>
               <div class="trace-punchline is-dim" id="tr-punchline">
-                <strong>Punchline:</strong> ≈15.4 GB moved for ≈15 GFLOP — arithmetic intensity ≈ 1.
-                The byte-time floor is ~9.9 ms; the FLOP time is ~0.05 ms. The tensor cores are
-                idle ~99.5% of the step, and measured decode throughput on good kernels sits
-                near this bandwidth ceiling — not the 312 TFLOP/s brochure number.
+                <span class="lang-en">
+                  <strong>Punchline:</strong> ≈15.4 GB moved for ≈15 GFLOP — arithmetic intensity ≈ 1.
+                  The byte-time floor is ~9.9 ms; the FLOP time is ~0.05 ms. The tensor cores are
+                  idle ~99.5% of the step, and measured decode throughput on good kernels sits
+                  near this bandwidth ceiling — not the 312 TFLOP/s brochure number.
+                </span>
+                <span class="lang-ko">
+                  <strong>결론:</strong> ≈15 GFLOP을 위해 ≈15.4 GB가 움직였다 — arithmetic
+                  intensity ≈ 1. byte 시간 하한은 ~9.9 ms, FLOP 시간은 ~0.05 ms. tensor core는
+                  스텝의 ~99.5% 동안 놀고 있고, 좋은 kernel의 실측 decode throughput은
+                  312 TFLOP/s라는 카탈로그 숫자가 아니라 이 bandwidth 천장 근처에 앉는다.
+                </span>
               </div>
             </div>
           </div>
@@ -439,63 +544,118 @@ for (const bank of banks) {
     <div class="container">
       <div class="prose">
         <p class="eyebrow">Reading the diagram</p>
-        <h2>The four views, in words</h2>
+        <h2><span class="lang-en">The four views, in words</span><span class="lang-ko">네 가지 뷰를 말로 풀면</span></h2>
 
-        <h3>① Die map — compute is an island</h3>
+        <h3><span class="lang-en">① Die map — compute is an island</span><span class="lang-ko">① Die map — compute는 섬이다</span></h3>
         <p>
-          The A100 die packs 108 SMs, each with 4 third-generation tensor cores, a 256 KB
-          register file, and 192 KB of combined L1/shared storage (up to 164 KB configurable
-          as shared memory). All of them talk to a 40 MB L2 split into two partitions, and the
-          L2 talks to five active HBM2e stacks sitting <em>physically beside</em> the die on a
-          silicon interposer. The geography is the point: FLOPs are manufactured in the middle,
-          but every byte of an LLM's weights lives off-die and must be imported at 1.555 TB/s —
-          the width of that bridge, not the size of the island, decides how fast you decode.
+          <span class="lang-en">
+            The A100 die packs 108 SMs, each with 4 third-generation tensor cores, a 256 KB
+            register file, and 192 KB of combined L1/shared storage (up to 164 KB configurable
+            as shared memory). All of them talk to a 40 MB L2 split into two partitions, and the
+            L2 talks to five active HBM2e stacks sitting <em>physically beside</em> the die on a
+            silicon interposer. The geography is the point: FLOPs are manufactured in the middle,
+            but every byte of an LLM's weights lives off-die and must be imported at 1.555 TB/s —
+            the width of that bridge, not the size of the island, decides how fast you decode.
+          </span>
+          <span class="lang-ko">
+            A100 die에는 108개의 SM이 들어 있고, 각 SM은 3세대 tensor core 4개, 256 KB
+            register file, L1/shared 통합 192 KB(최대 164 KB를 shared memory로 설정 가능)를
+            가진다. 이들 모두는 두 파티션으로 나뉜 40 MB L2와 통신하고, L2는 실리콘
+            interposer 위 die <em>바로 옆에</em> 물리적으로 놓인 5개의 활성 HBM2e 스택과
+            통신한다. 핵심은 이 지리다: FLOP은 가운데 섬에서 만들어지지만, LLM weight의 모든
+            byte는 die 밖에 살며 1.555 TB/s로 수입되어야 한다 — decode 속도를 정하는 것은
+            섬의 크기가 아니라 그 다리의 폭이다.
+          </span>
         </p>
 
-        <h3>② Hierarchy ladder — multiplicative trades</h3>
+        <h3><span class="lang-en">② Hierarchy ladder — multiplicative trades</span><span class="lang-ko">② Hierarchy ladder — 곱셈적 트레이드</span></h3>
         <p>
-          Each level trades roughly three orders of magnitude of capacity for one order of
-          magnitude of bandwidth and latency. The numbers worth memorizing: shared memory
-          aggregates to ≈19.5 TB/s (about 12× HBM), and the register file, at ≈27 MB die-wide,
-          is a <em>faster and nearly as large</em> pool as L2 — which is why high-performance
-          GEMM kernels are really register-file choreography. The ladder also explains why
-          caching weights is hopeless: the largest on-die pool (L2, 40 MB) barely holds one
-          4096×4096 FP16 matrix (33.5 MB) out of a 13.5 GB model.
+          <span class="lang-en">
+            Each level trades roughly three orders of magnitude of capacity for one order of
+            magnitude of bandwidth and latency. The numbers worth memorizing: shared memory
+            aggregates to ≈19.5 TB/s (about 12× HBM), and the register file, at ≈27 MB die-wide,
+            is a <em>faster and nearly as large</em> pool as L2 — which is why high-performance
+            GEMM kernels are really register-file choreography. The ladder also explains why
+            caching weights is hopeless: the largest on-die pool (L2, 40 MB) barely holds one
+            4096×4096 FP16 matrix (33.5 MB) out of a 13.5 GB model.
+          </span>
+          <span class="lang-ko">
+            각 계층은 대략 용량 세 자릿수를 bandwidth·latency 한 자릿수와 맞바꾼다. 외울
+            가치가 있는 숫자들: shared memory는 합산 ≈19.5 TB/s(HBM의 약 12×)이고, register
+            file은 die 전체 ≈27 MB로 L2에 <em>버금가는 크기이면서 더 빠른</em> 풀이다 —
+            고성능 GEMM kernel이 사실상 register-file 안무인 이유다. 이 사다리는 weight
+            caching이 왜 가망 없는지도 설명한다: 가장 큰 on-die 풀(L2, 40 MB)이 13.5 GB 모델
+            중 4096×4096 FP16 행렬 하나(33.5 MB)를 간신히 담는다.
+          </span>
         </p>
 
-        <h3>③ Roofline — one model, two regimes</h3>
+        <h3><span class="lang-en">③ Roofline — one model, two regimes</span><span class="lang-ko">③ Roofline — 하나의 모델, 두 개의 regime</span></h3>
         <p>
-          Arithmetic intensity (AI) is FLOPs performed per byte moved from HBM. The machine's
-          balance point is 312 TFLOP/s ÷ 1.555 TB/s ≈ 200 FLOP/byte. Prefill GEMMs (thousands
-          of tokens sharing each weight read) sit far right, compute-bound. Single-batch decode
-          is a GEMV: 2 FLOPs per 2-byte weight, AI ≈ 1, achieving ≈1.6 TFLOP/s — half a percent
-          of peak, and no kernel cleverness can fix it because the bytes are mandatory.
-          Batching amortizes weight reads (AI ≈ B), which is why serving systems fight for
-          large batches; attention over a long KV cache, however, stays at AI ≈ 1 even when
-          batched, because each sequence reads its <em>own</em> KV — this is exactly the seam
-          that KV-cache compression and quantization attack.
+          <span class="lang-en">
+            Arithmetic intensity (AI) is FLOPs performed per byte moved from HBM. The machine's
+            balance point is 312 TFLOP/s ÷ 1.555 TB/s ≈ 200 FLOP/byte. Prefill GEMMs (thousands
+            of tokens sharing each weight read) sit far right, compute-bound. Single-batch decode
+            is a GEMV: 2 FLOPs per 2-byte weight, AI ≈ 1, achieving ≈1.6 TFLOP/s — half a percent
+            of peak, and no kernel cleverness can fix it because the bytes are mandatory.
+            Batching amortizes weight reads (AI ≈ B), which is why serving systems fight for
+            large batches; attention over a long KV cache, however, stays at AI ≈ 1 even when
+            batched, because each sequence reads its <em>own</em> KV — this is exactly the seam
+            that KV-cache compression and quantization attack.
+          </span>
+          <span class="lang-ko">
+            Arithmetic intensity(AI)는 HBM에서 옮긴 byte당 수행한 FLOP이다. 이 기계의 균형점은
+            312 TFLOP/s ÷ 1.555 TB/s ≈ 200 FLOP/byte. Prefill GEMM(수천 개의 token이 weight
+            읽기를 공유)은 오른쪽 끝 compute-bound에 앉는다. Batch 1 decode는 GEMV다: 2-byte
+            weight당 2 FLOP, AI ≈ 1, 달성 성능 ≈1.6 TFLOP/s — peak의 0.5%이고, byte 이동이
+            필수이므로 어떤 kernel 묘수로도 고칠 수 없다. Batching은 weight 읽기를
+            분할상환하므로(AI ≈ B) serving 시스템이 큰 batch를 위해 싸우는 것이고, 반면 긴
+            KV cache에 대한 attention은 batch를 해도 AI ≈ 1에 머문다 — 각 sequence가
+            <em>자기</em> KV를 읽기 때문이다. 바로 이 지점이 KV-cache 압축과 quantization이
+            공략하는 틈이다.
+          </span>
         </p>
 
-        <h3>④ One decode step — the mandatory 15 GB</h3>
+        <h3><span class="lang-en">④ One decode step — the mandatory 15 GB</span><span class="lang-ko">④ Decode 한 스텝 — 피할 수 없는 15 GB</span></h3>
         <p>
-          For a 7B-class FP16 model with 4k context at batch 1, one token costs ≈13.5 GB of
-          weights + ≈2.15 GB of KV cache + a 262 MB LM head read — ≈15.4 GB of traffic for
-          ≈15 GFLOP of work. Divide: 15.4 GB ÷ 1.555 TB/s ≈ 9.9 ms, an upper bound near
-          ~100 tok/s, while the same FLOPs would take the tensor cores ~0.05 ms. Everything in
-          efficient inference follows from this division — quantize weights and KV (shrink the
-          numerator), batch requests (amortize it), or restructure attention so fewer bytes are
-          mandatory. My research lives in that numerator.
+          <span class="lang-en">
+            For a 7B-class FP16 model with 4k context at batch 1, one token costs ≈13.5 GB of
+            weights + ≈2.15 GB of KV cache + a 262 MB LM head read — ≈15.4 GB of traffic for
+            ≈15 GFLOP of work. Divide: 15.4 GB ÷ 1.555 TB/s ≈ 9.9 ms, an upper bound near
+            ~100 tok/s, while the same FLOPs would take the tensor cores ~0.05 ms. Everything in
+            efficient inference follows from this division — quantize weights and KV (shrink the
+            numerator), batch requests (amortize it), or restructure attention so fewer bytes are
+            mandatory. My research lives in that numerator.
+          </span>
+          <span class="lang-ko">
+            4k context, batch 1의 7B급 FP16 모델에서 token 하나의 비용은 weight ≈13.5 GB +
+            KV cache ≈2.15 GB + LM head 읽기 262 MB — ≈15 GFLOP의 연산을 위한 ≈15.4 GB의
+            트래픽이다. 나눠 보면: 15.4 GB ÷ 1.555 TB/s ≈ 9.9 ms, 약 ~100 tok/s 근처의
+            상한이고, 같은 FLOP은 tensor core로 ~0.05 ms면 끝난다. 효율적 추론의 모든 것이 이
+            나눗셈에서 나온다 — weight와 KV를 quantize하고(분자 줄이기), 요청을 batching하고
+            (분자 분할상환), 필수 byte 자체가 줄도록 attention을 재구성하는 것. 내 연구는 그
+            분자 안에 산다.
+          </span>
         </p>
 
-        <h3>Fine print on the numbers</h3>
+        <h3><span class="lang-en">Fine print on the numbers</span><span class="lang-ko">숫자에 대한 작은 글씨</span></h3>
         <p>
-          Peak specs (108 SMs, 40 GB @ 1.555 TB/s, 40 MB L2, 312 TFLOP/s dense BF16/FP16 tensor
-          core, 192 KB L1+shared per SM with ≤164 KB shared) are from NVIDIA's A100 white paper
-          for the SXM 40 GB part. On-die bandwidth and latency figures (L2 and shared-memory
-          throughput, ~20/200/450 ns tiers) are microbenchmark-derived ballparks that vary with
-          access pattern and clocks — treat them as order-of-magnitude anchors, not datasheet
-          promises. Tokens/s figures are bandwidth <em>ceilings</em>; real kernels land 70–90%
-          of the way there.
+          <span class="lang-en">
+            Peak specs (108 SMs, 40 GB @ 1.555 TB/s, 40 MB L2, 312 TFLOP/s dense BF16/FP16 tensor
+            core, 192 KB L1+shared per SM with ≤164 KB shared) are from NVIDIA's A100 white paper
+            for the SXM 40 GB part. On-die bandwidth and latency figures (L2 and shared-memory
+            throughput, ~20/200/450 ns tiers) are microbenchmark-derived ballparks that vary with
+            access pattern and clocks — treat them as order-of-magnitude anchors, not datasheet
+            promises. Tokens/s figures are bandwidth <em>ceilings</em>; real kernels land 70–90%
+            of the way there.
+          </span>
+          <span class="lang-ko">
+            Peak 스펙(108 SMs, 40 GB @ 1.555 TB/s, 40 MB L2, dense BF16/FP16 tensor core
+            312 TFLOP/s, SM당 L1+shared 192 KB 중 ≤164 KB shared)은 SXM 40 GB 부품에 대한
+            NVIDIA A100 white paper 기준이다. On-die bandwidth·latency 수치(L2와 shared-memory
+            throughput, ~20/200/450 ns 단계)는 microbenchmark에서 나온 어림값으로 접근 패턴과
+            클럭에 따라 달라진다 — datasheet의 약속이 아니라 자릿수 앵커로 취급하라. tok/s
+            수치는 bandwidth <em>상한</em>이며, 실제 kernel은 그 70–90% 지점에 도달한다.
+          </span>
         </p>
       </div>
     </div>
@@ -505,42 +665,42 @@ for (const bank of banks) {
   <section class="section band-dark">
     <div class="container">
       <p class="eyebrow">Going deeper</p>
-      <h2>Pull the thread</h2>
+      <h2><span class="lang-en">Pull the thread</span><span class="lang-ko">실을 더 당겨보기</span></h2>
       <div class="card-grid" style="margin-top:2rem;">
         <a class="card" href="https://images.nvidia.com/aem-dam/en-zz/Solutions/data-center/nvidia-ampere-architecture-whitepaper.pdf" target="_blank" rel="noopener">
           <span class="card-kicker">Primary source</span>
           <h3>NVIDIA A100 white paper</h3>
-          <p>The datasheet behind every number in the die map — SM diagram, memory subsystem, tensor-core formats.</p>
+          <p><span class="lang-en">The datasheet behind every number in the die map — SM diagram, memory subsystem, tensor-core formats.</span><span class="lang-ko">Die map의 모든 숫자 뒤에 있는 datasheet — SM 다이어그램, memory 서브시스템, tensor-core 포맷.</span></p>
           <span class="card-meta">nvidia.com · PDF</span>
         </a>
         <a class="card" href="https://dl.acm.org/doi/10.1145/1498765.1498785" target="_blank" rel="noopener">
           <span class="card-kicker">The model</span>
           <h3>Roofline (Williams et al., 2009)</h3>
-          <p>The original insightful-performance-model paper — two ceilings, one x-axis, endless mileage.</p>
+          <p><span class="lang-en">The original insightful-performance-model paper — two ceilings, one x-axis, endless mileage.</span><span class="lang-ko">통찰형 성능 모델의 원조 논문 — 천장 두 개, x축 하나, 끝없는 활용도.</span></p>
           <span class="card-meta">CACM · classic</span>
         </a>
         <a class="card" href="https://kipp.ly/transformer-inference-arithmetic/" target="_blank" rel="noopener">
           <span class="card-kicker">Back of envelope</span>
           <h3>Transformer inference arithmetic</h3>
-          <p>kipply's walkthrough of the same bytes-per-token accounting done here, extended to multi-GPU serving.</p>
+          <p><span class="lang-en">kipply's walkthrough of the same bytes-per-token accounting done here, extended to multi-GPU serving.</span><span class="lang-ko">여기서 한 것과 같은 token당 byte 회계를 multi-GPU serving까지 확장한 kipply의 워크스루.</span></p>
           <span class="card-meta">blog · essential</span>
         </a>
         <a class="card" href="https://arxiv.org/abs/2205.14135" target="_blank" rel="noopener">
           <span class="card-kicker">Hierarchy in action</span>
           <h3>FlashAttention</h3>
-          <p>What "IO-aware" means in practice: restructure attention around SMEM tiles so the mandatory HBM bytes shrink.</p>
+          <p><span class="lang-en">What "IO-aware" means in practice: restructure attention around SMEM tiles so the mandatory HBM bytes shrink.</span><span class="lang-ko">"IO-aware"가 실전에서 뜻하는 것: SMEM tile 중심으로 attention을 재구성해 필수 HBM byte를 줄인다.</span></p>
           <span class="card-meta">arXiv 2205.14135</span>
         </a>
         <a class="card" href="/study/">
           <span class="card-kicker">Study</span>
           <h3>Back to the bench</h3>
-          <p>More interactive tear-downs — model anatomy, quantization pipelines, and the rest of the GPU track.</p>
+          <p><span class="lang-en">More interactive tear-downs — model anatomy, quantization pipelines, and the rest of the GPU track.</span><span class="lang-ko">더 많은 인터랙티브 분해 노트 — 모델 해부, quantization 파이프라인, GPU 트랙의 나머지.</span></p>
           <span class="card-meta arrow-link">All study notes</span>
         </a>
         <a class="card" href="/research/">
           <span class="card-kicker">Research</span>
           <h3>Where this bites</h3>
-          <p>KV-cache compression and diffusion-LLM acceleration — my research is an attack on the numerator of that division.</p>
+          <p><span class="lang-en">KV-cache compression and diffusion-LLM acceleration — my research is an attack on the numerator of that division.</span><span class="lang-ko">KV-cache 압축과 diffusion-LLM 가속 — 내 연구는 그 나눗셈의 분자에 대한 공격이다.</span></p>
           <span class="card-meta arrow-link">Research areas</span>
         </a>
       </div>
@@ -549,6 +709,8 @@ for (const bank of banks) {
 </Base>
 
 <style>
+  .hero-top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.1rem; }
+  .hero-top .eyebrow { margin-bottom: 0; }
   .hero h1 em { font-style: italic; color: var(--accent-strong); }
   .lede { margin-top: 1.4rem; }
   .mono-inline { font-family: var(--font-mono); font-size: 0.88em; background: var(--surface-warm); padding: 0.1em 0.4em; border-radius: 5px; white-space: nowrap; }
@@ -738,6 +900,12 @@ for (const bank of banks) {
 </style>
 
 <script>
+  // ============ language (LangToggle contract) ============
+  type Lang = 'en' | 'ko';
+  type L = { en: string; ko: string };
+  const lang = (): Lang =>
+    ((window as unknown as { siteLang?: () => string }).siteLang?.() === 'ko' ? 'ko' : 'en');
+
   // ============ view switching ============
   const btns = Array.from(document.querySelectorAll<HTMLButtonElement>('.view-btn'));
   const panels = Array.from(document.querySelectorAll<HTMLElement>('[data-panel]'));
@@ -753,36 +921,51 @@ for (const bank of banks) {
   activate('die'); // JS present: collapse the no-JS stacked layout into tabs
 
   // ============ view A · die map ============
-  const dieInfo = {
+  const dieInfo: Record<string, { k: L; t: L; b: L }> = {
     default: {
-      k: 'A100-40GB die',
-      t: '826 mm² of silicon, one bottleneck',
-      b: '108 streaming multiprocessors (SMs) share a 40 MB L2 cache and five active HBM2e stacks delivering 1.555 TB/s. Every weight an LLM touches must cross from the flanking HBM into this island — hover a region to see its numbers.',
+      k: { en: 'A100-40GB die', ko: 'A100-40GB die' },
+      t: { en: '826 mm² of silicon, one bottleneck', ko: '826 mm²의 실리콘, 병목은 하나' },
+      b: {
+        en: '108 streaming multiprocessors (SMs) share a 40 MB L2 cache and five active HBM2e stacks delivering 1.555 TB/s. Every weight an LLM touches must cross from the flanking HBM into this island — hover a region to see its numbers.',
+        ko: '108개의 streaming multiprocessor(SM)가 40 MB L2 cache와 1.555 TB/s를 내는 5개의 활성 HBM2e 스택을 공유한다. LLM이 건드리는 모든 weight는 양옆의 HBM에서 이 섬으로 건너와야 한다 — 영역에 hover하면 숫자가 보인다.',
+      },
     },
     hbm: {
-      k: 'HBM2e stack',
-      t: '8 GB per stack · 1.555 TB/s aggregate',
-      b: 'Five active stacks (a sixth site exists but is disabled on the 40 GB part) sit on the interposer beside the die, ~400–500 ns away. This is the only level that holds a model: 13.5 GB of FP16 weights, plus KV cache. Split evenly, each SM’s fair share of bandwidth is ~14 GB/s.',
+      k: { en: 'HBM2e stack', ko: 'HBM2e 스택' },
+      t: { en: '8 GB per stack · 1.555 TB/s aggregate', ko: '스택당 8 GB · 합산 1.555 TB/s' },
+      b: {
+        en: 'Five active stacks (a sixth site exists but is disabled on the 40 GB part) sit on the interposer beside the die, ~400–500 ns away. This is the only level that holds a model: 13.5 GB of FP16 weights, plus KV cache. Split evenly, each SM’s fair share of bandwidth is ~14 GB/s.',
+        ko: '활성 스택 5개(여섯 번째 자리는 있지만 40 GB 제품에선 비활성)가 die 옆 interposer 위, ~400–500 ns 거리에 놓여 있다. 모델을 담는 유일한 계층이다: FP16 weight 13.5 GB + KV cache. bandwidth를 균등하게 나누면 SM 하나의 몫은 ~14 GB/s다.',
+      },
     },
     l2: {
-      k: 'L2 cache partition',
-      t: '20 MB × 2 · ~200+ cycles',
-      b: '40 MB total in two partitions joined by a crossbar, with several TB/s of aggregate throughput. But one 4096×4096 FP16 projection is already 33.5 MB — weights stream through L2; they cannot live in it.',
+      k: { en: 'L2 cache partition', ko: 'L2 cache 파티션' },
+      t: { en: '20 MB × 2 · ~200+ cycles', ko: '20 MB × 2 · ~200+ cycles' },
+      b: {
+        en: '40 MB total in two partitions joined by a crossbar, with several TB/s of aggregate throughput. But one 4096×4096 FP16 projection is already 33.5 MB — weights stream through L2; they cannot live in it.',
+        ko: 'crossbar로 이어진 두 파티션에 총 40 MB, 합산 throughput은 수 TB/s. 하지만 4096×4096 FP16 projection 하나가 이미 33.5 MB다 — weight는 L2를 통과해 흐를 뿐, 거기 상주할 수 없다.',
+      },
     },
     sm: {
-      k: 'Streaming multiprocessor',
-      t: '1 of 108 · 4 tensor cores each',
-      b: 'Per SM: 4 warp schedulers, a 256 KB register file, 192 KB combined L1/shared (up to 164 KB shared). All 108 together deliver 312 dense BF16 TFLOP/s — the machine can do ~200 FLOPs in the time it takes HBM to deliver one byte.',
+      k: { en: 'Streaming multiprocessor', ko: 'Streaming multiprocessor' },
+      t: { en: '1 of 108 · 4 tensor cores each', ko: '108개 중 1개 · 각각 tensor core 4개' },
+      b: {
+        en: 'Per SM: 4 warp schedulers, a 256 KB register file, 192 KB combined L1/shared (up to 164 KB shared). All 108 together deliver 312 dense BF16 TFLOP/s — the machine can do ~200 FLOPs in the time it takes HBM to deliver one byte.',
+        ko: 'SM당: warp scheduler 4개, 256 KB register file, L1/shared 통합 192 KB(최대 164 KB shared). 108개 전체가 dense BF16 312 TFLOP/s를 낸다 — HBM이 1 byte를 가져오는 시간에 기계는 ~200 FLOP을 할 수 있다.',
+      },
     },
-  } as const;
+  };
   const infoK = document.getElementById('die-info-kicker');
   const infoT = document.getElementById('die-info-title');
   const infoB = document.getElementById('die-info-body');
+  let dieKey: keyof typeof dieInfo = 'default';
   function setInfo(key: keyof typeof dieInfo) {
+    dieKey = key;
     const d = dieInfo[key];
-    if (infoK) infoK.textContent = d.k;
-    if (infoT) infoT.textContent = d.t;
-    if (infoB) infoB.textContent = d.b;
+    const lg = lang();
+    if (infoK) infoK.textContent = d.k[lg];
+    if (infoT) infoT.textContent = d.t[lg];
+    if (infoB) infoB.textContent = d.b[lg];
   }
   const dieSvg = document.querySelector('#panel-die svg');
   dieSvg?.addEventListener('mouseover', (e) => {
@@ -790,15 +973,24 @@ for (const bank of banks) {
     if (region?.dataset.info) setInfo(region.dataset.info as keyof typeof dieInfo);
   });
   dieSvg?.addEventListener('mouseleave', () => setInfo('default'));
+  let selectedSm: number | null = null;
+  function renderSmWhich() {
+    if (selectedSm === null) return; // static bilingual spans still in place
+    const which = document.getElementById('sm-detail-which');
+    if (which)
+      which.textContent =
+        lang() === 'ko' ? `— 108개 중 SM #${selectedSm + 1}` : `— SM #${selectedSm + 1} of 108`;
+  }
   dieSvg?.addEventListener('click', (e) => {
     const sm = (e.target as Element).closest<SVGElement>('.sm');
     if (!sm) return;
     dieSvg.querySelectorAll('.sm.is-selected').forEach((el) => el.classList.remove('is-selected'));
     sm.classList.add('is-selected');
-    const which = document.getElementById('sm-detail-which');
-    if (which) which.textContent = `— SM #${Number(sm.dataset.sm) + 1} of 108`;
+    selectedSm = Number(sm.dataset.sm);
+    renderSmWhich();
     setInfo('sm');
   });
+  setInfo('default'); // normalize the static card to the stored language
 
   // ============ view C · roofline ============
   const BW = 1.555; // TB/s
@@ -835,10 +1027,15 @@ for (const bank of banks) {
     lab?.setAttribute('y', String(Math.max(cy - 16, 52)));
     if (lab) lab.textContent = `batched decode · B=${B}`;
     const set = (id: string, txt: string) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+    const ko = lang() === 'ko';
+    const tStr = t < 10 ? t.toFixed(2) : t < 100 ? t.toFixed(1) : t.toFixed(0);
+    const pct = ((t / PEAK) * 100).toFixed(1);
     set('ro-ai', `≈ ${ai < 10 ? ai.toFixed(1) : fmtInt(ai)} FLOP/B`);
-    set('ro-tflops', `≈ ${t < 10 ? t.toFixed(2) : t < 100 ? t.toFixed(1) : t.toFixed(0)} TFLOP/s (${((t / PEAK) * 100).toFixed(1)}% of peak)`);
+    set('ro-tflops', ko
+      ? `≈ ${tStr} TFLOP/s (peak의 ${pct}%)`
+      : `≈ ${tStr} TFLOP/s (${pct}% of peak)`);
     set('ro-toks', toks >= compCap - 1
-      ? `≈ ${fmtInt(compCap)} tok/s (compute roof)`
+      ? (ko ? `≈ ${fmtInt(compCap)} tok/s (compute roof 도달)` : `≈ ${fmtInt(compCap)} tok/s (compute roof)`)
       : `≈ ${fmtInt(toks)} tok/s (${B} seq × ${fmtInt(perSeq)})`);
     const reg = document.getElementById('ro-regime');
     if (reg) {
@@ -862,25 +1059,49 @@ for (const bank of banks) {
   renderRoofline();
 
   // ============ view D · decode trace ============
-  type Step = { bytes: number; flops: number; cap: string; paths: string[]; flow: string };
+  type Step = { bytes: number; flops: number; cap: L; paths: string[]; flow: string };
   const MB = 1e6, GB = 1e9;
   const steps: Step[] = [
     { bytes: 0, flops: 0, paths: [], flow: 'idle — waiting for a token',
-      cap: 'A new token needs to be generated. The entire model sits in HBM; the “state” the GPU actually computes on — one 4096-long activation vector — is 8 KB. Press <strong>Next</strong> (or Play) to watch what has to move.' },
+      cap: {
+        en: 'A new token needs to be generated. The entire model sits in HBM; the “state” the GPU actually computes on — one 4096-long activation vector — is 8 KB. Press <strong>Next</strong> (or Play) to watch what has to move.',
+        ko: '새 token을 하나 생성해야 한다. 모델 전체는 HBM에 앉아 있고, GPU가 실제로 연산하는 “상태” — 길이 4096짜리 activation 벡터 하나 — 는 8 KB다. <strong>Next</strong>(또는 Play)를 눌러 무엇이 움직여야 하는지 보자.',
+      } },
     { bytes: 8.2e3, flops: 0, paths: ['w'], flow: 'embedding row → SMEM',
-      cap: 'Embedding lookup: one row of <span class="shape">E[32000×4096]</span> — 4096 FP16 values, 8 KB. The activation <span class="shape">x[1×4096]</span> now lives on-die in SMEM/registers for the whole step.' },
+      cap: {
+        en: 'Embedding lookup: one row of <span class="shape">E[32000×4096]</span> — 4096 FP16 values, 8 KB. The activation <span class="shape">x[1×4096]</span> now lives on-die in SMEM/registers for the whole step.',
+        ko: 'Embedding lookup: <span class="shape">E[32000×4096]</span>의 한 행 — FP16 값 4096개, 8 KB. activation <span class="shape">x[1×4096]</span>은 이제 스텝 내내 on-die SMEM/register에 산다.',
+      } },
     { bytes: 134.2 * MB, flops: 134.2e6, paths: ['w'], flow: 'layer 1: Wq Wk Wv Wo streaming',
-      cap: 'Layer 1 attention projections: <span class="shape">x[1×4096] × W{q,k,v,o}[4096×4096]</span>. Four 33.6 MB matrices stream in; each FP16 weight is used for exactly 2 FLOPs, then discarded. This is a GEMV: arithmetic intensity ≈ 1 FLOP/byte.' },
+      cap: {
+        en: 'Layer 1 attention projections: <span class="shape">x[1×4096] × W{q,k,v,o}[4096×4096]</span>. Four 33.6 MB matrices stream in; each FP16 weight is used for exactly 2 FLOPs, then discarded. This is a GEMV: arithmetic intensity ≈ 1 FLOP/byte.',
+        ko: 'Layer 1 attention projection: <span class="shape">x[1×4096] × W{q,k,v,o}[4096×4096]</span>. 33.6 MB 행렬 4개가 스트리밍되어 들어오고, FP16 weight 하나는 정확히 2 FLOP에 쓰인 뒤 버려진다. 이것이 GEMV다: arithmetic intensity ≈ 1 FLOP/byte.',
+      } },
     { bytes: 67.1 * MB, flops: 67.1e6, paths: ['kv'], flow: 'layer 1: KV cache read + append',
-      cap: 'Attention over history: <span class="shape">q · Kᵀ[4096 tok × 4096]</span>, then <span class="shape">scores × V</span> — 67 MB of layer-1 KV cache read, +2 KB appended. Also AI ≈ 1, and unlike weights, batching does <em>not</em> amortize it: every sequence reads its own KV.' },
+      cap: {
+        en: 'Attention over history: <span class="shape">q · Kᵀ[4096 tok × 4096]</span>, then <span class="shape">scores × V</span> — 67 MB of layer-1 KV cache read, +2 KB appended. Also AI ≈ 1, and unlike weights, batching does <em>not</em> amortize it: every sequence reads its own KV.',
+        ko: '히스토리에 대한 attention: <span class="shape">q · Kᵀ[4096 tok × 4096]</span>, 이어서 <span class="shape">scores × V</span> — layer-1 KV cache 67 MB를 읽고 +2 KB를 덧붙인다. 역시 AI ≈ 1이고, weight와 달리 batching으로 분할상환되지 <em>않는다</em>: 모든 sequence가 자기 KV를 읽는다.',
+      } },
     { bytes: 270.5 * MB, flops: 270.5e6, paths: ['w'], flow: 'layer 1: MLP weights streaming',
-      cap: 'Layer 1 MLP: <span class="shape">W_gate, W_up [4096×11008]</span> and <span class="shape">W_down [11008×4096]</span> — 3 × 90.2 MB = 271 MB. The FFN is roughly two-thirds of all weight bytes in the model.' },
+      cap: {
+        en: 'Layer 1 MLP: <span class="shape">W_gate, W_up [4096×11008]</span> and <span class="shape">W_down [11008×4096]</span> — 3 × 90.2 MB = 271 MB. The FFN is roughly two-thirds of all weight bytes in the model.',
+        ko: 'Layer 1 MLP: <span class="shape">W_gate, W_up [4096×11008]</span>과 <span class="shape">W_down [11008×4096]</span> — 3 × 90.2 MB = 271 MB. FFN이 모델 전체 weight byte의 대략 2/3를 차지한다.',
+      } },
     { bytes: 14.626 * GB, flops: 14.626e9, paths: ['w', 'kv'], flow: 'layers 2–32: same pattern ×31',
-      cap: 'Layers 2–32 repeat the identical pattern: 31 more × (134 MB attention weights + 67 MB KV + 271 MB MLP) ≈ 14.6 GB. The activation shuttling between layers never leaves the SMs.' },
+      cap: {
+        en: 'Layers 2–32 repeat the identical pattern: 31 more × (134 MB attention weights + 67 MB KV + 271 MB MLP) ≈ 14.6 GB. The activation shuttling between layers never leaves the SMs.',
+        ko: 'Layer 2–32는 동일한 패턴을 반복한다: 31번 더 × (attention weight 134 MB + KV 67 MB + MLP 271 MB) ≈ 14.6 GB. 층 사이를 오가는 activation은 SM 밖으로 나가지 않는다.',
+      } },
     { bytes: 262.1 * MB, flops: 262.1e6, paths: ['w'], flow: 'LM head → logits → one token',
-      cap: 'LM head: <span class="shape">h[1×4096] × W[4096×32000]</span> = 262 MB read for 32,000 logits → sample → <strong>one token</strong>. Now do it all again for the next one.' },
+      cap: {
+        en: 'LM head: <span class="shape">h[1×4096] × W[4096×32000]</span> = 262 MB read for 32,000 logits → sample → <strong>one token</strong>. Now do it all again for the next one.',
+        ko: 'LM head: <span class="shape">h[1×4096] × W[4096×32000]</span> = 32,000개의 logit을 위해 262 MB 읽기 → 샘플링 → <strong>token 하나</strong>. 다음 token을 위해 이걸 전부 다시 한다.',
+      } },
     { bytes: 0, flops: 0, paths: [], flow: 'done: 1 token out',
-      cap: 'Total: ≈<strong>15.4 GB</strong> crossed the HBM interface to produce ≈<strong>15 GFLOP</strong> of useful math — AI ≈ 1, versus a machine balance point of ≈200. The byte-time floor is ~9.9 ms; the FLOP time would be ~0.05 ms.' },
+      cap: {
+        en: 'Total: ≈<strong>15.4 GB</strong> crossed the HBM interface to produce ≈<strong>15 GFLOP</strong> of useful math — AI ≈ 1, versus a machine balance point of ≈200. The byte-time floor is ~9.9 ms; the FLOP time would be ~0.05 ms.',
+        ko: '합계: ≈<strong>15 GFLOP</strong>의 유효 연산을 위해 ≈<strong>15.4 GB</strong>가 HBM 인터페이스를 건넜다 — 기계의 균형점 ≈200 대비 AI ≈ 1. byte 시간 하한은 ~9.9 ms, FLOP 시간은 ~0.05 ms일 것이다.',
+      } },
   ];
   const cumBytes: number[] = []; const cumFlops: number[] = [];
   steps.reduce((a, s, i) => (cumBytes[i] = a + s.bytes), 0);
@@ -897,7 +1118,7 @@ for (const bank of banks) {
   const $ = (id: string) => document.getElementById(id);
   function renderTrace() {
     const s = steps[stepIdx];
-    const capEl = $('tr-caption'); if (capEl) capEl.innerHTML = s.cap;
+    const capEl = $('tr-caption'); if (capEl) capEl.innerHTML = s.cap[lang()];
     const num = $('tr-stepnum'); if (num) num.textContent = `step ${stepIdx} / ${steps.length - 1}`;
     $('tr-path-w')?.classList.toggle('is-live', s.paths.includes('w'));
     $('tr-path-kv')?.classList.toggle('is-live', s.paths.includes('kv'));
@@ -929,4 +1150,12 @@ for (const bank of banks) {
     }, 2200);
   });
   renderTrace();
+
+  // ============ re-render JS-owned text on language switch ============
+  window.addEventListener('site-langchange', () => {
+    setInfo(dieKey);
+    renderSmWhich();
+    renderRoofline();
+    renderTrace();
+  });
 </script>

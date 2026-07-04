@@ -1,5 +1,6 @@
 ---
 import Base from '../../layouts/Base.astro';
+import LangToggle from '../../components/LangToggle.astro';
 import { getCollection } from 'astro:content';
 
 const entries = await getCollection('reviews');
@@ -38,6 +39,7 @@ const nodes = entries.map((e) => ({
   group: e.data.tags[0] ?? 'misc',
   tags: e.data.tags,
   summary: e.data.summary,
+  summary_ko: e.data.summary_ko ?? '',
   url: `/reviews/${e.id}/`,
 }));
 
@@ -122,33 +124,27 @@ const fmtDay = (d: Date) =>
   title="Paper Review — Junwon Lee"
   description="A topical reading list on efficient AI — model architecture, post-training, compression, and on-device inference; currently KV cache quantization and hybrid attention — linked like a vault."
 >
-  <script is:inline>
-    try {
-      document.documentElement.setAttribute(
-        'data-review-lang',
-        localStorage.getItem('review-lang') === 'ko' ? 'ko' : 'en'
-      );
-    } catch (e) {
-      /* no-JS / blocked storage: EN default via CSS */
-    }
-  </script>
-
   <section class="section">
     <div class="container">
       <p class="eyebrow">Paper Review</p>
       <h1>A reading vault for efficient AI</h1>
       <p class="lede">
-        Daily reviews of papers on model architecture, post-training,
-        model compression &amp; 경량화, and on-device AI — currently centered on
-        KV cache quantization and hybrid (full + linear) attention — auto-collected,
-        human-curated, and linked like a vault (매일 한 편씩).
+        <span class="lang-en">
+          Daily reviews of papers on model architecture, post-training,
+          model compression &amp; lightweighting, and on-device AI — currently centered on
+          KV cache quantization and hybrid (full + linear) attention — auto-collected,
+          human-curated, and linked like a vault, one paper a day.
+        </span>
+        <span class="lang-ko">
+          model architecture, post-training, model compression·경량화, on-device AI
+          논문을 매일 한 편씩 리뷰한다 — 지금은 KV cache quantization과
+          hybrid (full + linear) attention이 중심 — 자동 수집하고 직접 큐레이션해
+          vault처럼 서로 연결해 둔다.
+        </span>
       </p>
 
       <div class="hero-controls">
-        <div class="lang-toggle" role="group" aria-label="Summary language">
-          <button type="button" class="lang-pill active" data-lang="en">EN</button>
-          <button type="button" class="lang-pill" data-lang="ko">한국어</button>
-        </div>
+        <LangToggle />
         <nav class="toc-chips" aria-label="Reading list sections">
           {sections.map((s) => (
             <a class="toc-chip" href={`#${s.id}`}>
@@ -236,30 +232,6 @@ const fmtDay = (d: Date) =>
 </Base>
 
 <script>
-  /* ---------- shared EN | 한국어 toggle ---------- */
-  const pills = Array.from(
-    document.querySelectorAll<HTMLButtonElement>('.lang-pill')
-  );
-  const applyLang = (lang: string) => {
-    document.documentElement.setAttribute('data-review-lang', lang);
-    try {
-      localStorage.setItem('review-lang', lang);
-    } catch {
-      /* storage unavailable */
-    }
-    pills.forEach((p) => p.classList.toggle('active', p.dataset.lang === lang));
-  };
-  const initial =
-    document.documentElement.getAttribute('data-review-lang') === 'ko'
-      ? 'ko'
-      : 'en';
-  pills.forEach((p) => {
-    p.classList.toggle('active', p.dataset.lang === initial);
-    p.addEventListener('click', () => applyLang(p.dataset.lang === 'ko' ? 'ko' : 'en'));
-  });
-</script>
-
-<script>
   import {
     forceSimulation,
     forceLink,
@@ -280,6 +252,7 @@ const fmtDay = (d: Date) =>
     group: string;
     tags: string[];
     summary: string;
+    summary_ko: string;
     url: string;
     degree: number;
     color: string;
@@ -441,7 +414,10 @@ const fmtDay = (d: Date) =>
         hovered = d;
         applyStyles();
         (tooltip.querySelector('.tt-title') as HTMLElement).textContent = d.title;
-        (tooltip.querySelector('.tt-summary') as HTMLElement).textContent = d.summary;
+        (tooltip.querySelector('.tt-summary') as HTMLElement).textContent =
+          ((window as unknown as { siteLang?: () => string }).siteLang?.() === 'ko' && d.summary_ko)
+            ? d.summary_ko
+            : d.summary;
         tooltip.hidden = false;
         positionTooltip(event);
       })
@@ -503,16 +479,8 @@ const fmtDay = (d: Date) =>
 </script>
 
 <style>
-  /* ---- language visibility (EN default, works without JS) ---- */
-  .lang-ko {
-    display: none;
-  }
-  :global(html[data-review-lang='ko']) .lang-ko {
-    display: revert;
-  }
-  :global(html[data-review-lang='ko']) .lang-en {
-    display: none;
-  }
+  /* language visibility + toggle styling come from the shared LangToggle component
+     (html[data-lang='ko'] + .lang-en/.lang-ko global rules). */
 
   /* ---- hero controls: toggle + section chips ---- */
   .hero-controls {
@@ -521,35 +489,6 @@ const fmtDay = (d: Date) =>
     align-items: center;
     gap: 0.9rem 1.25rem;
     margin-top: 1.6rem;
-  }
-  .lang-toggle {
-    display: inline-flex;
-    gap: 0.3rem;
-    padding: 0.25rem;
-    border: 1px solid var(--line);
-    border-radius: 999px;
-    background: var(--surface);
-    flex: none;
-  }
-  .lang-pill {
-    font-family: inherit;
-    font-size: 0.78rem;
-    font-weight: 600;
-    letter-spacing: 0.02em;
-    padding: 0.32rem 0.85rem;
-    border: none;
-    border-radius: 999px;
-    background: transparent;
-    color: var(--text-secondary);
-    cursor: pointer;
-    transition: background 0.15s ease, color 0.15s ease;
-  }
-  .lang-pill:hover {
-    color: var(--text);
-  }
-  .lang-pill.active {
-    background: var(--text);
-    color: var(--bg);
   }
   .toc-chips {
     display: flex;

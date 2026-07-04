@@ -1,5 +1,6 @@
 ---
 import Base from '../../layouts/Base.astro';
+import LangToggle from '../../components/LangToggle.astro';
 import { getCollection, render } from 'astro:content';
 
 export async function getStaticPaths() {
@@ -118,17 +119,6 @@ const hasKoLede = Boolean(entry.data.summary_ko);
   title={`${entry.data.title} — Junwon Lee`}
   description={entry.data.summary}
 >
-  <script is:inline>
-    try {
-      document.documentElement.setAttribute(
-        'data-review-lang',
-        localStorage.getItem('review-lang') === 'ko' ? 'ko' : 'en'
-      );
-    } catch (e) {
-      /* no-JS / blocked storage: EN default via CSS */
-    }
-  </script>
-
   <section class="section">
     <div class="container review-detail">
       <a class="back-link" href="/reviews/">← All reviews</a>
@@ -168,9 +158,8 @@ const hasKoLede = Boolean(entry.data.summary_ko);
         <p class="lede review-lede">{entry.data.summary}</p>
       )}
 
-      <div class="lang-toggle" role="group" aria-label="Analysis language">
-        <button type="button" class="lang-pill active" data-lang="en">EN</button>
-        <button type="button" class="lang-pill" data-lang="ko">한국어</button>
+      <div class="toggle-row">
+        <LangToggle />
       </div>
 
       {analysisRows.length > 0 && (
@@ -250,29 +239,6 @@ const hasKoLede = Boolean(entry.data.summary_ko);
   </section>
 </Base>
 
-<script>
-  const pills = Array.from(
-    document.querySelectorAll<HTMLButtonElement>('.lang-pill')
-  );
-  const applyLang = (lang: string) => {
-    document.documentElement.setAttribute('data-review-lang', lang);
-    try {
-      localStorage.setItem('review-lang', lang);
-    } catch {
-      /* storage unavailable */
-    }
-    pills.forEach((p) => p.classList.toggle('active', p.dataset.lang === lang));
-  };
-  const initial =
-    document.documentElement.getAttribute('data-review-lang') === 'ko'
-      ? 'ko'
-      : 'en';
-  pills.forEach((p) => {
-    p.classList.toggle('active', p.dataset.lang === initial);
-    p.addEventListener('click', () => applyLang(p.dataset.lang === 'ko' ? 'ko' : 'en'));
-  });
-</script>
-
 <style>
   .back-link {
     display: inline-block;
@@ -332,46 +298,10 @@ const hasKoLede = Boolean(entry.data.summary_ko);
     max-width: 760px;
   }
 
-  /* ---- language visibility (EN default, works without JS) ---- */
-  .lang-ko {
-    display: none;
-  }
-  :global(html[data-review-lang='ko']) .lang-ko {
-    display: revert;
-  }
-  :global(html[data-review-lang='ko']) .lang-en {
-    display: none;
-  }
-
-  /* ---- language toggle ---- */
-  .lang-toggle {
-    display: inline-flex;
-    gap: 0.3rem;
+  /* language visibility + toggle styling come from the shared LangToggle component
+     (html[data-lang='ko'] + .lang-en/.lang-ko global rules). */
+  .toggle-row {
     margin-top: 1.6rem;
-    padding: 0.25rem;
-    border: 1px solid var(--line);
-    border-radius: 999px;
-    background: var(--surface);
-  }
-  .lang-pill {
-    font-family: inherit;
-    font-size: 0.78rem;
-    font-weight: 600;
-    letter-spacing: 0.02em;
-    padding: 0.32rem 0.85rem;
-    border: none;
-    border-radius: 999px;
-    background: transparent;
-    color: var(--text-secondary);
-    cursor: pointer;
-    transition: background 0.15s ease, color 0.15s ease;
-  }
-  .lang-pill:hover {
-    color: var(--text);
-  }
-  .lang-pill.active {
-    background: var(--text);
-    color: var(--bg);
   }
 
   /* ---- 13-item analysis: one column, never a grid ---- */

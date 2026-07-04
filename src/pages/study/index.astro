@@ -1,5 +1,6 @@
 ---
 import Base from '../../layouts/Base.astro';
+import LangToggle from '../../components/LangToggle.astro';
 import { getCollection } from 'astro:content';
 
 const entries = await getCollection('study');
@@ -14,16 +15,22 @@ const tracks = [
     key: 'models',
     label: 'AI Models',
     blurb: 'Architectures pulled apart layer by layer — what each block computes, and what actually moves between them.',
+    blurb_ko:
+      'Architecture를 layer 단위로 분해한다 — 각 block이 무엇을 계산하고, block 사이로 실제로 무엇이 오가는지.',
   },
   {
     key: 'quantization',
     label: 'Quantization',
     blurb: 'From fp16 tensors to packed low-bit integers: scales, zero-points, and where the error really goes.',
+    blurb_ko:
+      'fp16 tensor에서 packed low-bit integer까지: scale, zero-point, 그리고 오차가 실제로 어디로 가는지.',
   },
   {
     key: 'gpu',
     label: 'GPU',
     blurb: 'The machine under the math — memory hierarchy, bandwidth, occupancy, and why most kernels wait on bytes.',
+    blurb_ko:
+      '수식 아래에 있는 기계 — memory hierarchy, bandwidth, occupancy, 그리고 왜 대부분의 kernel은 byte를 기다리는지.',
   },
 ] as const;
 
@@ -42,13 +49,26 @@ const dateOf = (e: StudyEntry) => e.data.date.toISOString().slice(0, 10);
   <section class="section study-hero">
     <div class="container">
       <p class="eyebrow">Study</p>
-      <h1>Tear it down until the matrices show</h1>
+      <h1>
+        <span class="lang-en">Tear it down until the matrices show</span>
+        <span class="lang-ko">행렬이 드러날 때까지 뜯어본다</span>
+      </h1>
       <p class="lede">
-        My test for understanding a system: can I draw its data flow from memory — every tensor,
-        every reshape, every byte that crosses a bus? These notes are interactive tear-downs of
-        model architectures, quantization pipelines, and GPU internals, built while studying them
-        (공부하면서 그린 해부도).
+        <span class="lang-en">
+          My test for understanding a system: can I draw its data flow from memory — every tensor,
+          every reshape, every byte that crosses a bus? These notes are interactive tear-downs of
+          model architectures, quantization pipelines, and GPU internals, built while studying them
+          (공부하면서 그린 해부도).
+        </span>
+        <span class="lang-ko">
+          시스템을 이해했는지 확인하는 나의 테스트: 모든 tensor, 모든 reshape, bus를 건너는 모든
+          byte까지 — 그 데이터 흐름을 기억만으로 그릴 수 있는가? 이 노트들은 model architecture,
+          quantization pipeline, GPU internals를 공부하면서 그린 인터랙티브 해부도다.
+        </span>
       </p>
+      <div class="hero-tools">
+        <LangToggle />
+      </div>
     </div>
   </section>
 
@@ -58,15 +78,36 @@ const dateOf = (e: StudyEntry) => e.data.date.toISOString().slice(0, 10);
         <div class="track-head">
           <p class="eyebrow">{track.label}</p>
           <h2>{track.label}</h2>
-          <p class="track-blurb">{track.blurb}</p>
+          <p class="track-blurb">
+            <span class="lang-en">{track.blurb}</span>
+            <span class="lang-ko">{track.blurb_ko}</span>
+          </p>
         </div>
         {byTrack[track.key].length > 0 ? (
           <div class="card-grid">
             {byTrack[track.key].map((e) => (
               <a class="card" href={hrefOf(e)}>
                 <span class="card-kicker">{track.label}</span>
-                <h3>{e.data.title}</h3>
-                <p>{e.data.summary}</p>
+                <h3>
+                  {e.data.title_ko ? (
+                    <>
+                      <span class="lang-en">{e.data.title}</span>
+                      <span class="lang-ko">{e.data.title_ko}</span>
+                    </>
+                  ) : (
+                    e.data.title
+                  )}
+                </h3>
+                <p>
+                  {e.data.summary_ko ? (
+                    <>
+                      <span class="lang-en">{e.data.summary}</span>
+                      <span class="lang-ko">{e.data.summary_ko}</span>
+                    </>
+                  ) : (
+                    e.data.summary
+                  )}
+                </p>
                 <span class="card-meta">
                   {e.data.interactive && <span class="tag accent">Interactive</span>}
                   <span>{dateOf(e)}</span>
@@ -75,7 +116,10 @@ const dateOf = (e: StudyEntry) => e.data.date.toISOString().slice(0, 10);
             ))}
           </div>
         ) : (
-          <p class="empty-track">Notes incoming — this bench is still being set up.</p>
+          <p class="empty-track">
+            <span class="lang-en">Notes incoming — this bench is still being set up.</span>
+            <span class="lang-ko">노트 준비 중 — 이 bench는 아직 세팅되는 중입니다.</span>
+          </p>
         )}
       </div>
     </section>
@@ -89,6 +133,9 @@ const dateOf = (e: StudyEntry) => e.data.date.toISOString().slice(0, 10);
   .study-hero .lede {
     margin-top: 1.4rem;
     max-width: 46rem;
+  }
+  .hero-tools {
+    margin-top: 1.5rem;
   }
   .track-head {
     margin-bottom: 1.6rem;

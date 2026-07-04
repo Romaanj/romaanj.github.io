@@ -1,5 +1,6 @@
 ---
 import Base from '../../../layouts/Base.astro';
+import LangToggle from '../../../components/LangToggle.astro';
 
 // Block-causal mask matrix: 12 positions = 3 blocks of 4.
 // Cell (q, k) is visible when block(k) <= block(q); within-block is bidirectional.
@@ -22,13 +23,22 @@ const maskRows = Array.from({ length: N }, (_, q) => ({
   <div class="sdar-page">
     <section class="section">
       <div class="container">
-        <p class="eyebrow">Study · Model anatomy</p>
-        <h1>Inside SDAR: a block-diffusion LM, tensor by tensor</h1>
+        <div class="hero-top">
+          <p class="eyebrow">Study · Model anatomy</p>
+          <LangToggle />
+        </div>
+        <h1>
+          <span class="lang-en">Inside SDAR: a block-diffusion LM, tensor by tensor</span><span class="lang-ko">SDAR: block-diffusion LM 해부</span>
+        </h1>
         <p class="lede">
-          SDAR-style models keep the ordinary decoder transformer — same weights, same shapes —
+          <span class="lang-en">SDAR-style models keep the ordinary decoder transformer — same weights, same shapes —
           and change only how it reads and writes text: autoregressive <em>across</em> blocks,
           parallel diffusion-denoising <em>inside</em> each block (블록 단위로). Walk the stack,
-          open a layer, then step through decoding and watch the KV cache grow.
+          open a layer, then step through decoding and watch the KV cache grow.</span>
+          <span class="lang-ko">SDAR 계열 모델은 평범한 decoder transformer를 그대로 둔 채 — weight도 shape도 같다 —
+          텍스트를 읽고 쓰는 방식만 바꾼다: block <em>사이</em>는 autoregressive,
+          각 block <em>내부</em>는 병렬 diffusion-denoising이다(블록 단위로). 스택을 따라 내려가고,
+          layer 하나를 열어 본 뒤, 디코딩을 한 단계씩 밟으며 KV cache가 자라는 모습을 지켜보자.</span>
         </p>
 
         <div class="jump-row">
@@ -38,8 +48,12 @@ const maskRows = Array.from({ length: N }, (_, q) => ({
         </div>
 
         <div class="config-note">
-          <span class="config-lead">Config assumed on this page — the public SDAR-1.7B setup
-          (a Qwen3-1.7B backbone adapted to block diffusion):</span>
+          <span class="config-lead">
+            <span class="lang-en">Config assumed on this page — the public SDAR-1.7B setup
+            (a Qwen3-1.7B backbone adapted to block diffusion):</span>
+            <span class="lang-ko">이 페이지가 가정하는 config — 공개 SDAR-1.7B 설정
+            (Qwen3-1.7B backbone을 block diffusion에 적응시킨 모델):</span>
+          </span>
           <span class="tag accent">d_model 2,048</span>
           <span class="tag">28 layers</span>
           <span class="tag">16 Q heads / 8 KV heads (GQA)</span>
@@ -54,9 +68,13 @@ const maskRows = Array.from({ length: N }, (_, q) => ({
     <!-- ============ 1 · MODEL STACK ============ -->
     <section class="section-tight" id="stack-view">
       <div class="container">
-        <h2 class="viz-h">1 · The model stack</h2>
-        <p class="viz-sub">Hover any box for exact parameter counts and bytes. Click a
-          transformer block to open its internals.</p>
+        <h2 class="viz-h">1 · <span class="lang-en">The model stack</span><span class="lang-ko">모델 스택</span></h2>
+        <p class="viz-sub">
+          <span class="lang-en">Hover any box for exact parameter counts and bytes. Click a
+          transformer block to open its internals.</span>
+          <span class="lang-ko">박스에 마우스를 올리면 정확한 parameter 수와 byte 수가 보인다.
+          transformer block을 클릭하면 내부가 열린다.</span>
+        </p>
 
         <div class="viz-frame">
           <div class="sdar-scroll">
@@ -71,7 +89,7 @@ const maskRows = Array.from({ length: N }, (_, q) => ({
             </defs>
 
             <!-- input tokens -->
-            <g data-tip="At decode time the sequence is: committed tokens (clean) + the active block's [MASK] placeholders. Length L integers, one id per position.">
+            <g data-tip="At decode time the sequence is: committed tokens (clean) + the active block's [MASK] placeholders. Length L integers, one id per position." data-tip-ko="Decode 시점의 시퀀스는: commit된 token(clean) + 활성 block의 [MASK] placeholder다. 길이 L의 정수열, 위치당 id 하나.">
               <rect class="sbox" x="120" y="14" width="320" height="48" rx="10"></rect>
               <text class="stitle" x="280" y="34" text-anchor="middle">input token ids — [L]</text>
               <text class="ssub" x="280" y="52" text-anchor="middle">“The capital of France is” + 4 × [MASK]</text>
@@ -79,7 +97,7 @@ const maskRows = Array.from({ length: N }, (_, q) => ({
             <line class="flowline" x1="280" y1="62" x2="280" y2="76" marker-end="url(#arrS)"></line>
 
             <!-- embedding -->
-            <g data-tip="Lookup: each id selects a 2,048-dim row. 151,936 × 2,048 = 311,164,928 params ≈ 622 MB in BF16. Tied: the same matrix is reused (transposed) as the LM head.">
+            <g data-tip="Lookup: each id selects a 2,048-dim row. 151,936 × 2,048 = 311,164,928 params ≈ 622 MB in BF16. Tied: the same matrix is reused (transposed) as the LM head." data-tip-ko="Lookup: 각 id가 2,048-dim row 하나를 선택한다. 151,936 × 2,048 = 311,164,928 params ≈ 622 MB (BF16). Tied: 같은 matrix가 (transpose되어) LM head로 재사용된다.">
               <rect class="sbox" x="120" y="78" width="320" height="56" rx="10"></rect>
               <text class="stitle" x="280" y="100" text-anchor="middle">token embedding E</text>
               <text class="smono" x="280" y="122" text-anchor="middle">[151,936 × 2,048] · 311.2 M params · tied with LM head</text>
@@ -88,7 +106,7 @@ const maskRows = Array.from({ length: N }, (_, q) => ({
 
             <!-- transformer blocks -->
             <a href="#layer-view" class="blk-link" aria-label="Open transformer block internals">
-              <g class="clickable" data-tip="Per layer: Q 4.19 M + K 2.10 M + V 2.10 M + O 4.19 M + SwiGLU MLP 37.75 M + norms ≈ 50.33 M params ≈ 100.7 MB BF16. Click to open.">
+              <g class="clickable" data-tip="Per layer: Q 4.19 M + K 2.10 M + V 2.10 M + O 4.19 M + SwiGLU MLP 37.75 M + norms ≈ 50.33 M params ≈ 100.7 MB BF16. Click to open." data-tip-ko="Layer당: Q 4.19 M + K 2.10 M + V 2.10 M + O 4.19 M + SwiGLU MLP 37.75 M + norm ≈ 50.33 M params ≈ 100.7 MB BF16. 클릭하면 열린다.">
                 <rect class="sbox sbox-blk" x="120" y="150" width="320" height="56" rx="10"></rect>
                 <text class="stitle" x="280" y="172" text-anchor="middle">transformer block 1</text>
                 <text class="ssub" x="280" y="192" text-anchor="middle">attn 12.58 M · MLP 37.75 M · click to open ↓</text>
@@ -96,7 +114,7 @@ const maskRows = Array.from({ length: N }, (_, q) => ({
             </a>
             <line class="flowline-thin" x1="280" y1="206" x2="280" y2="216"></line>
             <a href="#layer-view" class="blk-link" aria-label="Open transformer block internals">
-              <g class="clickable" data-tip="Identical shape every layer. Only the weights differ.">
+              <g class="clickable" data-tip="Identical shape every layer. Only the weights differ." data-tip-ko="모든 layer가 동일한 shape이다. weight만 다르다.">
                 <rect class="sbox sbox-blk" x="120" y="216" width="320" height="56" rx="10"></rect>
                 <text class="stitle" x="280" y="238" text-anchor="middle">transformer block 2</text>
                 <text class="ssub" x="280" y="258" text-anchor="middle">attn 12.58 M · MLP 37.75 M</text>
@@ -106,7 +124,7 @@ const maskRows = Array.from({ length: N }, (_, q) => ({
             <rect x="164" y="284" width="232" height="20" fill="#ffffff"></rect>
             <text class="ssub" x="280" y="298" text-anchor="middle">⋯ blocks 3 – 27 (24 more, identical) ⋯</text>
             <a href="#layer-view" class="blk-link" aria-label="Open transformer block internals">
-              <g class="clickable" data-tip="28 layers total: 28 × 50.33 M = 1,409 M backbone params ≈ 2.82 GB BF16.">
+              <g class="clickable" data-tip="28 layers total: 28 × 50.33 M = 1,409 M backbone params ≈ 2.82 GB BF16." data-tip-ko="총 28개 layer: 28 × 50.33 M = 1,409 M backbone params ≈ 2.82 GB BF16.">
                 <rect class="sbox sbox-blk" x="120" y="316" width="320" height="56" rx="10"></rect>
                 <text class="stitle" x="280" y="338" text-anchor="middle">transformer block 28</text>
                 <text class="ssub" x="280" y="358" text-anchor="middle">attn 12.58 M · MLP 37.75 M</text>
@@ -115,14 +133,14 @@ const maskRows = Array.from({ length: N }, (_, q) => ({
             <line class="flowline" x1="280" y1="372" x2="280" y2="388" marker-end="url(#arrS)"></line>
 
             <!-- final norm -->
-            <g data-tip="Final RMSNorm before the output projection: 2,048 params.">
+            <g data-tip="Final RMSNorm before the output projection: 2,048 params." data-tip-ko="Output projection 앞의 마지막 RMSNorm: 2,048 params.">
               <rect class="sbox sbox-warm" x="120" y="390" width="320" height="36" rx="9"></rect>
               <text class="stitle" x="280" y="413" text-anchor="middle">final RMSNorm — 2,048 params</text>
             </g>
             <line class="flowline" x1="280" y1="426" x2="280" y2="440" marker-end="url(#arrS)"></line>
 
             <!-- LM head -->
-            <g data-tip="Weight tying: the head is Eᵀ, so it adds zero new parameters. Output: one 151,936-way distribution per position — including every masked position at once.">
+            <g data-tip="Weight tying: the head is Eᵀ, so it adds zero new parameters. Output: one 151,936-way distribution per position — including every masked position at once." data-tip-ko="Weight tying: head가 Eᵀ이므로 새 parameter를 하나도 더하지 않는다. 출력: 위치당 151,936-way 분포 하나 — mask된 모든 위치를 한꺼번에 포함해서.">
               <rect class="sbox" x="120" y="442" width="320" height="56" rx="10"></rect>
               <text class="stitle" x="280" y="464" text-anchor="middle">LM head — Eᵀ [2,048 × 151,936] (tied)</text>
               <text class="smono" x="280" y="486" text-anchor="middle">logits [L × 151,936]</text>
@@ -130,7 +148,7 @@ const maskRows = Array.from({ length: N }, (_, q) => ({
             <line class="flowline" x1="280" y1="498" x2="280" y2="512" marker-end="url(#arrS)"></line>
 
             <!-- sampler -->
-            <g data-tip="Not a weight — a loop. Each denoising pass commits the masked positions whose confidence clears a threshold; when the block is complete, its K/V are appended to the cache and the next block of masks opens.">
+            <g data-tip="Not a weight — a loop. Each denoising pass commits the masked positions whose confidence clears a threshold; when the block is complete, its K/V are appended to the cache and the next block of masks opens." data-tip-ko="Weight가 아니라 루프다. 각 denoising pass는 confidence가 threshold를 넘는 mask 위치들을 commit하고, block이 완성되면 그 K/V가 cache에 추가되며 다음 mask block이 열린다.">
               <rect class="sbox sbox-accent" x="120" y="514" width="320" height="72" rx="12"></rect>
               <text class="stitle taccent" x="280" y="537" text-anchor="middle">block-diffusion decoding loop</text>
               <text class="ssub" x="280" y="556" text-anchor="middle">confidence-based unmasking inside the active block</text>
@@ -163,10 +181,15 @@ const maskRows = Array.from({ length: N }, (_, q) => ({
     <!-- ============ 2 · LAYER INTERNALS ============ -->
     <section class="section-tight" id="layer-view">
       <div class="container">
-        <h2 class="viz-h">2 · Inside one transformer block</h2>
-        <p class="viz-sub">Left: the dataflow with every weight matrix and its shape. Right: the
+        <h2 class="viz-h">2 · <span class="lang-en">Inside one transformer block</span><span class="lang-ko">Transformer block 하나의 내부</span></h2>
+        <p class="viz-sub">
+          <span class="lang-en">Left: the dataflow with every weight matrix and its shape. Right: the
           block-causal attention mask — hover a row to see exactly which K/V positions that query
-          may read.</p>
+          may read.</span>
+          <span class="lang-ko">왼쪽: 모든 weight matrix와 그 shape을 담은 dataflow. 오른쪽:
+          block-causal attention mask — 행에 마우스를 올리면 그 query가 읽을 수 있는
+          K/V 위치가 정확히 표시된다.</span>
+        </p>
 
         <div class="viz-frame">
           <div class="layer-grid">
@@ -181,7 +204,7 @@ const maskRows = Array.from({ length: N }, (_, q) => ({
                 </defs>
 
                 <!-- input -->
-                <g data-tip="Hidden states entering the layer. At decode time L = cached context is NOT re-run; only the active block's positions flow through as queries.">
+                <g data-tip="Hidden states entering the layer. At decode time L = cached context is NOT re-run; only the active block's positions flow through as queries." data-tip-ko="Layer로 들어오는 hidden states. Decode 시점의 L: cache된 context는 다시 실행되지 않고, 활성 block의 위치들만 query로 흘러 들어간다.">
                   <rect class="sbox" x="110" y="20" width="240" height="44" rx="9"></rect>
                   <text class="stitle" x="230" y="38" text-anchor="middle">X — hidden states</text>
                   <text class="smono" x="230" y="56" text-anchor="middle">[L × 2,048] BF16</text>
@@ -189,7 +212,7 @@ const maskRows = Array.from({ length: N }, (_, q) => ({
                 <line class="flowline" x1="230" y1="64" x2="230" y2="86" marker-end="url(#arrF)"></line>
 
                 <!-- norm 1 -->
-                <g data-tip="Pre-norm RMSNorm: 2,048 scale params. x / rms(x) · g">
+                <g data-tip="Pre-norm RMSNorm: 2,048 scale params. x / rms(x) · g" data-tip-ko="Pre-norm RMSNorm: scale params 2,048개. x / rms(x) · g">
                   <rect class="sbox sbox-warm" x="110" y="88" width="240" height="36" rx="9"></rect>
                   <text class="stitle" x="230" y="111" text-anchor="middle">RMSNorm (2,048 params)</text>
                 </g>
@@ -199,19 +222,19 @@ const maskRows = Array.from({ length: N }, (_, q) => ({
                 <line class="flowline-thin" x1="230" y1="140" x2="230" y2="166"></line>
                 <path class="flowline-thin" d="M230,140 H384 V166" fill="none"></path>
 
-                <g data-tip="W_Q: 2,048 × 2,048 = 4,194,304 params ≈ 8.4 MB BF16. Reshaped to 16 heads × 128 dims.">
+                <g data-tip="W_Q: 2,048 × 2,048 = 4,194,304 params ≈ 8.4 MB BF16. Reshaped to 16 heads × 128 dims." data-tip-ko="W_Q: 2,048 × 2,048 = 4,194,304 params ≈ 8.4 MB BF16. 16 heads × 128 dims로 reshape된다.">
                   <rect class="sbox" x="10" y="168" width="132" height="64" rx="9"></rect>
                   <text class="stitle sm" x="76" y="188" text-anchor="middle">W_Q · 2048→2048</text>
                   <text class="smono" x="76" y="206" text-anchor="middle">16 heads × 128</text>
                   <text class="smono" x="76" y="222" text-anchor="middle">4.19 M</text>
                 </g>
-                <g data-tip="W_K: 2,048 × 1,024 = 2,097,152 params ≈ 4.2 MB BF16. GQA: only 8 KV heads.">
+                <g data-tip="W_K: 2,048 × 1,024 = 2,097,152 params ≈ 4.2 MB BF16. GQA: only 8 KV heads." data-tip-ko="W_K: 2,048 × 1,024 = 2,097,152 params ≈ 4.2 MB BF16. GQA: KV head는 8개뿐.">
                   <rect class="sbox" x="164" y="168" width="132" height="64" rx="9"></rect>
                   <text class="stitle sm" x="230" y="188" text-anchor="middle">W_K · 2048→1024</text>
                   <text class="smono" x="230" y="206" text-anchor="middle">8 KV heads × 128</text>
                   <text class="smono" x="230" y="222" text-anchor="middle">2.10 M</text>
                 </g>
-                <g data-tip="W_V: 2,048 × 1,024 = 2,097,152 params ≈ 4.2 MB BF16. K and V are what the cache stores.">
+                <g data-tip="W_V: 2,048 × 1,024 = 2,097,152 params ≈ 4.2 MB BF16. K and V are what the cache stores." data-tip-ko="W_V: 2,048 × 1,024 = 2,097,152 params ≈ 4.2 MB BF16. cache가 저장하는 것이 바로 K와 V다.">
                   <rect class="sbox" x="318" y="168" width="132" height="64" rx="9"></rect>
                   <text class="stitle sm" x="384" y="188" text-anchor="middle">W_V · 2048→1024</text>
                   <text class="smono" x="384" y="206" text-anchor="middle">8 KV heads × 128</text>
@@ -222,7 +245,7 @@ const maskRows = Array.from({ length: N }, (_, q) => ({
                 <line class="flowline-thin" x1="230" y1="232" x2="230" y2="256"></line>
 
                 <!-- qk norm + rope -->
-                <g data-tip="Qwen3-style QK-norm: a per-head RMSNorm (128 params each for Q and K) before rotary position embedding.">
+                <g data-tip="Qwen3-style QK-norm: a per-head RMSNorm (128 params each for Q and K) before rotary position embedding." data-tip-ko="Qwen3 스타일 QK-norm: rotary position embedding 앞에 두는 per-head RMSNorm (Q와 K 각각 128 params).">
                   <rect class="sbox sbox-warm" x="10" y="258" width="286" height="30" rx="8"></rect>
                   <text class="ssub" x="153" y="278" text-anchor="middle">per-head RMSNorm on Q, K (dim 128) + RoPE</text>
                 </g>
@@ -231,7 +254,7 @@ const maskRows = Array.from({ length: N }, (_, q) => ({
                 <line class="flowline" x1="384" y1="232" x2="384" y2="314" marker-end="url(#arrF)"></line>
 
                 <!-- attention -->
-                <g data-tip="Scores are [16 heads × L_q × L_k] with mask M added before softmax. KV-cache cost: 2 (K,V) × 8 heads × 128 × 2 B = 4 KB per token per layer → 112 KB/token across 28 layers.">
+                <g data-tip="Scores are [16 heads × L_q × L_k] with mask M added before softmax. KV-cache cost: 2 (K,V) × 8 heads × 128 × 2 B = 4 KB per token per layer → 112 KB/token across 28 layers." data-tip-ko="Score는 [16 heads × L_q × L_k]이고 softmax 전에 mask M이 더해진다. KV-cache 비용: 2 (K,V) × 8 heads × 128 × 2 B = layer당 token당 4 KB → 28개 layer 전체로 112 KB/token.">
                   <rect class="sbox sbox-accent" x="40" y="316" width="380" height="78" rx="11"></rect>
                   <text class="stitle taccent" x="230" y="339" text-anchor="middle">block-causal attention</text>
                   <text class="smono" x="230" y="359" text-anchor="middle">softmax(Q Kᵀ / √128 + M) V → [L × 16 × 128]</text>
@@ -240,7 +263,7 @@ const maskRows = Array.from({ length: N }, (_, q) => ({
                 <line class="flowline" x1="230" y1="394" x2="230" y2="426" marker-end="url(#arrF)"></line>
 
                 <!-- W_O -->
-                <g data-tip="W_O: 2,048 × 2,048 = 4,194,304 params ≈ 8.4 MB BF16. Concatenates 16 × 128 head outputs back to d_model.">
+                <g data-tip="W_O: 2,048 × 2,048 = 4,194,304 params ≈ 8.4 MB BF16. Concatenates 16 × 128 head outputs back to d_model." data-tip-ko="W_O: 2,048 × 2,048 = 4,194,304 params ≈ 8.4 MB BF16. 16 × 128 head 출력을 concat해 d_model로 되돌린다.">
                   <rect class="sbox" x="110" y="428" width="240" height="44" rx="9"></rect>
                   <text class="stitle sm" x="230" y="446" text-anchor="middle">W_O — [2,048 × 2,048] · 4.19 M</text>
                   <text class="smono" x="230" y="464" text-anchor="middle">concat heads → 2,048</text>
@@ -254,7 +277,7 @@ const maskRows = Array.from({ length: N }, (_, q) => ({
                 <line class="flowline" x1="230" y1="519" x2="230" y2="542" marker-end="url(#arrF)"></line>
 
                 <!-- norm 2 -->
-                <g data-tip="Second pre-norm RMSNorm: 2,048 params.">
+                <g data-tip="Second pre-norm RMSNorm: 2,048 params." data-tip-ko="두 번째 pre-norm RMSNorm: 2,048 params.">
                   <rect class="sbox sbox-warm" x="110" y="544" width="240" height="36" rx="9"></rect>
                   <text class="stitle" x="230" y="567" text-anchor="middle">RMSNorm (2,048 params)</text>
                 </g>
@@ -263,12 +286,12 @@ const maskRows = Array.from({ length: N }, (_, q) => ({
                 <path class="flowline-thin" d="M230,580 V594 H118 V606" fill="none"></path>
                 <path class="flowline-thin" d="M230,594 H342 V606" fill="none"></path>
 
-                <g data-tip="W_gate: 2,048 × 6,144 = 12,582,912 params ≈ 25.2 MB BF16.">
+                <g data-tip="W_gate: 2,048 × 6,144 = 12,582,912 params ≈ 25.2 MB BF16." data-tip-ko="W_gate: 2,048 × 6,144 = 12,582,912 params ≈ 25.2 MB BF16.">
                   <rect class="sbox" x="20" y="608" width="196" height="56" rx="9"></rect>
                   <text class="stitle sm" x="118" y="630" text-anchor="middle">W_gate — [2,048 × 6,144]</text>
                   <text class="smono" x="118" y="650" text-anchor="middle">12.58 M</text>
                 </g>
-                <g data-tip="W_up: 2,048 × 6,144 = 12,582,912 params ≈ 25.2 MB BF16.">
+                <g data-tip="W_up: 2,048 × 6,144 = 12,582,912 params ≈ 25.2 MB BF16." data-tip-ko="W_up: 2,048 × 6,144 = 12,582,912 params ≈ 25.2 MB BF16.">
                   <rect class="sbox" x="244" y="608" width="196" height="56" rx="9"></rect>
                   <text class="stitle sm" x="342" y="630" text-anchor="middle">W_up — [2,048 × 6,144]</text>
                   <text class="smono" x="342" y="650" text-anchor="middle">12.58 M</text>
@@ -277,13 +300,13 @@ const maskRows = Array.from({ length: N }, (_, q) => ({
                 <line class="flowline-thin" x1="118" y1="664" x2="118" y2="698"></line>
                 <line class="flowline-thin" x1="342" y1="664" x2="342" y2="698"></line>
 
-                <g data-tip="SwiGLU nonlinearity: elementwise SiLU(gate) times up. No parameters here.">
+                <g data-tip="SwiGLU nonlinearity: elementwise SiLU(gate) times up. No parameters here." data-tip-ko="SwiGLU 비선형성: elementwise로 SiLU(gate)와 up을 곱한다. 여기에는 parameter가 없다.">
                   <rect class="sbox sbox-warm" x="90" y="700" width="280" height="36" rx="9"></rect>
                   <text class="smono" x="230" y="723" text-anchor="middle">SiLU(gate) ⊙ up → [L × 6,144]</text>
                 </g>
                 <line class="flowline" x1="230" y1="736" x2="230" y2="766" marker-end="url(#arrF)"></line>
 
-                <g data-tip="W_down: 6,144 × 2,048 = 12,582,912 params ≈ 25.2 MB BF16. MLP total: 37.75 M per layer — 3× the attention weights.">
+                <g data-tip="W_down: 6,144 × 2,048 = 12,582,912 params ≈ 25.2 MB BF16. MLP total: 37.75 M per layer — 3× the attention weights." data-tip-ko="W_down: 6,144 × 2,048 = 12,582,912 params ≈ 25.2 MB BF16. MLP 합계: layer당 37.75 M — attention weight의 3배.">
                   <rect class="sbox" x="110" y="768" width="240" height="44" rx="9"></rect>
                   <text class="stitle sm" x="230" y="786" text-anchor="middle">W_down — [6,144 × 2,048]</text>
                   <text class="smono" x="230" y="804" text-anchor="middle">12.58 M</text>
@@ -297,7 +320,7 @@ const maskRows = Array.from({ length: N }, (_, q) => ({
                 <line class="flowline" x1="230" y1="859" x2="230" y2="882" marker-end="url(#arrF)"></line>
 
                 <!-- output -->
-                <g data-tip="Same shape out as in — 28 of these blocks are stacked.">
+                <g data-tip="Same shape out as in — 28 of these blocks are stacked." data-tip-ko="입력과 같은 shape으로 나간다 — 이 block이 28개 쌓여 있다.">
                   <rect class="sbox" x="110" y="884" width="240" height="44" rx="9"></rect>
                   <text class="stitle" x="230" y="902" text-anchor="middle">X′ — [L × 2,048]</text>
                   <text class="smono" x="230" y="920" text-anchor="middle">→ layer ℓ+1</text>
@@ -343,15 +366,27 @@ const maskRows = Array.from({ length: N }, (_, q) => ({
               </div>
 
               <div class="mask-legend">
-                <span><i class="sw sw-past"></i> earlier block — causal, K/V read from cache</span>
-                <span><i class="sw sw-intra"></i> same block — bidirectional (future visible)</span>
-                <span><i class="sw sw-off"></i> later block — masked out</span>
-                <span><i class="sw sw-diag"></i> strict AR causal boundary, for comparison</span>
+                <span><i class="sw sw-past"></i>
+                  <span class="lang-en">earlier block — causal, K/V read from cache</span>
+                  <span class="lang-ko">이전 block — causal, K/V는 cache에서 읽음</span></span>
+                <span><i class="sw sw-intra"></i>
+                  <span class="lang-en">same block — bidirectional (future visible)</span>
+                  <span class="lang-ko">같은 block — bidirectional (미래 위치도 보임)</span></span>
+                <span><i class="sw sw-off"></i>
+                  <span class="lang-en">later block — masked out</span>
+                  <span class="lang-ko">이후 block — mask 처리됨</span></span>
+                <span><i class="sw sw-diag"></i>
+                  <span class="lang-en">strict AR causal boundary, for comparison</span>
+                  <span class="lang-ko">비교용 strict AR causal 경계</span></span>
               </div>
 
-              <p class="mask-caption" id="maskCaption">Hover a row: each row is one query position;
+              <p class="mask-caption" id="maskCaption">
+                <span class="lang-en">Hover a row: each row is one query position;
                 filled cells are the K/V positions it may attend to. Coral cells right of the dashed
-                diagonal are exactly what block diffusion adds over an AR mask.</p>
+                diagonal are exactly what block diffusion adds over an AR mask.</span>
+                <span class="lang-ko">행에 마우스를 올려 보자: 각 행은 query 위치 하나이고,
+                채워진 셀은 그 query가 attend할 수 있는 K/V 위치다. 점선 대각선 오른쪽의 coral 셀이
+                바로 block diffusion이 AR mask 위에 더하는 가시성이다.</span></p>
             </div>
           </div>
         </div>
@@ -361,10 +396,15 @@ const maskRows = Array.from({ length: N }, (_, q) => ({
     <!-- ============ 3 · DECODING TIMELINE ============ -->
     <section class="section-tight" id="decode-view">
       <div class="container">
-        <h2 class="viz-h">3 · Decoding timeline</h2>
-        <p class="viz-sub">Step through block-by-block generation: masked slots are denoised in
+        <h2 class="viz-h">3 · <span class="lang-en">Decoding timeline</span><span class="lang-ko">디코딩 타임라인</span></h2>
+        <p class="viz-sub">
+          <span class="lang-en">Step through block-by-block generation: masked slots are denoised in
           parallel, commits follow confidence, and each finalized block appends exact K/V entries
-          to the cache.</p>
+          to the cache.</span>
+          <span class="lang-ko">block 단위 생성을 한 단계씩 따라가 보자: mask된 슬롯이 병렬로
+          denoise되고, commit은 confidence를 따르며, 확정된 각 block은 정확한(exact) K/V 엔트리를
+          cache에 추가한다.</span>
+        </p>
 
         <div class="viz-frame">
           <div class="dt-controls">
@@ -384,9 +424,13 @@ const maskRows = Array.from({ length: N }, (_, q) => ({
             </span>
           </div>
 
-          <p class="dt-caption" id="dtCaption">Prefill — the 5-token prompt runs through all 28
+          <p class="dt-caption" id="dtCaption">
+            <span class="lang-en">Prefill — the 5-token prompt runs through all 28
             layers once. Every layer writes K and V for the 5 positions: 5 × 112 KB = 560 KB of
-            cache. Identical to an AR model so far.</p>
+            cache. Identical to an AR model so far.</span>
+            <span class="lang-ko">Prefill — 5-token prompt가 28개 layer를 한 번 통과한다.
+            모든 layer가 5개 위치의 K와 V를 기록한다: 5 × 112 KB = 560 KB의 cache.
+            여기까지는 AR 모델과 동일하다.</span></p>
 
           <div class="dt-meters" id="dtMeters">forward passes 1 (1 prefill + 0 denoise) · tokens committed 0 · AR passes for the same tokens: 0</div>
 
@@ -399,8 +443,12 @@ const maskRows = Array.from({ length: N }, (_, q) => ({
           </div>
 
           <noscript>
-            <p class="viz-sub">This explorer steps through 10 decoding states with JavaScript
-              enabled; without it you are seeing the initial prefill state.</p>
+            <p class="viz-sub">
+              <span class="lang-en">This explorer steps through 10 decoding states with JavaScript
+              enabled; without it you are seeing the initial prefill state.</span>
+              <span class="lang-ko">이 탐색기는 JavaScript가 켜져 있으면 10개의 디코딩 상태를
+              단계별로 보여 준다; 꺼져 있으면 지금처럼 초기 prefill 상태만 보인다.</span>
+            </p>
           </noscript>
         </div>
       </div>
@@ -410,23 +458,31 @@ const maskRows = Array.from({ length: N }, (_, q) => ({
     <section class="section">
       <div class="container">
         <div class="prose">
-          <h2>Reading the diagram</h2>
+          <h2><span class="lang-en">Reading the diagram</span><span class="lang-ko">다이어그램 읽기</span></h2>
 
-          <h3>Stage 1 — the stack is just a transformer</h3>
+          <h3><span class="lang-en">Stage 1 — the stack is just a transformer</span><span class="lang-ko">Stage 1 — 스택은 그냥 transformer다</span></h3>
           <p>
-            There is no diffusion-specific machinery in the weights. The stack is a plain dense
+            <span class="lang-en">There is no diffusion-specific machinery in the weights. The stack is a plain dense
             decoder: a 151,936 × 2,048 tied embedding (311 M parameters), 28 identical transformer
             blocks of about 50.3 M parameters each, a final RMSNorm, and the transposed embedding
             as the LM head — roughly 1.72 B parameters, 3.4 GB in BF16. This is why SDAR-style
             models can be <em>adapted</em> from a pretrained AR checkpoint rather than trained
             from scratch: the published recipe starts from Qwen3 weights and continues training
             with a block-diffusion objective. Everything that makes the model “diffusion” lives
-            in two places outside the weights: the attention mask and the decoding loop.
+            in two places outside the weights: the attention mask and the decoding loop.</span>
+            <span class="lang-ko">weight 안에는 diffusion 전용 장치가 하나도 없다. 스택은 평범한 dense
+            decoder다: 151,936 × 2,048 tied embedding(311 M parameter), 각각 약 50.3 M parameter인
+            동일한 transformer block 28개, 마지막 RMSNorm, 그리고 embedding의 transpose를 LM head로
+            쓴다 — 대략 1.72 B parameter, BF16으로 3.4 GB. SDAR 계열 모델을 처음부터 학습하는 대신
+            사전학습된 AR checkpoint에서 <em>적응(adapt)</em>시킬 수 있는 이유가 여기에 있다:
+            공개된 레시피는 Qwen3 weight에서 출발해 block-diffusion objective로 학습을 이어 간다.
+            이 모델을 “diffusion”으로 만드는 모든 것은 weight 바깥의 두 곳에 산다:
+            attention mask와 디코딩 루프.</span>
           </p>
 
-          <h3>Stage 2 — one layer, and the mask that changes everything</h3>
+          <h3><span class="lang-en">Stage 2 — one layer, and the mask that changes everything</span><span class="lang-ko">Stage 2 — layer 하나, 그리고 모든 것을 바꾸는 mask</span></h3>
           <p>
-            Inside a block: pre-RMSNorm, then Q/K/V projections. The config is GQA-shaped —
+            <span class="lang-en">Inside a block: pre-RMSNorm, then Q/K/V projections. The config is GQA-shaped —
             16 query heads of dimension 128 (W<sub>Q</sub>: 2,048 → 2,048) but only 8 KV heads
             (W<sub>K</sub>, W<sub>V</sub>: 2,048 → 1,024), so each K/V head serves two query
             heads and the cache is half the size it would be with MHA. After per-head QK-norm and
@@ -437,12 +493,22 @@ const maskRows = Array.from({ length: N }, (_, q) => ({
             the coral cells to the right of the dashed diagonal are precisely the visibility that
             a causal AR mask forbids — and they are what lets several tokens be predicted jointly
             in one pass. The MLP is a standard SwiGLU (2,048 → 6,144 → 2,048, 37.75 M parameters
-            per layer — three times the attention weights).
+            per layer — three times the attention weights).</span>
+            <span class="lang-ko">block 내부: pre-RMSNorm 다음 Q/K/V projection. config는 GQA 형태다 —
+            dimension 128짜리 query head 16개(W<sub>Q</sub>: 2,048 → 2,048)에 KV head는 8개뿐이라
+            (W<sub>K</sub>, W<sub>V</sub>: 2,048 → 1,024), K/V head 하나가 query head 두 개를 감당하고
+            cache는 MHA였을 때의 절반 크기다. per-head QK-norm과 RoPE 다음에 진짜로 다른 단 하나의
+            재료가 온다: <strong>block-causal mask</strong>. 위치들을 4개씩 block으로 나눈다.
+            query는 이전 block의 모든 위치(일반적인 causal attention — 그 K/V는 cache에서 바로 온다)와,
+            미래 위치를 포함한 자기 block의 <em>모든</em> 위치에 attend할 수 있다. matrix 패널에서
+            점선 대각선 오른쪽의 coral 셀이 정확히 causal AR mask가 금지하는 가시성이며 — 여러 token을
+            한 pass에 함께 예측할 수 있게 해 주는 것이 바로 이들이다. MLP는 표준 SwiGLU다
+            (2,048 → 6,144 → 2,048, layer당 37.75 M parameter — attention weight의 3배).</span>
           </p>
 
-          <h3>Stage 3 — decode in blocks, cache like an AR model</h3>
+          <h3><span class="lang-en">Stage 3 — decode in blocks, cache like an AR model</span><span class="lang-ko">Stage 3 — block으로 디코딩, cache는 AR 모델처럼</span></h3>
           <p>
-            Generation appends a block of 4 <code>[MASK]</code> tokens and denoises it over a few
+            <span class="lang-en">Generation appends a block of 4 <code>[MASK]</code> tokens and denoises it over a few
             forward passes. Each pass produces a full 151,936-way distribution at every masked
             position simultaneously; positions whose confidence clears a threshold τ are committed
             (at least the argmax is, so progress is guaranteed), and committed tokens condition the
@@ -451,14 +517,23 @@ const maskRows = Array.from({ length: N }, (_, q) => ({
             finished it is frozen; because cross-block attention is causal, its K and V are
             <em>exact</em> — bit-for-bit what an AR pass would have produced — so they are appended
             to the cache once and never touched again. The cache simply grows in block-sized
-            strides: 112 KB per token in this config.
+            strides: 112 KB per token in this config.</span>
+            <span class="lang-ko">생성은 <code>[MASK]</code> token 4개짜리 block을 덧붙이고 몇 번의
+            forward pass에 걸쳐 denoise한다. 각 pass는 mask된 모든 위치에서 동시에 151,936-way
+            분포를 만든다; confidence가 threshold τ를 넘는 위치는 commit되고(최소한 argmax 하나는
+            commit되므로 진행이 보장된다), commit된 token은 다음 pass의 조건이 된다. commit 순서는
+            왼쪽에서 오른쪽 위치 순이 아니라 confidence를 따른다. 위 타임라인에서는 AR step 8번 대신
+            denoising pass 5번에 token 8개가 확정된다. block이 끝나면 동결된다; block 사이 attention이
+            causal이므로 그 K와 V는 <em>정확(exact)</em>하다 — AR pass가 만들었을 값과 bit 단위로
+            같다 — 그래서 cache에 한 번 추가되면 다시는 손대지 않는다. cache는 그저 block 크기 보폭으로
+            자란다: 이 config에서 token당 112 KB.</span>
           </p>
         </div>
 
         <div class="eff-note band-dark">
-          <h3>Why this matters for efficiency</h3>
+          <h3><span class="lang-en">Why this matters for efficiency</span><span class="lang-ko">이것이 효율에 중요한 이유</span></h3>
           <p>
-            Two separate levers hide in this design. <strong>Within-block parallelism attacks the
+            <span class="lang-en">Two separate levers hide in this design. <strong>Within-block parallelism attacks the
             weight-read floor.</strong> Batch-1 decoding is memory-bound: every forward pass streams
             all ≈3.4 GB of weights through the GPU regardless of how many tokens it commits, so a
             pass that commits 2–3 tokens cuts the weight traffic <em>per token</em> by 2–3×. The
@@ -469,7 +544,19 @@ const maskRows = Array.from({ length: N }, (_, q) => ({
             construction — the cache is append-only and exact, the same contract an AR engine
             relies on. The trade lives between the two levers: larger blocks buy more parallelism
             but weaken left-to-right conditioning inside the block; the released SDAR checkpoints
-            settle at a short block length of 4.
+            settle at a short block length of 4.</span>
+            <span class="lang-ko">이 설계에는 서로 다른 지렛대 두 개가 숨어 있다. <strong>block 내
+            병렬성은 weight-read 바닥을 공략한다.</strong> batch-1 디코딩은 memory-bound다:
+            forward pass는 commit하는 token 수와 무관하게 매번 ≈3.4 GB weight 전체를 GPU로
+            흘려보내므로, 한 pass가 token 2–3개를 commit하면 token<em>당</em> weight 트래픽이
+            2–3배 줄어든다. confidence threshold와 block 크기로 조절되는 tokens-per-pass 비율은
+            거의 공짜 throughput이다. <strong>block-causality는 KV 재사용을 정확(exact)하게
+            만든다.</strong> full-attention diffusion LM은 모든 위치가 계속 수정될 수 있어 cache된
+            K/V가 언제든 stale해질 수 있고, cache 재사용은 관리해야 할 근사가 된다. 여기서는 확정된
+            block이 구조적으로 불변이다 — cache는 append-only이고 정확하며, AR 엔진이 의존하는 것과
+            같은 계약이다. 트레이드오프는 두 지렛대 사이에 있다: block이 클수록 병렬성은 커지지만
+            block 내부의 left-to-right 조건화가 약해진다; 공개된 SDAR checkpoint들은 짧은
+            block length 4에 정착했다.</span>
           </p>
           <div class="eff-chips">
             <span class="eff-chip">1 fwd pass ≈ 3.4 GB weight reads (BF16, batch 1)</span>
@@ -479,20 +566,24 @@ const maskRows = Array.from({ length: N }, (_, q) => ({
         </div>
 
         <div class="prose">
-          <h2>Going deeper</h2>
+          <h2><span class="lang-en">Going deeper</span><span class="lang-ko">더 깊이 읽기</span></h2>
           <ul class="deeper-list">
-            <li><a class="arrow-link" href="https://github.com/JetAstra/SDAR" target="_blank" rel="noopener">SDAR — model family, checkpoints &amp; tech report (GitHub)</a></li>
-            <li><a class="arrow-link" href="https://arxiv.org/abs/2503.09573" target="_blank" rel="noopener">Block Diffusion (BD3-LM) — interpolating between AR and diffusion LMs</a></li>
-            <li><a class="arrow-link" href="https://arxiv.org/abs/2502.09992" target="_blank" rel="noopener">LLaDA — large language diffusion models (full-attention dLLM)</a></li>
-            <li><a class="arrow-link" href="https://arxiv.org/abs/2505.22618" target="_blank" rel="noopener">Fast-dLLM — KV caching &amp; parallel decoding for diffusion LLMs</a></li>
-            <li><a class="arrow-link" href="https://arxiv.org/abs/2505.09388" target="_blank" rel="noopener">Qwen3 technical report — the backbone family</a></li>
+            <li><a class="arrow-link" href="https://github.com/JetAstra/SDAR" target="_blank" rel="noopener">SDAR<span class="lang-en"> — model family, checkpoints &amp; tech report (GitHub)</span><span class="lang-ko"> — 모델 패밀리, checkpoint &amp; tech report (GitHub)</span></a></li>
+            <li><a class="arrow-link" href="https://arxiv.org/abs/2503.09573" target="_blank" rel="noopener">Block Diffusion (BD3-LM)<span class="lang-en"> — interpolating between AR and diffusion LMs</span><span class="lang-ko"> — AR와 diffusion LM 사이를 보간하는 모델</span></a></li>
+            <li><a class="arrow-link" href="https://arxiv.org/abs/2502.09992" target="_blank" rel="noopener">LLaDA<span class="lang-en"> — large language diffusion models (full-attention dLLM)</span><span class="lang-ko"> — 대규모 language diffusion 모델 (full-attention dLLM)</span></a></li>
+            <li><a class="arrow-link" href="https://arxiv.org/abs/2505.22618" target="_blank" rel="noopener">Fast-dLLM<span class="lang-en"> — KV caching &amp; parallel decoding for diffusion LLMs</span><span class="lang-ko"> — diffusion LLM을 위한 KV caching &amp; parallel decoding</span></a></li>
+            <li><a class="arrow-link" href="https://arxiv.org/abs/2505.09388" target="_blank" rel="noopener">Qwen3 technical report<span class="lang-en"> — the backbone family</span><span class="lang-ko"> — backbone 모델 패밀리</span></a></li>
           </ul>
           <p class="fine-print">
-            Shapes on this page assume the public SDAR-1.7B configuration (Qwen3-1.7B backbone:
+            <span class="lang-en">Shapes on this page assume the public SDAR-1.7B configuration (Qwen3-1.7B backbone:
             d = 2,048, 28 layers, 16 Q / 8 KV heads, head_dim 128, FFN 6,144, vocab 151,936,
             block length 4). The larger released variants (4B, 8B, and the 30B-A3B MoE) change
             widths and depths, not the mechanics shown here. Confidence numbers in the timeline
-            are illustrative.
+            are illustrative.</span>
+            <span class="lang-ko">이 페이지의 shape들은 공개된 SDAR-1.7B configuration을 가정한다
+            (Qwen3-1.7B backbone: d = 2,048, 28 layers, 16 Q / 8 KV heads, head_dim 128, FFN 6,144,
+            vocab 151,936, block length 4). 더 큰 공개 변형들(4B, 8B, 그리고 30B-A3B MoE)은 폭과
+            깊이만 다를 뿐, 여기서 보인 메커니즘은 같다. 타임라인의 confidence 숫자는 예시용이다.</span>
           </p>
         </div>
       </div>
@@ -504,6 +595,11 @@ const maskRows = Array.from({ length: N }, (_, q) => ({
 
 <style is:global>
   /* ---- page chrome ---- */
+  .sdar-page .hero-top {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 0.8rem 1rem; flex-wrap: wrap; margin-bottom: 1.1rem;
+  }
+  .sdar-page .hero-top .eyebrow { margin-bottom: 0; }
   .sdar-page .jump-row { display: flex; gap: 0.6rem; flex-wrap: wrap; margin: 1.6rem 0 0; }
   .sdar-page .jump-row .tag { transition: border-color 0.2s, color 0.2s; }
   .sdar-page .jump-row .tag:hover { border-color: var(--accent); color: var(--accent-strong); }
@@ -681,12 +777,15 @@ const maskRows = Array.from({ length: N }, (_, q) => ({
 </style>
 
 <script>
-  // ============ shared tooltip ============
+  // ============ shared tooltip (bilingual: data-tip / data-tip-ko) ============
   const tip = document.getElementById('sdarTip');
+  const curLang = () =>
+    typeof window.siteLang === 'function' ? window.siteLang() : 'en';
   document.querySelectorAll('[data-tip]').forEach((el) => {
     el.addEventListener('mousemove', (e) => {
       if (!tip) return;
-      tip.textContent = el.getAttribute('data-tip') || '';
+      const ko = el.getAttribute('data-tip-ko');
+      tip.textContent = (curLang() === 'ko' && ko ? ko : el.getAttribute('data-tip')) || '';
       tip.style.opacity = '1';
       const x = Math.min(e.clientX + 14, window.innerWidth - 296);
       tip.style.left = x + 'px';
@@ -705,18 +804,32 @@ const maskRows = Array.from({ length: N }, (_, q) => ({
   let maskMode = 'train';
 
   const CAP_DEFAULT = {
-    train:
-      'Hover a row: each row is one query position; filled cells are the K/V positions it may attend to. Coral cells right of the dashed diagonal are exactly what block diffusion adds over an AR mask.',
-    dec:
-      'Decoding view: while block B2 is being denoised, only its four queries (t8–t11) run through the layers. t0–t7 are finalized — they never run as queries again; their K/V are read from the cache.',
+    train: {
+      en: 'Hover a row: each row is one query position; filled cells are the K/V positions it may attend to. Coral cells right of the dashed diagonal are exactly what block diffusion adds over an AR mask.',
+      ko: '행에 마우스를 올려 보자: 각 행은 query 위치 하나이고, 채워진 셀은 그 query가 attend할 수 있는 K/V 위치다. 점선 대각선 오른쪽의 coral 셀이 바로 block diffusion이 AR mask 위에 더하는 가시성이다.',
+    },
+    dec: {
+      en: 'Decoding view: while block B2 is being denoised, only its four queries (t8–t11) run through the layers. t0–t7 are finalized — they never run as queries again; their K/V are read from the cache.',
+      ko: '디코딩 뷰: block B2를 denoise하는 동안 그 네 개의 query(t8–t11)만 layer를 통과한다. t0–t7은 확정(finalized)되어 다시는 query로 실행되지 않는다; 이들의 K/V는 cache에서 읽는다.',
+    },
   };
+
+  let maskCapRow = null; // active row q, or null → default caption
+
+  function maskCaptionText() {
+    const lang = curLang();
+    if (maskCapRow !== null) return rowText(maskCapRow, lang);
+    const d = CAP_DEFAULT[maskMode];
+    return lang === 'ko' ? d.ko : d.en;
+  }
 
   function setMaskMode(m) {
     maskMode = m;
     if (maskWrap) maskWrap.classList.toggle('decode', m === 'dec');
     if (modeTrainBtn) modeTrainBtn.classList.toggle('on', m === 'train');
     if (modeDecBtn) modeDecBtn.classList.toggle('on', m === 'dec');
-    if (maskCap) maskCap.textContent = CAP_DEFAULT[m];
+    maskCapRow = null;
+    if (maskCap) maskCap.textContent = maskCaptionText();
     clearRows();
   }
   if (modeTrainBtn) modeTrainBtn.addEventListener('click', () => setMaskMode('train'));
@@ -726,10 +839,26 @@ const maskRows = Array.from({ length: N }, (_, q) => ({
     document.querySelectorAll('.mrow.active').forEach((x) => x.classList.remove('active'));
   }
 
-  function rowText(q) {
+  function rowText(q, lang) {
     const b = Math.floor(q / 4);
     const s = b * 4;
     const e = s + 3;
+    if (lang === 'ko') {
+      if (maskMode === 'dec' && b < 2) {
+        return (
+          't' + q + '는 확정(finalized)된 block에 있다: 디코딩 동안 다시는 query로 실행되지 않고, ' +
+          'K/V(layer당 4 KB)는 이후 block들이 cache에서 바로 읽어 간다.'
+        );
+      }
+      let k = 'Query t' + q + ' (block B' + b + '): ';
+      k += b > 0
+        ? 't0–t' + (s - 1) + '(block B0–B' + (b - 1) + ', KV cache에서 제공)에는 causal하게, '
+        : '';
+      k += '자기 block B' + b + ' 전체(t' + s + '–t' + e + ')에는 bidirectional하게 attend한다';
+      if (q < e) k += ' — 미래 위치 t' + (q + 1) + '–t' + e + ' 포함';
+      k += '. t' + e + ' 이후 위치는 mask로 가려진다.';
+      return k;
+    }
     if (maskMode === 'dec' && b < 2) {
       return (
         't' + q + ' sits in a finalized block: during decoding it never runs as a query again — ' +
@@ -751,7 +880,8 @@ const maskRows = Array.from({ length: N }, (_, q) => ({
     const activate = () => {
       clearRows();
       g.classList.add('active');
-      if (maskCap) maskCap.textContent = rowText(q);
+      maskCapRow = q;
+      if (maskCap) maskCap.textContent = maskCaptionText();
     };
     g.addEventListener('mouseenter', activate);
     g.addEventListener('click', activate);
@@ -760,7 +890,8 @@ const maskRows = Array.from({ length: N }, (_, q) => ({
   if (maskSvg) {
     maskSvg.addEventListener('mouseleave', () => {
       clearRows();
-      if (maskCap) maskCap.textContent = CAP_DEFAULT[maskMode];
+      maskCapRow = null;
+      if (maskCap) maskCap.textContent = maskCaptionText();
     });
   }
 
@@ -775,47 +906,80 @@ const maskRows = Array.from({ length: N }, (_, q) => ({
   const STEPS = [
     {
       name: 'Prefill', b1: H4, b2: H4, cache: 5, fw: 1, dec: 0, em: 0,
-      cap: 'Prefill — the 5-token prompt runs through all 28 layers once. Every layer writes K and V for the 5 positions: 5 × 112 KB = 560 KB of cache. Identical to an AR model so far.',
+      cap: {
+        en: 'Prefill — the 5-token prompt runs through all 28 layers once. Every layer writes K and V for the 5 positions: 5 × 112 KB = 560 KB of cache. Identical to an AR model so far.',
+        ko: 'Prefill — 5-token prompt가 28개 layer를 한 번 통과한다. 모든 layer가 5개 위치의 K와 V를 기록한다: 5 × 112 KB = 560 KB의 cache. 여기까지는 AR 모델과 동일하다.',
+      },
     },
     {
       name: 'Open block 1', b1: ['m', 'm', 'm', 'm'], b2: H4, cache: 5, fw: 1, dec: 0, em: 0,
-      cap: 'A block of 4 [MASK] tokens is appended. Within this block attention will be bidirectional; toward the prompt it is causal, so the cached K/V are simply read — nothing is recomputed.',
+      cap: {
+        en: 'A block of 4 [MASK] tokens is appended. Within this block attention will be bidirectional; toward the prompt it is causal, so the cached K/V are simply read — nothing is recomputed.',
+        ko: '[MASK] token 4개짜리 block이 덧붙는다. 이 block 안에서 attention은 bidirectional이 되고, prompt 쪽으로는 causal이므로 cache된 K/V를 그대로 읽기만 한다 — 아무것도 재계산되지 않는다.',
+      },
     },
     {
       name: 'Denoise 1/3', b1: ['j', { c: 0.55, g: ',' }, { c: 0.34, g: 'home' }, { c: 0.47, g: 'to' }], b2: H4, cache: 5, fw: 2, dec: 1, em: 1,
-      cap: "Denoise pass 1 — one forward pass scores all 4 masked positions in parallel. 'Paris' (0.98) clears the confidence threshold (τ ≈ 0.9) and is committed. The rest stay masked — but note the model already has guesses.",
+      cap: {
+        en: "Denoise pass 1 — one forward pass scores all 4 masked positions in parallel. 'Paris' (0.98) clears the confidence threshold (τ ≈ 0.9) and is committed. The rest stay masked — but note the model already has guesses.",
+        ko: "Denoise pass 1 — forward pass 한 번이 mask된 4개 위치를 병렬로 채점한다. 'Paris'(0.98)가 confidence threshold(τ ≈ 0.9)를 넘어 commit된다. 나머지는 mask로 남는다 — 하지만 모델이 이미 추측을 갖고 있다는 점에 주목.",
+      },
     },
     {
       name: 'Denoise 2/3', b1: ['d', 'j', { c: 0.61, g: 'home' }, 'j'], b2: H4, cache: 5, fw: 3, dec: 2, em: 3,
-      cap: "Denoise pass 2 — with 'Paris' fixed as context, confidence rises elsewhere: ',' (0.96) and 'to' (0.93) commit. Out of order — inside a block, commit order follows confidence, not position.",
+      cap: {
+        en: "Denoise pass 2 — with 'Paris' fixed as context, confidence rises elsewhere: ',' (0.96) and 'to' (0.93) commit. Out of order — inside a block, commit order follows confidence, not position.",
+        ko: "Denoise pass 2 — 'Paris'가 context로 고정되자 다른 위치의 confidence가 올라간다: ','(0.96)와 'to'(0.93)가 commit된다. 순서를 건너뛴다 — block 안에서 commit 순서는 위치가 아니라 confidence를 따른다.",
+      },
     },
     {
       name: 'Denoise 3/3', b1: ['d', 'd', 'j', 'd'], b2: H4, cache: 5, fw: 4, dec: 3, em: 4,
-      cap: "Denoise pass 3 — 'home' (0.97) resolves last. Block 1 took 3 forward passes for 4 tokens: 1.33 tokens per pass, vs exactly 1.0 for AR decoding.",
+      cap: {
+        en: "Denoise pass 3 — 'home' (0.97) resolves last. Block 1 took 3 forward passes for 4 tokens: 1.33 tokens per pass, vs exactly 1.0 for AR decoding.",
+        ko: "Denoise pass 3 — 'home'(0.97)이 마지막으로 풀린다. Block 1은 token 4개에 forward pass 3번: pass당 1.33 token, AR 디코딩은 정확히 1.0이다.",
+      },
     },
     {
       name: 'Cache append', b1: ['k', 'k', 'k', 'k'], b2: H4, cache: 9, fw: 4, dec: 3, em: 4,
-      cap: 'Block 1 is finalized. Because cross-block attention is causal, its K/V values are exact and are appended to the cache (+4 × 112 KB = 448 KB). They will never be recomputed — the same guarantee an AR cache gives.',
+      cap: {
+        en: 'Block 1 is finalized. Because cross-block attention is causal, its K/V values are exact and are appended to the cache (+4 × 112 KB = 448 KB). They will never be recomputed — the same guarantee an AR cache gives.',
+        ko: 'Block 1이 확정된다. block 사이 attention은 causal이므로 K/V 값이 정확(exact)하며 cache에 추가된다(+4 × 112 KB = 448 KB). 다시는 재계산되지 않는다 — AR cache가 주는 것과 같은 보장이다.',
+      },
     },
     {
       name: 'Open block 2', b1: ['k', 'k', 'k', 'k'], b2: ['m', 'm', 'm', 'm'], cache: 9, fw: 4, dec: 3, em: 4,
-      cap: 'Block 2 opens with 4 fresh masks. Its queries attend to 9 cached positions (prompt + block 1) plus the 4 in-block positions — 13 keys total per query.',
+      cap: {
+        en: 'Block 2 opens with 4 fresh masks. Its queries attend to 9 cached positions (prompt + block 1) plus the 4 in-block positions — 13 keys total per query.',
+        ko: 'Block 2가 새 mask 4개로 열린다. 이 block의 query는 cache된 9개 위치(prompt + block 1)와 block 내 4개 위치에 attend한다 — query당 총 13개의 key.',
+      },
     },
     {
       name: 'Denoise 1/2', b1: ['k', 'k', 'k', 'k'], b2: ['j', 'j', { c: 0.58, g: 'museum' }, { c: 0.71, g: '.' }], cache: 9, fw: 5, dec: 4, em: 6,
-      cap: "Denoise pass 1 — two tokens clear τ in a single pass: 'the' (0.95) and 'Louvre' (0.92). Two commits for one read of the 3.4 GB of weights.",
+      cap: {
+        en: "Denoise pass 1 — two tokens clear τ in a single pass: 'the' (0.95) and 'Louvre' (0.92). Two commits for one read of the 3.4 GB of weights.",
+        ko: "Denoise pass 1 — 한 pass에서 token 두 개가 τ를 넘는다: 'the'(0.95)와 'Louvre'(0.92). 3.4 GB weight를 한 번 읽는 동안 commit 두 개.",
+      },
     },
     {
       name: 'Denoise 2/2', b1: ['k', 'k', 'k', 'k'], b2: ['d', 'd', 'j', 'j'], cache: 9, fw: 6, dec: 5, em: 8,
-      cap: "Denoise pass 2 — 'museum' (0.94) and '.' (0.99) commit together. Block 2: 4 tokens in 2 passes.",
+      cap: {
+        en: "Denoise pass 2 — 'museum' (0.94) and '.' (0.99) commit together. Block 2: 4 tokens in 2 passes.",
+        ko: "Denoise pass 2 — 'museum'(0.94)과 '.'(0.99)가 함께 commit된다. Block 2: 2 pass에 token 4개.",
+      },
     },
     {
       name: 'Cache append', b1: ['k', 'k', 'k', 'k'], b2: ['k', 'k', 'k', 'k'], cache: 13, fw: 6, dec: 5, em: 8,
-      cap: "Block 2's K/V join the cache: 13 tokens × 112 KB ≈ 1.42 MB. The cache grows in block-sized strides but is bit-for-bit what an AR pass would have produced.",
+      cap: {
+        en: "Block 2's K/V join the cache: 13 tokens × 112 KB ≈ 1.42 MB. The cache grows in block-sized strides but is bit-for-bit what an AR pass would have produced.",
+        ko: 'Block 2의 K/V가 cache에 합류한다: 13 token × 112 KB ≈ 1.42 MB. cache는 block 크기 보폭으로 자라지만, AR pass가 만들었을 값과 bit 단위로 동일하다.',
+      },
     },
     {
       name: 'Tally', b1: ['k', 'k', 'k', 'k'], b2: ['k', 'k', 'k', 'k'], cache: 13, fw: 6, dec: 5, em: 8,
-      cap: 'Tally — 8 new tokens in 5 denoising passes (AR would use 8). At batch 1 each pass reads all ≈3.4 GB of weights, so tokens-per-pass is nearly free throughput. The knob is τ: lower it for more parallelism, raise it for more caution.',
+      cap: {
+        en: 'Tally — 8 new tokens in 5 denoising passes (AR would use 8). At batch 1 each pass reads all ≈3.4 GB of weights, so tokens-per-pass is nearly free throughput. The knob is τ: lower it for more parallelism, raise it for more caution.',
+        ko: '결산 — denoising pass 5번으로 새 token 8개(AR이라면 8번). batch 1에서는 pass마다 ≈3.4 GB weight 전체를 읽으므로, tokens-per-pass는 거의 공짜 throughput이다. 손잡이는 τ: 낮추면 병렬성이, 높이면 신중함이 커진다.',
+      },
     },
   ];
 
@@ -896,7 +1060,7 @@ const maskRows = Array.from({ length: N }, (_, q) => ({
       stripEl.innerHTML =
         promptHtml() + renderBlock('block 1', B1, s.b1) + renderBlock('block 2', B2, s.b2);
     }
-    if (capEl) capEl.textContent = s.cap;
+    if (capEl) capEl.textContent = curLang() === 'ko' ? s.cap.ko : s.cap.en;
     if (metersEl) {
       metersEl.innerHTML =
         'forward passes <b>' + s.fw + '</b> (1 prefill + ' + s.dec + ' denoise) · ' +
@@ -943,4 +1107,10 @@ const maskRows = Array.from({ length: N }, (_, q) => ({
   }
 
   render();
+
+  // ============ language toggle re-render ============
+  window.addEventListener('site-langchange', () => {
+    if (maskCap) maskCap.textContent = maskCaptionText();
+    render();
+  });
 </script>

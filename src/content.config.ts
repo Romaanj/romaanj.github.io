@@ -53,8 +53,10 @@ const study = defineCollection({
   loader: glob({ pattern: '**/*.{md,mdx}', base: './src/content/study' }),
   schema: z.object({
     title: z.string(),
+    title_ko: z.string().optional(),
     track: z.enum(['models', 'quantization', 'gpu']),
     summary: z.string(),
+    summary_ko: z.string().optional(),
     date: z.coerce.date(),
     order: z.number().default(99),
     /** set when the note lives as a custom interactive page instead of markdown */

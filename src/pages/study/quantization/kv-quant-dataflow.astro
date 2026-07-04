@@ -1,5 +1,6 @@
 ---
 import Base from '../../../layouts/Base.astro';
+import LangToggle from '../../../components/LangToggle.astro';
 
 // ------------------------------------------------------------------
 // Running example (all public/textbook arithmetic):
@@ -46,13 +47,25 @@ const packedBytes = [
   <!-- ============ hero ============ -->
   <section class="section">
     <div class="container">
-      <p class="eyebrow">Study · Quantization</p>
-      <h1>What actually happens when you quantize a KV cache</h1>
+      <div class="hero-top">
+        <p class="eyebrow">Study · Quantization</p>
+        <LangToggle />
+      </div>
+      <h1>
+        <span class="lang-en">What actually happens when you quantize a KV cache</span><span class="lang-ko">KV cache를 quantize하면 실제로 무슨 일이 일어나는가</span>
+      </h1>
       <p class="lede">
-        Not the cartoon version. A step-through of the real dataflow — actual tensor shapes,
-        actual scale/zero arithmetic on an 8-value group, actual bytes packed into HBM, and the
-        roofline arithmetic that explains why 4× fewer bytes is (almost) 4× faster decode
-        attention. Every number on this page can be recomputed by hand.
+        <span class="lang-en">
+          Not the cartoon version. A step-through of the real dataflow — actual tensor shapes,
+          actual scale/zero arithmetic on an 8-value group, actual bytes packed into HBM, and the
+          roofline arithmetic that explains why 4× fewer bytes is (almost) 4× faster decode
+          attention. Every number on this page can be recomputed by hand.
+        </span><span class="lang-ko">
+          만화 버전이 아니다. 실제 dataflow를 한 단계씩 따라간다 — 실제 tensor shape, 8개 값
+          그룹에 대한 실제 scale/zero 산술, HBM에 실제로 패킹되는 바이트, 그리고 바이트가 4×
+          줄면 decode attention이 (거의) 4× 빨라지는 이유를 설명하는 roofline 산술까지. 이
+          페이지의 모든 숫자는 손으로 다시 계산할 수 있다.
+        </span>
       </p>
       <div class="hero-tags">
         <span class="tag accent">asymmetric INT4</span>
@@ -72,13 +85,13 @@ const packedBytes = [
         <div class="kvq-controls">
           <button class="btn ghost" id="kvq-prev" type="button" aria-label="Previous step">← Prev</button>
           <div class="kvq-pips" role="tablist" aria-label="Steps">
-            <button class="kvq-pip" type="button" role="tab" data-step="0">1 · Arrive</button>
-            <button class="kvq-pip" type="button" role="tab" data-step="1">2 · Group</button>
-            <button class="kvq-pip" type="button" role="tab" data-step="2">3 · Scale</button>
-            <button class="kvq-pip" type="button" role="tab" data-step="3">4 · Snap</button>
-            <button class="kvq-pip" type="button" role="tab" data-step="4">5 · Pack</button>
-            <button class="kvq-pip" type="button" role="tab" data-step="5">6 · Read</button>
-            <button class="kvq-pip" type="button" role="tab" data-step="6">7 · Break</button>
+            <button class="kvq-pip" type="button" role="tab" data-step="0">1 · <span class="lang-en">Arrive</span><span class="lang-ko">도착</span></button>
+            <button class="kvq-pip" type="button" role="tab" data-step="1">2 · <span class="lang-en">Group</span><span class="lang-ko">그룹</span></button>
+            <button class="kvq-pip" type="button" role="tab" data-step="2">3 · <span class="lang-en">Scale</span><span class="lang-ko">스케일</span></button>
+            <button class="kvq-pip" type="button" role="tab" data-step="3">4 · <span class="lang-en">Snap</span><span class="lang-ko">스냅</span></button>
+            <button class="kvq-pip" type="button" role="tab" data-step="4">5 · <span class="lang-en">Pack</span><span class="lang-ko">패킹</span></button>
+            <button class="kvq-pip" type="button" role="tab" data-step="5">6 · <span class="lang-en">Read</span><span class="lang-ko">읽기</span></button>
+            <button class="kvq-pip" type="button" role="tab" data-step="6">7 · <span class="lang-en">Break</span><span class="lang-ko">한계</span></button>
           </div>
           <button class="btn" id="kvq-next" type="button" aria-label="Next step">Next →</button>
           <button class="btn ghost" id="kvq-play" type="button">Play</button>
@@ -94,7 +107,7 @@ const packedBytes = [
 
           <!-- ======== PANEL 0 · arrival ======== -->
           <section class="kvq-panel" data-panel="0">
-            <h3 class="kvq-panel-title"><span class="kvq-stepchip">1</span>One decode step, two tensors</h3>
+            <h3 class="kvq-panel-title"><span class="kvq-stepchip">1</span><span class="lang-en">One decode step, two tensors</span><span class="lang-ko">디코드 한 스텝, 두 개의 텐서</span></h3>
             <div class="kvq-cols">
               <div class="kvq-scroll">
                 <svg class="kvq-svg" viewBox="0 0 960 332" style="min-width: 720px" role="img"
@@ -126,6 +139,7 @@ const packedBytes = [
                         stroke="var(--line-strong)"
                         class="kvq-headcell"
                         data-tip={`K · head ${h} · [128] × FP16 (2 B) = 256 B`}
+                        data-tip-ko={`K · ${h}번 head · [128] × FP16 (2 B) = 256 B`}
                       ></rect>
                     ))}
                     <text x="356" y="76" class="t-small t-tert">32 KV heads</text>
@@ -143,6 +157,7 @@ const packedBytes = [
                         stroke="var(--line-strong)"
                         class="kvq-headcell"
                         data-tip={`V · head ${h} · [128] × FP16 (2 B) = 256 B`}
+                        data-tip-ko={`V · ${h}번 head · [128] × FP16 (2 B) = 256 B`}
                       ></rect>
                     ))}
                     <text x="356" y="76" class="t-small t-tert">32 KV heads</text>
@@ -162,22 +177,31 @@ const packedBytes = [
               </div>
 
               <aside class="kvq-aside">
-                <h4>The bill, per token</h4>
+                <h4><span class="lang-en">The bill, per token</span><span class="lang-ko">토큰당 청구서</span></h4>
                 <ul class="kvq-ledger">
-                  <li><span>K, one layer</span><code>32 × 128 × 2 B = 8,192 B</code></li>
-                  <li><span>K + V, one layer</span><code>16,384 B = 16 KiB</code></li>
-                  <li><span>× 32 layers</span><code>512 KiB per token</code></li>
-                  <li><span>× 4,096 tokens</span><code>2.0 GiB per sequence</code></li>
+                  <li><span><span class="lang-en">K, one layer</span><span class="lang-ko">K, 레이어 1개</span></span><code>32 × 128 × 2 B = 8,192 B</code></li>
+                  <li><span><span class="lang-en">K + V, one layer</span><span class="lang-ko">K + V, 레이어 1개</span></span><code>16,384 B = 16 KiB</code></li>
+                  <li><span><span class="lang-en">× 32 layers</span><span class="lang-ko">× 32 레이어</span></span><code>512 KiB per token</code></li>
+                  <li><span><span class="lang-en">× 4,096 tokens</span><span class="lang-ko">× 4,096 토큰</span></span><code>2.0 GiB per sequence</code></li>
                   <li><span>× batch 8</span><code>16 GiB — before weights</code></li>
                 </ul>
                 <details class="kvq-more">
-                  <summary>Why a cache at all? And what about GQA?</summary>
+                  <summary><span class="lang-en">Why a cache at all? And what about GQA?</span><span class="lang-ko">애초에 왜 캐시인가? 그리고 GQA는?</span></summary>
                   <p>
-                    Attention at step t needs K and V of every earlier token. Recomputing them
-                    would cost a full forward pass per step, so we cache — trading FLOPs for
-                    memory, which then becomes the thing to compress. Grouped-query models shrink
-                    the head count (Llama-3-8B keeps 8 KV heads, not 32), dividing every number in
-                    this ledger by 4 — but the pipeline on this page is identical.
+                    <span class="lang-en">
+                      Attention at step t needs K and V of every earlier token. Recomputing them
+                      would cost a full forward pass per step, so we cache — trading FLOPs for
+                      memory, which then becomes the thing to compress. Grouped-query models shrink
+                      the head count (Llama-3-8B keeps 8 KV heads, not 32), dividing every number in
+                      this ledger by 4 — but the pipeline on this page is identical.
+                    </span><span class="lang-ko">
+                      스텝 t의 attention은 앞선 모든 토큰의 K와 V를 필요로 한다. 매번 다시
+                      계산하면 스텝마다 full forward pass 비용이 들기 때문에 캐시한다 — FLOPs를
+                      memory와 맞바꾸는 것이고, 그 memory가 이번엔 압축 대상이 된다.
+                      Grouped-query 모델은 head 수를 줄여 (Llama-3-8B는 32개가 아닌 8개의 KV
+                      head) 이 장부의 모든 숫자를 4로 나눈다 — 하지만 이 페이지의 파이프라인은
+                      동일하다.
+                    </span>
                   </p>
                 </details>
               </aside>
@@ -186,12 +210,19 @@ const packedBytes = [
 
           <!-- ======== PANEL 1 · the group ======== -->
           <section class="kvq-panel" data-panel="1">
-            <h3 class="kvq-panel-title"><span class="kvq-stepchip">2</span>Zoom in: one quantization group</h3>
+            <h3 class="kvq-panel-title"><span class="kvq-stepchip">2</span><span class="lang-en">Zoom in: one quantization group</span><span class="lang-ko">확대: quantization group 하나</span></h3>
             <p class="kvq-note">
-              Quantizers never see the whole tensor — they work on small <strong>groups</strong> that share
-              one scale and one zero-point. Below: the first 8 channels of <code>K[3, :]</code>, real FP16
-              values. (8 is a toy size so the math fits on screen; production kernels use g = 32–128.
-              Step 5 does the storage arithmetic at g = 128.)
+              <span class="lang-en">
+                Quantizers never see the whole tensor — they work on small <strong>groups</strong> that share
+                one scale and one zero-point. Below: the first 8 channels of <code>K[3, :]</code>, real FP16
+                values. (8 is a toy size so the math fits on screen; production kernels use g = 32–128.
+                Step 5 does the storage arithmetic at g = 128.)
+              </span><span class="lang-ko">
+                Quantizer는 tensor 전체를 보지 않는다 — scale 하나와 zero-point 하나를 공유하는
+                작은 <strong>그룹</strong> 단위로 동작한다. 아래는 <code>K[3, :]</code>의 처음 8개
+                channel, 실제 FP16 값이다. (8은 수식이 화면에 들어오도록 고른 toy 크기이고,
+                production kernel은 g = 32–128을 쓴다. Step 5에서 g = 128로 저장 산술을 한다.)
+              </span>
             </p>
             <div class="kvq-scroll">
               <div class="kvq-vals">
@@ -199,6 +230,7 @@ const packedBytes = [
                   <div
                     class:list={['kvq-val', { 'is-max': g.c === 'c2', 'is-min': g.c === 'c4' }]}
                     data-tip={`${g.c} · FP16 · 2 bytes`}
+                    data-tip-ko={`${g.c} · FP16 · 2 bytes`}
                   >
                     <span class="idx">{g.c}</span>
                     <span class="num">{g.xd}</span>
@@ -210,36 +242,42 @@ const packedBytes = [
               </div>
             </div>
             <p class="kvq-note">
-              Group total in FP16: <code>8 × 2 B = 16 B</code>. The goal of the next three steps is to
-              rewrite these 16 bytes as <strong>4 bytes of codes</strong> plus a small shared header —
-              while keeping every value within half a grid step of where it started.
+              <span class="lang-en">
+                Group total in FP16: <code>8 × 2 B = 16 B</code>. The goal of the next three steps is to
+                rewrite these 16 bytes as <strong>4 bytes of codes</strong> plus a small shared header —
+                while keeping every value within half a grid step of where it started.
+              </span><span class="lang-ko">
+                FP16 기준 그룹 합계: <code>8 × 2 B = 16 B</code>. 다음 세 단계의 목표는 이
+                16바이트를 <strong>code 4바이트</strong>와 작은 공유 header로 다시 쓰는 것이다 —
+                모든 값이 원래 자리에서 grid 반 스텝 이내에 머물게 하면서.
+              </span>
             </p>
           </section>
 
           <!-- ======== PANEL 2 · scale & zero ======== -->
           <section class="kvq-panel" data-panel="2">
-            <h3 class="kvq-panel-title"><span class="kvq-stepchip">3</span>Two numbers summarize the group</h3>
+            <h3 class="kvq-panel-title"><span class="kvq-stepchip">3</span><span class="lang-en">Two numbers summarize the group</span><span class="lang-ko">숫자 두 개가 그룹을 요약한다</span></h3>
             <div class="kvq-math-grid">
               <div class="kvq-math">
                 <span class="k">1 · scan</span>
                 <code>min = −0.28 <em>(c4)</em></code>
                 <code>max = &nbsp;0.87 <em>(c2)</em></code>
                 <code>range = 1.15</code>
-                <p>One pass over the 8 values.</p>
+                <p><span class="lang-en">One pass over the 8 values.</span><span class="lang-ko">8개 값을 한 번에 스캔.</span></p>
               </div>
               <div class="kvq-math">
                 <span class="k">2 · scale</span>
                 <code>s = range / (2⁴ − 1)</code>
                 <code>&nbsp;&nbsp;= 1.15 / 15</code>
                 <code>&nbsp;&nbsp;= <strong>0.07667</strong></code>
-                <p>The width of one grid step: 16 codes ⇒ 15 steps between them.</p>
+                <p><span class="lang-en">The width of one grid step: 16 codes ⇒ 15 steps between them.</span><span class="lang-ko">grid 한 스텝의 폭: code 16개 ⇒ 그 사이 스텝은 15개.</span></p>
               </div>
               <div class="kvq-math">
                 <span class="k">3 · zero-point</span>
                 <code>z = round(−min / s)</code>
                 <code>&nbsp;&nbsp;= round(3.652)</code>
                 <code>&nbsp;&nbsp;= <strong>4</strong></code>
-                <p>The integer code that decodes to ≈ 0.0 — this is what makes it <em>asymmetric</em>.</p>
+                <p><span class="lang-en">The integer code that decodes to ≈ 0.0 — this is what makes it <em>asymmetric</em>.</span><span class="lang-ko">≈ 0.0으로 decode되는 정수 code — 이것이 <em>asymmetric</em>의 핵심이다.</span></p>
               </div>
             </div>
             <div class="kvq-formula">
@@ -247,22 +285,32 @@ const packedBytes = [
               <span>dequantize</span><code>x̂ = (q − z) × s</code>
             </div>
             <details class="kvq-more">
-              <summary>Why asymmetric? A concrete comparison</summary>
+              <summary><span class="lang-en">Why asymmetric? A concrete comparison</span><span class="lang-ko">왜 asymmetric인가? 구체적 비교</span></summary>
               <p>
-                A symmetric INT4 quantizer centers its grid at zero and must cover
-                <code>max(|min|, |max|) = 0.87</code> on <em>both</em> sides:
-                <code>s = 0.87 / 7 = 0.124</code>. This group is skewed positive
-                (max = 0.87 vs |min| = 0.28), so the asymmetric grid&apos;s step of 0.0767 is
-                <strong>38% finer</strong> for the same 4 bits — the zero-point simply slides the grid
-                to hug [min, max]. KV activations are routinely skewed, which is why asymmetric is
-                the default for cache quantization.
+                <span class="lang-en">
+                  A symmetric INT4 quantizer centers its grid at zero and must cover
+                  <code>max(|min|, |max|) = 0.87</code> on <em>both</em> sides:
+                  <code>s = 0.87 / 7 = 0.124</code>. This group is skewed positive
+                  (max = 0.87 vs |min| = 0.28), so the asymmetric grid&apos;s step of 0.0767 is
+                  <strong>38% finer</strong> for the same 4 bits — the zero-point simply slides the grid
+                  to hug [min, max]. KV activations are routinely skewed, which is why asymmetric is
+                  the default for cache quantization.
+                </span><span class="lang-ko">
+                  Symmetric INT4 quantizer는 grid를 0에 중심 맞추고
+                  <code>max(|min|, |max|) = 0.87</code>을 <em>양쪽</em> 모두 커버해야 한다:
+                  <code>s = 0.87 / 7 = 0.124</code>. 이 그룹은 양수 쪽으로 치우쳐 있어
+                  (max = 0.87 vs |min| = 0.28), 같은 4 bit로도 asymmetric grid의 스텝 0.0767이
+                  <strong>38% 더 촘촘하다</strong> — zero-point는 grid를 [min, max]에 밀착하도록
+                  밀어줄 뿐이다. KV activation은 으레 치우쳐 있으므로, cache quantization에서는
+                  asymmetric이 기본값이다.
+                </span>
               </p>
             </details>
           </section>
 
           <!-- ======== PANEL 3 · snap to grid ======== -->
           <section class="kvq-panel" data-panel="3">
-            <h3 class="kvq-panel-title"><span class="kvq-stepchip">4</span>Snap every value to the 16-level grid</h3>
+            <h3 class="kvq-panel-title"><span class="kvq-stepchip">4</span><span class="lang-en">Snap every value to the 16-level grid</span><span class="lang-ko">모든 값을 16-level grid에 스냅</span></h3>
             <div class="kvq-scroll">
               <svg class="kvq-svg" viewBox="0 0 940 220" style="min-width: 720px" role="img"
                    aria-label="Number line with 16 quantization levels; 8 FP16 values snap to their nearest level">
@@ -288,6 +336,7 @@ const packedBytes = [
                       cx={X(g.x).toFixed(1)} cy="90" r="7"
                       fill="var(--accent)" stroke="var(--surface)" stroke-width="1.5"
                       data-tip={`${g.c}: ${g.xd} → q=${g.q} → ${g.deq}  (err ${g.err})`}
+                      data-tip-ko={`${g.c}: ${g.xd} → q=${g.q} → ${g.deq}  (오차 ${g.err})`}
                     ></circle>
                     <text x={X(g.x).toFixed(1)} y="74" text-anchor="middle" class="t-small t-tert">{g.c}</text>
                   </g>
@@ -333,20 +382,20 @@ const packedBytes = [
             <div class="kvq-badges">
               <span class="tag accent">max |error| = 0.0367 ≤ s/2 = 0.0383 ✓</span>
               <span class="tag">mean |error| = 0.0225</span>
-              <span class="tag">round-to-nearest ⇒ error is bounded, not random</span>
+              <span class="tag"><span class="lang-en">round-to-nearest ⇒ error is bounded, not random</span><span class="lang-ko">round-to-nearest ⇒ error는 랜덤이 아니라 유계다</span></span>
             </div>
           </section>
 
           <!-- ======== PANEL 4 · packing ======== -->
           <section class="kvq-panel" data-panel="4">
-            <h3 class="kvq-panel-title"><span class="kvq-stepchip">5</span>Pack nibbles, pay the header, count the bytes</h3>
+            <h3 class="kvq-panel-title"><span class="kvq-stepchip">5</span><span class="lang-en">Pack nibbles, pay the header, count the bytes</span><span class="lang-ko">nibble 패킹, header 비용, 바이트 계산</span></h3>
 
-            <p class="kvq-note">Two 4-bit codes share one byte — even channel in the low nibble, odd in the high nibble.</p>
+            <p class="kvq-note"><span class="lang-en">Two 4-bit codes share one byte — even channel in the low nibble, odd in the high nibble.</span><span class="lang-ko">4-bit code 두 개가 1 byte를 나눠 쓴다 — 짝수 channel은 low nibble, 홀수 channel은 high nibble.</span></p>
             <div class="kvq-scroll">
               <div class="kvq-pack">
                 <div class="kvq-nibrow">
                   {group.map((g, i) => (
-                    <span class:list={['kvq-nib', { hi: i % 2 === 1 }]} data-tip={`${g.c} → q=${g.q} → ${g.bits}`}>
+                    <span class:list={['kvq-nib', { hi: i % 2 === 1 }]} data-tip={`${g.c} → q=${g.q} → ${g.bits}`} data-tip-ko={`${g.c} → q=${g.q} → ${g.bits}`}>
                       {g.bits}
                     </span>
                   ))}
@@ -354,27 +403,33 @@ const packedBytes = [
                 <div class="kvq-bracerow" aria-hidden="true"><span>⌄</span><span>⌄</span><span>⌄</span><span>⌄</span></div>
                 <div class="kvq-byterow">
                   {packedBytes.map((b) => (
-                    <span class="kvq-byte" data-tip={`hi: ${b.hi} · lo: ${b.lo}`}>
+                    <span class="kvq-byte" data-tip={`hi: ${b.hi} · lo: ${b.lo}`} data-tip-ko={`hi(상위): ${b.hi} · lo(하위): ${b.lo}`}>
                       <strong>{b.hex}</strong>
                       <em>{b.bits}</em>
                     </span>
                   ))}
                 </div>
-                <p class="kvq-note center">8 values · 16 B of FP16 → <strong>4 B of codes</strong></p>
+                <p class="kvq-note center"><span class="lang-en">8 values · 16 B of FP16 → <strong>4 B of codes</strong></span><span class="lang-ko">값 8개 · FP16으로 16 B → <strong>code 4 B</strong></span></p>
               </div>
             </div>
 
             <p class="kvq-note">
-              On HBM, each group also stores its header. One 128-channel group (the production size
-              used below) as a logical record — widths not to scale; real kernels usually keep
-              scales/zeros in separate contiguous arrays for coalesced loads:
+              <span class="lang-en">
+                On HBM, each group also stores its header. One 128-channel group (the production size
+                used below) as a logical record — widths not to scale; real kernels usually keep
+                scales/zeros in separate contiguous arrays for coalesced loads:
+              </span><span class="lang-ko">
+                HBM에는 각 그룹의 header도 함께 저장된다. 아래 저장 산술에 쓰는 production 크기인
+                128-channel 그룹 하나를 논리적 record로 그리면 — 폭은 비례가 아니고, 실제
+                kernel은 coalesced load를 위해 scale/zero를 보통 별도의 연속 배열에 둔다:
+              </span>
             </p>
             <div class="kvq-record" role="img" aria-label="Storage record: 64 bytes of packed codes, 2 bytes scale, 2 bytes zero-point">
               <span class="rec-codes">packed INT4 codes · 128 × 0.5 B = 64 B</span>
-              <span class="rec-scale" data-tip="scale s, stored FP16">s · 2 B</span>
-              <span class="rec-zero" data-tip="zero-point z (many kernels pack this to 4 bits too)">z · 2 B</span>
+              <span class="rec-scale" data-tip="scale s, stored FP16" data-tip-ko="scale s — FP16으로 저장">s · 2 B</span>
+              <span class="rec-zero" data-tip="zero-point z (many kernels pack this to 4 bits too)" data-tip-ko="zero-point z (많은 kernel이 이것도 4 bits로 패킹한다)">z · 2 B</span>
             </div>
-            <p class="kvq-note">68 B where FP16 needed 256 B → <strong>3.76×</strong>, i.e. <strong>4.25 effective bits</strong> per value.</p>
+            <p class="kvq-note"><span class="lang-en">68 B where FP16 needed 256 B → <strong>3.76×</strong>, i.e. <strong>4.25 effective bits</strong> per value.</span><span class="lang-ko">FP16이 256 B 쓰던 것을 68 B로 → <strong>3.76×</strong>, 즉 값당 <strong>4.25 effective bits</strong>.</span></p>
 
             <div class="kvq-cols even">
               <div class="kvq-scroll">
@@ -402,19 +457,26 @@ const packedBytes = [
               </div>
             </div>
             <details class="kvq-more">
-              <summary>The group-size dial</summary>
+              <summary><span class="lang-en">The group-size dial</span><span class="lang-ko">group-size 다이얼</span></summary>
               <p>
-                Smaller groups hug their local min/max, so the step s shrinks and rounding error
-                falls — but every group pays the 4-byte header, so effective bits rise. g = 64–128
-                is the usual sweet spot for the KV cache: the header cost drops to 0.25–0.5 bits
-                per value while each group still spans only a narrow slice of the distribution.
+                <span class="lang-en">
+                  Smaller groups hug their local min/max, so the step s shrinks and rounding error
+                  falls — but every group pays the 4-byte header, so effective bits rise. g = 64–128
+                  is the usual sweet spot for the KV cache: the header cost drops to 0.25–0.5 bits
+                  per value while each group still spans only a narrow slice of the distribution.
+                </span><span class="lang-ko">
+                  그룹이 작을수록 로컬 min/max에 밀착해 스텝 s가 줄고 rounding error도 떨어진다 —
+                  하지만 그룹마다 4-byte header를 내야 하므로 effective bits는 올라간다. KV
+                  cache에서는 g = 64–128이 통상의 sweet spot이다: header 비용이 값당 0.25–0.5
+                  bit로 떨어지면서도 각 그룹은 여전히 분포의 좁은 조각만 커버한다.
+                </span>
               </p>
             </details>
           </section>
 
           <!-- ======== PANEL 5 · read path ======== -->
           <section class="kvq-panel" data-panel="5">
-            <h3 class="kvq-panel-title"><span class="kvq-stepchip">6</span>Decode: the cache streams back, and bytes are the bill</h3>
+            <h3 class="kvq-panel-title"><span class="kvq-stepchip">6</span><span class="lang-en">Decode: the cache streams back, and bytes are the bill</span><span class="lang-ko">디코드: 캐시가 다시 스트리밍되고, 청구서는 바이트다</span></h3>
             <div class="kvq-scroll">
               <svg class="kvq-svg" viewBox="0 0 960 384" style="min-width: 760px" role="img"
                    aria-label="Animation of KV bytes streaming from HBM through L2 into an SM where dequantization and FP16 dot products happen">
@@ -437,7 +499,8 @@ const packedBytes = [
                 <rect x="665" y="84" width="240" height="40" rx="8" fill="var(--surface-warm)" stroke="var(--line)"></rect>
                 <text x="785" y="109" text-anchor="middle" class="t-small">registers / shared memory</text>
                 <rect x="665" y="134" width="240" height="46" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"
-                      data-tip="1 FMA per element ≈ 2.1 GFLOP per step ≈ 27 µs on CUDA cores — vs the ~1 ms of DRAM time it saves"></rect>
+                      data-tip="1 FMA per element ≈ 2.1 GFLOP per step ≈ 27 µs on CUDA cores — vs the ~1 ms of DRAM time it saves"
+                      data-tip-ko="element당 1 FMA ≈ step당 2.1 GFLOP ≈ CUDA core에서 27 µs — 절약해 주는 ~1 ms의 DRAM 시간 대비"></rect>
                 <text x="785" y="154" text-anchor="middle" class="t-small t-accent">dequant in-register</text>
                 <text x="785" y="171" text-anchor="middle" class="t-mono t-small">x̂ = (q − z) × s</text>
                 <rect x="665" y="190" width="240" height="46" rx="8" fill="var(--surface-warm)" stroke="var(--line)"></rect>
@@ -463,7 +526,8 @@ const packedBytes = [
                 <g>
                   <rect class="kvq-pkt" x="188" y="211" width="40" height="18" rx="4" fill="var(--accent)" style="animation-delay:0s"></rect>
                   <rect class="kvq-pkt" x="188" y="211" width="12" height="18" rx="3" fill="var(--swatch-olive)" style="animation-delay:-1.35s"
-                        data-tip="scale + zero-point headers — 6% of the traffic at g=128"></rect>
+                        data-tip="scale + zero-point headers — 6% of the traffic at g=128"
+                        data-tip-ko="scale + zero-point header — g=128에서 전체 traffic의 6%"></rect>
                   <rect class="kvq-pkt" x="188" y="211" width="40" height="18" rx="4" fill="var(--accent)" style="animation-delay:-1.5s"></rect>
                 </g>
 
@@ -478,26 +542,36 @@ const packedBytes = [
 
             <div class="kvq-cols">
               <div class="kvq-aside wide">
-                <h4>The roofline receipt (per decode step, 4,096 ctx, batch 1)</h4>
+                <h4><span class="lang-en">The roofline receipt (per decode step, 4,096 ctx, batch 1)</span><span class="lang-ko">roofline 영수증 (decode step당, 4,096 ctx, batch 1)</span></h4>
                 <ul class="kvq-ledger">
-                  <li><span>bytes read, FP16</span><code>4,096 × 512 KiB = 2.0 GiB</code></li>
-                  <li><span>bytes read, INT4 + headers</span><code>4,096 × 136 KiB = 544 MiB</code></li>
-                  <li><span>stream time @ 1.55 TB/s</span><code>1.39 ms → 0.37 ms</code></li>
-                  <li><span>extra dequant work</span><code>1.07 G elems × 1 FMA ≈ 2.1 GFLOP</code></li>
-                  <li><span>…which costs</span><code>≈ 27 µs on CUDA cores (≈ 7 µs fused)</code></li>
+                  <li><span><span class="lang-en">bytes read, FP16</span><span class="lang-ko">읽는 바이트, FP16</span></span><code>4,096 × 512 KiB = 2.0 GiB</code></li>
+                  <li><span><span class="lang-en">bytes read, INT4 + headers</span><span class="lang-ko">읽는 바이트, INT4 + headers</span></span><code>4,096 × 136 KiB = 544 MiB</code></li>
+                  <li><span><span class="lang-en">stream time @ 1.55 TB/s</span><span class="lang-ko">스트리밍 시간 @ 1.55 TB/s</span></span><code>1.39 ms → 0.37 ms</code></li>
+                  <li><span><span class="lang-en">extra dequant work</span><span class="lang-ko">추가 dequant 연산</span></span><code>1.07 G elems × 1 FMA ≈ 2.1 GFLOP</code></li>
+                  <li><span><span class="lang-en">…which costs</span><span class="lang-ko">…의 비용</span></span><code>≈ 27 µs on CUDA cores (≈ 7 µs fused)</code></li>
                   <li><span>arithmetic intensity</span><code>1 → ≈ 7.5 FLOP/B · ridge ≈ 200 FLOP/B</code></li>
                 </ul>
               </div>
               <aside class="kvq-aside">
-                <h4>Why this wins</h4>
+                <h4><span class="lang-en">Why this wins</span><span class="lang-ko">왜 이기는가</span></h4>
                 <p class="kvq-note">
-                  Decode attention does ~2 FLOPs per cached element but reads 2 bytes for it —
-                  intensity ≈ 1 FLOP/B on a machine whose break-even is ≈ 200. The GPU idles on
-                  DRAM. Quantization attacks the only term that matters: <strong>bytes</strong>.
-                  Even after adding a dequant FMA per element we sit at ≈ 7.5 FLOP/B — still deep
-                  in memory-bound territory, so runtime ≈ bytes ÷ bandwidth, and 3.76× fewer bytes
-                  ≈ 3.8× faster cache reads. The dequant &ldquo;cost&rdquo; is ~30 µs hiding under a
-                  millisecond of saved DRAM time.
+                  <span class="lang-en">
+                    Decode attention does ~2 FLOPs per cached element but reads 2 bytes for it —
+                    intensity ≈ 1 FLOP/B on a machine whose break-even is ≈ 200. The GPU idles on
+                    DRAM. Quantization attacks the only term that matters: <strong>bytes</strong>.
+                    Even after adding a dequant FMA per element we sit at ≈ 7.5 FLOP/B — still deep
+                    in memory-bound territory, so runtime ≈ bytes ÷ bandwidth, and 3.76× fewer bytes
+                    ≈ 3.8× faster cache reads. The dequant &ldquo;cost&rdquo; is ~30 µs hiding under a
+                    millisecond of saved DRAM time.
+                  </span><span class="lang-ko">
+                    Decode attention은 캐시된 element당 ~2 FLOPs를 하면서 그를 위해 2 byte를
+                    읽는다 — break-even이 ≈ 200인 기계에서 intensity ≈ 1 FLOP/B. GPU는 DRAM을
+                    기다리며 논다. Quantization은 유일하게 중요한 항인 <strong>바이트</strong>를
+                    공격한다. element당 dequant FMA를 하나 더해도 ≈ 7.5 FLOP/B — 여전히 깊은
+                    memory-bound 영역이므로 runtime ≈ bytes ÷ bandwidth이고, 바이트가 3.76× 줄면
+                    cache read는 ≈ 3.8× 빨라진다. dequant &ldquo;비용&rdquo;은 절약된 1 밀리초의
+                    DRAM 시간 아래 숨는 ~30 µs다.
+                  </span>
                 </p>
               </aside>
             </div>
@@ -505,24 +579,31 @@ const packedBytes = [
 
           <!-- ======== PANEL 6 · failure modes ======== -->
           <section class="kvq-panel" data-panel="6">
-            <h3 class="kvq-panel-title"><span class="kvq-stepchip">7</span>Where the clean picture breaks</h3>
+            <h3 class="kvq-panel-title"><span class="kvq-stepchip">7</span><span class="lang-en">Where the clean picture breaks</span><span class="lang-ko">깔끔한 그림이 깨지는 곳</span></h3>
             <div class="kvq-failgrid">
 
               <details class="kvq-fail" open>
-                <summary><span class="tag accent">K outliers</span> A few key channels run ~10× hot</summary>
+                <summary><span class="tag accent">K outliers</span> <span class="lang-en">A few key channels run ~10× hot</span><span class="lang-ko">일부 key channel은 ~10× 뜨겁게 달린다</span></summary>
                 <div class="fail-body">
                   <p>
-                    Keys have persistent outlier channels — a structure tied to rotary position
-                    embeddings and &ldquo;massive activation&rdquo; channels (documented in KVQuant and the
-                    massive-activations literature). One hot channel inside a group inflates the range,
-                    and the scale is range/15. Toy group with one outlier:
+                    <span class="lang-en">
+                      Keys have persistent outlier channels — a structure tied to rotary position
+                      embeddings and &ldquo;massive activation&rdquo; channels (documented in KVQuant and the
+                      massive-activations literature). One hot channel inside a group inflates the range,
+                      and the scale is range/15. Toy group with one outlier:
+                    </span><span class="lang-ko">
+                      Key에는 지속적인 outlier channel이 있다 — rotary position embedding과
+                      &ldquo;massive activation&rdquo; channel에 결부된 구조다 (KVQuant와
+                      massive-activations 문헌에 기록됨). 그룹 안의 뜨거운 channel 하나가 range를
+                      부풀리는데, scale은 range/15다. outlier 하나가 든 toy 그룹:
+                    </span>
                   </p>
                   <p class="kvq-mono-block">
                     [0.03, −0.05, 0.02, −0.01, 0.04, 0.01, −0.02, <strong>4.80</strong>]<br />
                     s = 4.85 / 15 = 0.323 · z = 0<br />
                     every normal value: round(x / 0.323) = 0 → decodes to exactly 0.0
                   </p>
-                  <p>Seven of eight channels are erased. The outlier is fine; everything near it dies.</p>
+                  <p><span class="lang-en">Seven of eight channels are erased. The outlier is fine; everything near it dies.</span><span class="lang-ko">8개 중 7개 channel이 지워진다. outlier는 멀쩡하고, 그 주변의 모든 값이 죽는다.</span></p>
                   <svg class="kvq-svg mini" viewBox="0 0 280 120" role="img" aria-label="Heatmap of K with two hot channel columns">
                     <rect x="20" y="10" width="240" height="84" rx="6" fill="var(--surface-warm)"></rect>
                     <rect x="60" y="10" width="20" height="84" fill="var(--accent)"></rect>
@@ -536,43 +617,74 @@ const packedBytes = [
                 <summary><span class="tag accent">axis choice</span> K per-channel, V per-token</summary>
                 <div class="fail-body">
                   <p>
-                    Because K&apos;s outliers align along <em>channels</em>, group K per-channel: each group
-                    collects one channel across consecutive tokens, so a hot channel shares a scale only
-                    with itself. V shows no persistent channel structure, so per-token grouping (one
-                    group inside each token&apos;s 128-dim vector) works and keeps the append-only streaming
-                    layout trivial — this K/V asymmetry is the central observation of KIVI. The cost of
-                    per-channel K: you must buffer a few tokens before a channel-group fills, so
-                    systems keep a small FP16 residual window of the newest tokens anyway.
+                    <span class="lang-en">
+                      Because K&apos;s outliers align along <em>channels</em>, group K per-channel: each group
+                      collects one channel across consecutive tokens, so a hot channel shares a scale only
+                      with itself. V shows no persistent channel structure, so per-token grouping (one
+                      group inside each token&apos;s 128-dim vector) works and keeps the append-only streaming
+                      layout trivial — this K/V asymmetry is the central observation of KIVI. The cost of
+                      per-channel K: you must buffer a few tokens before a channel-group fills, so
+                      systems keep a small FP16 residual window of the newest tokens anyway.
+                    </span><span class="lang-ko">
+                      K의 outlier는 <em>channel</em> 방향으로 정렬되어 있으므로 K는 per-channel로
+                      그룹화한다: 각 그룹이 연속된 토큰들에 걸쳐 channel 하나를 모으므로, 뜨거운
+                      channel은 자기 자신하고만 scale을 공유한다. V는 지속적인 channel 구조가
+                      없어 per-token 그룹화(각 토큰의 128-dim 벡터 내부에서 그룹 하나)로 충분하고
+                      append-only streaming 레이아웃도 그대로 단순하게 유지된다 — 이 K/V 비대칭이
+                      KIVI의 핵심 관측이다. per-channel K의 비용: channel-group이 찰 때까지 토큰
+                      몇 개를 버퍼링해야 하므로, 시스템들은 어차피 최신 토큰의 작은 FP16
+                      residual window를 유지한다.
+                    </span>
                   </p>
                 </div>
               </details>
 
               <details class="kvq-fail">
-                <summary><span class="tag accent">2-bit cliff</span> 4 levels is where uniform grids die</summary>
+                <summary><span class="tag accent">2-bit cliff</span> <span class="lang-en">4 levels is where uniform grids die</span><span class="lang-ko">level 4개, uniform grid가 죽는 지점</span></summary>
                 <div class="fail-body">
                   <p>
-                    At 2 bits a group has 4 codes → 3 steps; round-to-nearest noise per value is ~4×
-                    the INT4 case, and accuracy falls off a cliff rather than degrading gracefully —
-                    long-context retrieval and multi-step reasoning go first. Working 2-bit systems are
-                    never &ldquo;the same recipe, smaller grid&rdquo;: they add non-uniform (quantile/learned)
-                    levels, isolate outliers into a sparse FP16 side-band (KVQuant), tighten groups, and
-                    keep a recent-token FP16 window (KIVI). Textbook INT4 is nearly free; 2-bit is a
-                    research area.
+                    <span class="lang-en">
+                      At 2 bits a group has 4 codes → 3 steps; round-to-nearest noise per value is ~4×
+                      the INT4 case, and accuracy falls off a cliff rather than degrading gracefully —
+                      long-context retrieval and multi-step reasoning go first. Working 2-bit systems are
+                      never &ldquo;the same recipe, smaller grid&rdquo;: they add non-uniform (quantile/learned)
+                      levels, isolate outliers into a sparse FP16 side-band (KVQuant), tighten groups, and
+                      keep a recent-token FP16 window (KIVI). Textbook INT4 is nearly free; 2-bit is a
+                      research area.
+                    </span><span class="lang-ko">
+                      2 bit에서는 그룹당 code 4개 → 스텝 3개; 값당 round-to-nearest 노이즈가
+                      INT4의 ~4×이고, 정확도는 완만히 저하되는 대신 절벽처럼 떨어진다 —
+                      long-context retrieval과 multi-step reasoning이 먼저 무너진다. 동작하는
+                      2-bit 시스템은 결코 &ldquo;같은 레시피에 grid만 축소&rdquo;가 아니다:
+                      non-uniform (quantile/learned) level을 더하고, outlier를 sparse FP16
+                      side-band로 분리하고 (KVQuant), 그룹을 조이고, 최근 토큰 FP16 window를
+                      유지한다 (KIVI). 교과서식 INT4는 거의 공짜지만, 2-bit는 연구 분야다.
+                    </span>
                   </p>
                 </div>
               </details>
 
               <details class="kvq-fail">
-                <summary><span class="tag accent">sinks</span> The first tokens are load-bearing</summary>
+                <summary><span class="tag accent">sinks</span> <span class="lang-en">The first tokens are load-bearing</span><span class="lang-ko">첫 토큰들이 하중을 받치고 있다</span></summary>
                 <div class="fail-body">
                   <p>
-                    Softmax needs somewhere to park attention mass, and it picks the first few
-                    positions — the &ldquo;attention sink&rdquo; effect (StreamingLLM). Their K vectors are
-                    also outlier-heavy. Quantizing them aggressively damages every future step&apos;s
-                    attention distribution, so implementations routinely keep the first handful of
-                    tokens (and the newest 32–128) in FP16. The overhead is constant while the cache
-                    grows linearly — at 4,096 tokens, a 128-token FP16 window costs 3% of the cache
-                    for most of the accuracy back.
+                    <span class="lang-en">
+                      Softmax needs somewhere to park attention mass, and it picks the first few
+                      positions — the &ldquo;attention sink&rdquo; effect (StreamingLLM). Their K vectors are
+                      also outlier-heavy. Quantizing them aggressively damages every future step&apos;s
+                      attention distribution, so implementations routinely keep the first handful of
+                      tokens (and the newest 32–128) in FP16. The overhead is constant while the cache
+                      grows linearly — at 4,096 tokens, a 128-token FP16 window costs 3% of the cache
+                      for most of the accuracy back.
+                    </span><span class="lang-ko">
+                      Softmax는 attention mass를 세워둘 곳이 필요하고, 처음 몇 개 위치를 고른다 —
+                      &ldquo;attention sink&rdquo; 효과다 (StreamingLLM). 이 토큰들의 K 벡터는
+                      outlier도 많다. 이들을 공격적으로 quantize하면 이후 모든 스텝의 attention
+                      분포가 손상되므로, 구현들은 으레 처음 몇 개 토큰을 (그리고 최신 32–128개를)
+                      FP16으로 유지한다. 캐시는 선형으로 자라는 반면 이 오버헤드는 상수다 —
+                      4,096 토큰에서 128-토큰 FP16 window는 캐시의 3% 비용으로 정확도 대부분을
+                      되찾는다.
+                    </span>
                   </p>
                 </div>
               </details>
@@ -591,65 +703,120 @@ const packedBytes = [
   <section class="section-tight">
     <div class="container">
       <div class="prose">
-        <h2>Reading the diagram</h2>
+        <h2><span class="lang-en">Reading the diagram</span><span class="lang-ko">다이어그램 읽는 법</span></h2>
         <p>
-          The running configuration is a Llama-2-7B-shaped decoder: 32 layers, multi-head attention
-          with 32 KV heads of dimension 128, FP16 weights and activations. Every byte count above
-          follows from those four numbers. (Grouped-query models divide the cache by the head-count
-          ratio — 4× for Llama-3-8B — but change nothing structural.)
+          <span class="lang-en">
+            The running configuration is a Llama-2-7B-shaped decoder: 32 layers, multi-head attention
+            with 32 KV heads of dimension 128, FP16 weights and activations. Every byte count above
+            follows from those four numbers. (Grouped-query models divide the cache by the head-count
+            ratio — 4× for Llama-3-8B — but change nothing structural.)
+          </span><span class="lang-ko">
+            기본 설정은 Llama-2-7B 모양의 decoder다: 32 layer, dimension 128의 KV head 32개를 가진
+            multi-head attention, FP16 weight와 activation. 위의 모든 바이트 수는 이 네 숫자에서
+            따라 나온다. (Grouped-query 모델은 head-count 비율만큼 캐시를 나눈다 — Llama-3-8B는
+            4× — 하지만 구조적으로는 아무것도 바뀌지 않는다.)
+          </span>
         </p>
 
-        <h3>1 — Arrival</h3>
+        <h3>1 — <span class="lang-en">Arrival</span><span class="lang-ko">도착</span></h3>
         <p>
-          Each decode step emits one key row and one value row per head, per layer:
-          2 × 32 × 128 × 2 B = 16 KiB per layer, 512 KiB per token over 32 layers. The cache is
-          append-only and linear in context length: a single 4,096-token sequence holds 2 GiB, and a
-          batch of 8 holds 16 GiB — on a 40 GB A100 the cache, not the weights, is what caps batch
-          size. That is the entire motivation in one sentence.
+          <span class="lang-en">
+            Each decode step emits one key row and one value row per head, per layer:
+            2 × 32 × 128 × 2 B = 16 KiB per layer, 512 KiB per token over 32 layers. The cache is
+            append-only and linear in context length: a single 4,096-token sequence holds 2 GiB, and a
+            batch of 8 holds 16 GiB — on a 40 GB A100 the cache, not the weights, is what caps batch
+            size. That is the entire motivation in one sentence.
+          </span><span class="lang-ko">
+            매 decode step은 head당, layer당 key row 하나와 value row 하나를 내놓는다: layer당
+            2 × 32 × 128 × 2 B = 16 KiB, 32개 layer면 토큰당 512 KiB. 캐시는 append-only이고
+            context 길이에 선형이다: 4,096-토큰 시퀀스 하나가 2 GiB, batch 8이면 16 GiB — 40 GB
+            A100에서 batch 크기를 제한하는 것은 weight가 아니라 캐시다. 이것이 한 문장으로 요약한
+            동기의 전부다.
+          </span>
         </p>
 
-        <h3>2–4 — The quantization math</h3>
+        <h3>2–4 — <span class="lang-en">The quantization math</span><span class="lang-ko">quantization 수식</span></h3>
         <p>
-          Group-wise asymmetric INT4 stores, per group, 4-bit codes plus one FP16 scale and one
-          zero-point. The scale is <code>s = (max − min) / 15</code> — the grid step; the zero-point
-          <code>z = round(−min / s)</code> is the code that decodes to zero. Encoding is
-          <code>q = clamp(round(x/s) + z, 0, 15)</code>, decoding is <code>x̂ = (q − z) · s</code>.
-          Two properties do all the work: round-to-nearest bounds every element&apos;s error by
-          <code>s/2</code> (0.038 in the worked group — check the table), and the asymmetric grid
-          hugs [min, max] so a skewed group wastes no codes. Nothing is learned; two reduction passes
-          and a rounding, cheap enough to run inline as tokens are generated.
+          <span class="lang-en">
+            Group-wise asymmetric INT4 stores, per group, 4-bit codes plus one FP16 scale and one
+            zero-point. The scale is <code>s = (max − min) / 15</code> — the grid step; the zero-point
+            <code>z = round(−min / s)</code> is the code that decodes to zero. Encoding is
+            <code>q = clamp(round(x/s) + z, 0, 15)</code>, decoding is <code>x̂ = (q − z) · s</code>.
+            Two properties do all the work: round-to-nearest bounds every element&apos;s error by
+            <code>s/2</code> (0.038 in the worked group — check the table), and the asymmetric grid
+            hugs [min, max] so a skewed group wastes no codes. Nothing is learned; two reduction passes
+            and a rounding, cheap enough to run inline as tokens are generated.
+          </span><span class="lang-ko">
+            Group-wise asymmetric INT4는 그룹마다 4-bit code와 FP16 scale 하나, zero-point 하나를
+            저장한다. scale은 <code>s = (max − min) / 15</code> — grid 스텝이고, zero-point
+            <code>z = round(−min / s)</code>는 0으로 decode되는 code다. 인코딩은
+            <code>q = clamp(round(x/s) + z, 0, 15)</code>, 디코딩은 <code>x̂ = (q − z) · s</code>.
+            두 성질이 모든 일을 한다: round-to-nearest는 모든 element의 error를
+            <code>s/2</code>로 유계 짓고 (위 그룹에서 0.038 — 표에서 확인), asymmetric grid는
+            [min, max]에 밀착해 치우친 그룹도 code를 낭비하지 않는다. 학습되는 것은 없다;
+            reduction 두 번과 rounding 한 번, 토큰이 생성되는 동안 인라인으로 돌 만큼 싸다.
+          </span>
         </p>
 
-        <h3>5 — Packing</h3>
+        <h3>5 — <span class="lang-en">Packing</span><span class="lang-ko">패킹</span></h3>
         <p>
-          Two codes per byte (low nibble = even channel), so 128 values pack into 64 B; the header
-          adds 4 B. 68 B versus 256 B in FP16 is 3.76×, or 4.25 effective bits per value — the
-          honest number to quote, since the scale/zero overhead is real traffic and real capacity.
-          Group size is a dial: g = 32 costs a full extra bit per value but quantizes tighter
-          slices; g = 128 pays 0.25 bit. Per token, the model&apos;s cache line shrinks from
-          512 KiB to 136 KiB.
+          <span class="lang-en">
+            Two codes per byte (low nibble = even channel), so 128 values pack into 64 B; the header
+            adds 4 B. 68 B versus 256 B in FP16 is 3.76×, or 4.25 effective bits per value — the
+            honest number to quote, since the scale/zero overhead is real traffic and real capacity.
+            Group size is a dial: g = 32 costs a full extra bit per value but quantizes tighter
+            slices; g = 128 pays 0.25 bit. Per token, the model&apos;s cache line shrinks from
+            512 KiB to 136 KiB.
+          </span><span class="lang-ko">
+            byte당 code 두 개 (low nibble = 짝수 channel), 그래서 128개 값이 64 B로 패킹되고
+            header가 4 B를 더한다. FP16의 256 B 대비 68 B는 3.76×, 즉 값당 4.25 effective bits —
+            scale/zero 오버헤드는 실제 트래픽이자 실제 용량이므로 이것이 정직하게 인용할 숫자다.
+            group size는 다이얼이다: g = 32는 값당 온전히 1 bit를 더 내는 대신 더 좁은 조각을
+            quantize하고, g = 128은 0.25 bit를 낸다. 토큰당 모델의 cache line은 512 KiB에서
+            136 KiB로 줄어든다.
+          </span>
         </p>
 
-        <h3>6 — Why it&apos;s fast, not just small</h3>
+        <h3>6 — <span class="lang-en">Why it&apos;s fast, not just small</span><span class="lang-ko">작아질 뿐 아니라 빨라지는 이유</span></h3>
         <p>
-          Decode attention must read the K and V of every cached token to produce one new token:
-          ~2 FLOPs per cached element against 2 bytes read. That is an arithmetic intensity of
-          ~1 FLOP/B on hardware that breaks even near 200 — the definition of memory-bound, so
-          runtime is bytes ÷ bandwidth and nothing else. Quantization cuts the bytes 3.76×; the
-          added dequant is one fused multiply-add per element (~2.1 GFLOP per step at 4K context,
-          ~30 µs) executed in registers while the next block streams in. You trade a millisecond of
-          DRAM stall for microseconds of arithmetic. The same logic explains why weight-only
-          quantization speeds up decode at batch 1: whenever the roofline says memory, compression
-          is a latency optimization wearing a capacity costume.
+          <span class="lang-en">
+            Decode attention must read the K and V of every cached token to produce one new token:
+            ~2 FLOPs per cached element against 2 bytes read. That is an arithmetic intensity of
+            ~1 FLOP/B on hardware that breaks even near 200 — the definition of memory-bound, so
+            runtime is bytes ÷ bandwidth and nothing else. Quantization cuts the bytes 3.76×; the
+            added dequant is one fused multiply-add per element (~2.1 GFLOP per step at 4K context,
+            ~30 µs) executed in registers while the next block streams in. You trade a millisecond of
+            DRAM stall for microseconds of arithmetic. The same logic explains why weight-only
+            quantization speeds up decode at batch 1: whenever the roofline says memory, compression
+            is a latency optimization wearing a capacity costume.
+          </span><span class="lang-ko">
+            Decode attention은 새 토큰 하나를 만들기 위해 캐시된 모든 토큰의 K와 V를 읽어야
+            한다: 캐시된 element당 ~2 FLOPs에 2 byte 읽기. break-even이 200 근처인 하드웨어에서
+            arithmetic intensity ~1 FLOP/B — memory-bound의 정의 그 자체이므로, runtime은
+            bytes ÷ bandwidth이고 그 외의 어떤 것도 아니다. Quantization은 바이트를 3.76×
+            줄인다; 추가되는 dequant는 element당 fused multiply-add 하나로 (4K context에서
+            스텝당 ~2.1 GFLOP, ~30 µs), 다음 블록이 스트리밍되는 동안 register에서 실행된다.
+            1 밀리초의 DRAM stall을 수십 마이크로초의 산술과 맞바꾸는 셈이다. 같은 논리가
+            batch 1에서 weight-only quantization이 decode를 빠르게 하는 이유도 설명한다:
+            roofline이 memory라고 말하는 한, 압축은 용량이라는 의상을 입은 latency 최적화다.
+          </span>
         </p>
 
-        <h3>7 — The caveats that define the field</h3>
+        <h3>7 — <span class="lang-en">The caveats that define the field</span><span class="lang-ko">이 분야를 정의하는 주의사항들</span></h3>
         <p>
-          The textbook recipe survives contact with K&apos;s outlier channels only if the grouping
-          axis respects them (per-channel K, per-token V), survives long contexts only if sink and
-          recent tokens keep full precision, and does not survive 2 bits without non-uniform levels
-          or outlier side-bands. Those three caveats are, roughly, the table of contents of the
-          post-2023 KV-quantization literature (KIVI, KVQuant, and their descendants).
+          <span class="lang-en">
+            The textbook recipe survives contact with K&apos;s outlier channels only if the grouping
+            axis respects them (per-channel K, per-token V), survives long contexts only if sink and
+            recent tokens keep full precision, and does not survive 2 bits without non-uniform levels
+            or outlier side-bands. Those three caveats are, roughly, the table of contents of the
+            post-2023 KV-quantization literature (KIVI, KVQuant, and their descendants).
+          </span><span class="lang-ko">
+            교과서 레시피는 grouping 축이 K의 outlier channel을 존중할 때만 (per-channel K,
+            per-token V) 그와의 접촉에서 살아남고, sink와 최근 토큰이 full precision을 유지할
+            때만 long context에서 살아남으며, non-uniform level이나 outlier side-band 없이는
+            2 bit에서 살아남지 못한다. 이 세 가지 주의사항이 대략 2023년 이후 KV-quantization
+            문헌의 목차다 (KIVI, KVQuant, 그리고 그 후손들).
+          </span>
         </p>
       </div>
     </div>
@@ -658,40 +825,48 @@ const packedBytes = [
   <!-- ============ going deeper ============ -->
   <section class="section-tight">
     <div class="container">
-      <p class="eyebrow">Going deeper</p>
-      <h2>Primary sources</h2>
+      <p class="eyebrow"><span class="lang-en">Going deeper</span><span class="lang-ko">더 깊이</span></p>
+      <h2><span class="lang-en">Primary sources</span><span class="lang-ko">1차 자료</span></h2>
       <div class="card-grid" style="margin-top: 1.4rem">
         <a class="card" href="https://arxiv.org/abs/2402.02750" target="_blank" rel="noopener">
           <span class="card-kicker">arXiv 2402.02750</span>
           <h3>KIVI — Liu et al., 2024</h3>
-          <p>Tuning-free 2-bit KV quantization; source of the per-channel-K / per-token-V asymmetry and the FP16 residual window.</p>
-          <span class="card-meta">the axis-choice paper</span>
+          <p><span class="lang-en">Tuning-free 2-bit KV quantization; source of the per-channel-K / per-token-V asymmetry and the FP16 residual window.</span><span class="lang-ko">Tuning-free 2-bit KV quantization; per-channel-K / per-token-V 비대칭과 FP16 residual window의 출처.</span></p>
+          <span class="card-meta"><span class="lang-en">the axis-choice paper</span><span class="lang-ko">axis-choice 논문</span></span>
         </a>
         <a class="card" href="https://arxiv.org/abs/2401.18079" target="_blank" rel="noopener">
           <span class="card-kicker">arXiv 2401.18079</span>
           <h3>KVQuant — Hooper et al., 2024</h3>
-          <p>Non-uniform quantization levels plus sparse outlier isolation; what it takes to push below 3 bits at long context.</p>
-          <span class="card-meta">the sub-4-bit playbook</span>
+          <p><span class="lang-en">Non-uniform quantization levels plus sparse outlier isolation; what it takes to push below 3 bits at long context.</span><span class="lang-ko">Non-uniform quantization level과 sparse outlier 분리; long context에서 3 bit 아래로 내려가는 데 필요한 것들.</span></p>
+          <span class="card-meta"><span class="lang-en">the sub-4-bit playbook</span><span class="lang-ko">sub-4-bit 플레이북</span></span>
         </a>
         <a class="card" href="https://arxiv.org/abs/2309.17453" target="_blank" rel="noopener">
           <span class="card-kicker">arXiv 2309.17453</span>
           <h3>StreamingLLM — Xiao et al., 2023</h3>
-          <p>Attention sinks: why the first tokens absorb attention mass and must be treated gently by any cache compression.</p>
-          <span class="card-meta">why sinks are load-bearing</span>
+          <p><span class="lang-en">Attention sinks: why the first tokens absorb attention mass and must be treated gently by any cache compression.</span><span class="lang-ko">Attention sink: 왜 첫 토큰들이 attention mass를 흡수하며, 어떤 cache compression이든 이들을 조심히 다뤄야 하는 이유.</span></p>
+          <span class="card-meta"><span class="lang-en">why sinks are load-bearing</span><span class="lang-ko">sink가 하중을 받치는 이유</span></span>
         </a>
         <a class="card" href="https://arxiv.org/abs/2211.05102" target="_blank" rel="noopener">
           <span class="card-kicker">arXiv 2211.05102</span>
           <h3>Pope et al., 2022</h3>
-          <p>Efficiently Scaling Transformer Inference — the memory-bound decode arithmetic this whole page rests on.</p>
-          <span class="card-meta">the roofline foundation</span>
+          <p><span class="lang-en">Efficiently Scaling Transformer Inference — the memory-bound decode arithmetic this whole page rests on.</span><span class="lang-ko">Efficiently Scaling Transformer Inference — 이 페이지 전체가 기대고 있는 memory-bound decode 산술.</span></p>
+          <span class="card-meta"><span class="lang-en">the roofline foundation</span><span class="lang-ko">roofline의 기초</span></span>
         </a>
       </div>
-      <p style="margin-top: 2rem"><a class="arrow-link" href="/study/">Back to all study notes</a></p>
+      <p style="margin-top: 2rem"><a class="arrow-link" href="/study/"><span class="lang-en">Back to all study notes</span><span class="lang-ko">모든 study 노트로 돌아가기</span></a></p>
     </div>
   </section>
 </Base>
 
 <style>
+  .hero-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
   .hero-tags {
     display: flex;
     flex-wrap: wrap;
@@ -1158,14 +1333,42 @@ const packedBytes = [
   const root = document.getElementById('kvq-explorer');
 
   const captions = [
-    'A new token has just been decoded. Its key and value tensors — [32 heads × 128 dim] in FP16, per layer — are appended to the cache: 16 KiB per layer, 512 KiB per token across all 32 layers. Hover any head cell for its exact size.',
-    'Quantization never sees the whole tensor. It works group-by-group. Here are 8 real FP16 channel values from one key row — the group we are about to compress from 16 bytes to 4.',
-    'One pass finds min = −0.28 and max = 0.87. Two numbers fall out: the scale s = 0.07667 (width of one grid step) and the zero-point z = 4 (the integer code that decodes to 0.0).',
-    'Every value snaps to the nearest of 16 grid levels: q = round(x/s) + z. Hover the dots — each rounding error is bounded by half a step, s/2 = 0.0383. The table shows the full arithmetic per element.',
-    'Two 4-bit codes share each byte, low nibble first. 16 bytes of FP16 became 4 bytes of codes plus a shared scale and zero-point — 3.76× smaller at group size 128, i.e. 4.25 effective bits per value.',
-    'Decode-time attention must re-read every cached token. Packed codes and scales stream HBM → L2 → SM; dequant is one FMA per element in registers; dot products stay FP16. Attention is memory-bound, so 3.76× fewer bytes ≈ 3.8× faster cache reads.',
-    'Where the clean picture breaks: outlier channels in K wreck shared scales, the grouping axis must differ for K and V, the first tokens are load-bearing, and uniform grids fall off a cliff at 2 bits. Click each card.',
+    {
+      en: 'A new token has just been decoded. Its key and value tensors — [32 heads × 128 dim] in FP16, per layer — are appended to the cache: 16 KiB per layer, 512 KiB per token across all 32 layers. Hover any head cell for its exact size.',
+      ko: '새 토큰 하나가 방금 decode되었다. 그 key와 value tensor — layer당 FP16 [32 heads × 128 dim] — 가 캐시에 append된다: layer당 16 KiB, 32개 layer 전체로 토큰당 512 KiB. head 셀에 마우스를 올리면 정확한 크기가 보인다.',
+    },
+    {
+      en: 'Quantization never sees the whole tensor. It works group-by-group. Here are 8 real FP16 channel values from one key row — the group we are about to compress from 16 bytes to 4.',
+      ko: 'Quantization은 tensor 전체를 보지 않는다. 그룹 단위로 동작한다. 여기 한 key row에서 가져온 실제 FP16 channel 값 8개가 있다 — 지금부터 16 byte를 4 byte로 압축할 그룹이다.',
+    },
+    {
+      en: 'One pass finds min = −0.28 and max = 0.87. Two numbers fall out: the scale s = 0.07667 (width of one grid step) and the zero-point z = 4 (the integer code that decodes to 0.0).',
+      ko: '한 번의 스캔으로 min = −0.28, max = 0.87을 찾는다. 숫자 두 개가 따라 나온다: scale s = 0.07667 (grid 한 스텝의 폭)과 zero-point z = 4 (0.0으로 decode되는 정수 code).',
+    },
+    {
+      en: 'Every value snaps to the nearest of 16 grid levels: q = round(x/s) + z. Hover the dots — each rounding error is bounded by half a step, s/2 = 0.0383. The table shows the full arithmetic per element.',
+      ko: '모든 값이 16개 grid level 중 가장 가까운 곳으로 스냅된다: q = round(x/s) + z. 점 위에 마우스를 올려 보라 — 각 rounding error는 반 스텝 s/2 = 0.0383으로 유계다. 표에 element별 전체 산술이 있다.',
+    },
+    {
+      en: 'Two 4-bit codes share each byte, low nibble first. 16 bytes of FP16 became 4 bytes of codes plus a shared scale and zero-point — 3.76× smaller at group size 128, i.e. 4.25 effective bits per value.',
+      ko: '4-bit code 두 개가 byte 하나를 나눠 쓴다, low nibble 먼저. FP16 16 byte가 code 4 byte + 공유 scale/zero-point가 되었다 — group size 128에서 3.76× 축소, 즉 값당 4.25 effective bits.',
+    },
+    {
+      en: 'Decode-time attention must re-read every cached token. Packed codes and scales stream HBM → L2 → SM; dequant is one FMA per element in registers; dot products stay FP16. Attention is memory-bound, so 3.76× fewer bytes ≈ 3.8× faster cache reads.',
+      ko: 'Decode-time attention은 캐시된 모든 토큰을 다시 읽어야 한다. 패킹된 code와 scale이 HBM → L2 → SM으로 스트리밍되고, dequant는 register에서 element당 FMA 하나, dot product는 FP16 그대로다. Attention은 memory-bound이므로 바이트 3.76× 감소 ≈ cache read 3.8× 가속.',
+    },
+    {
+      en: 'Where the clean picture breaks: outlier channels in K wreck shared scales, the grouping axis must differ for K and V, the first tokens are load-bearing, and uniform grids fall off a cliff at 2 bits. Click each card.',
+      ko: '깔끔한 그림이 깨지는 곳: K의 outlier channel이 공유 scale을 망가뜨리고, grouping 축은 K와 V가 달라야 하며, 첫 토큰들은 하중을 받치고 있고, uniform grid는 2 bit에서 절벽으로 떨어진다. 각 카드를 클릭해 보라.',
+    },
   ];
+
+  const captionFor = (i) => {
+    const c = captions[i];
+    if (!c) return '';
+    const lang = typeof window.siteLang === 'function' ? window.siteLang() : 'en';
+    return lang === 'ko' ? c.ko : c.en;
+  };
 
   if (root) {
     root.classList.add('js');
@@ -1188,9 +1391,13 @@ const packedBytes = [
         p.classList.toggle('active', i === current);
         p.setAttribute('aria-selected', i === current ? 'true' : 'false');
       });
-      if (capText) capText.textContent = captions[current] || '';
+      if (capText) capText.textContent = captionFor(current);
       if (stepNum) stepNum.textContent = 'Step ' + (current + 1) + ' / ' + panels.length;
     }
+
+    window.addEventListener('site-langchange', () => {
+      if (capText) capText.textContent = captionFor(current);
+    });
 
     function stopPlay() {
       if (timer !== null) {
@@ -1246,9 +1453,11 @@ const packedBytes = [
         tip.style.left = x + 'px';
         tip.style.top = y + 'px';
       };
+      const curLang = () => (window.siteLang ? window.siteLang() : 'en');
       root.querySelectorAll('[data-tip]').forEach((el) => {
         el.addEventListener('mouseenter', (e) => {
-          tip.textContent = el.getAttribute('data-tip') || '';
+          const ko = el.getAttribute('data-tip-ko');
+          tip.textContent = (curLang() === 'ko' && ko ? ko : el.getAttribute('data-tip')) || '';
           tip.hidden = false;
           place(e);
         });
