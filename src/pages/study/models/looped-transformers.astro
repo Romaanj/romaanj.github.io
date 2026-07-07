@@ -1,0 +1,1654 @@
+---
+import Base from '../../../layouts/Base.astro';
+import LangToggle from '../../../components/LangToggle.astro';
+
+// ------------------------------------------------------------------
+// All numbers on this page come from published papers / public repos
+// (fetched 2026-07-07): Huginn arXiv 2502.05171; Parcae arXiv 2604.12946
+// + github.com/SandyResearch/parcae; LOTUS arXiv 2606.31779; Universal
+// Transformer arXiv 1807.03819; ALBERT arXiv 1909.11942; looped-TF
+// arXiv 2311.12424; Mixture-of-Recursions arXiv 2507.10524; Ouro arXiv
+// 2510.25741. Derived arithmetic is labeled "estimate" / [RE] in place.
+// ------------------------------------------------------------------
+
+// (a) standard 32-layer strip — worked example: equal width d, per-layer params p
+const stdLayers = Array.from({ length: 32 }, (_, i) => {
+  const n = i + 1;
+  return {
+    i,
+    n,
+    tipEn: `Layer ${n} of 32 — its own weight matrices (p params). Stored once, read from HBM once per token at batch-1 decode. No other layer can reuse these bytes.`,
+    tipKo: `Layer ${n} / 32 — 자기만의 weight 행렬 (p params). 저장도 한 번, batch-1 decode에서 token마다 HBM 읽기도 한 번. 다른 layer는 이 byte를 재사용할 수 없다.`,
+  };
+});
+
+// (c) stability trajectories — schematic scalar model x_{t+1} = ρ·x_t + 1
+// (stand-in for h_{t+1} = Ā h_t + B̄ e; fixed point 1/(1−ρ) when ρ < 1)
+const T_STAB = 24;
+const stabTraj = (rho, x0) => {
+  const pts = [];
+  let x = x0;
+  for (let t = 0; t <= T_STAB; t++) {
+    pts.push(x);
+    x = rho * x + 1;
+  }
+  return pts;
+};
+const stabX = (t) => 70 + (t / T_STAB) * 630;
+const stabY = (v) => 300 - (Math.min(v, 12) / 12) * 250;
+const stabPts = (rho, x0) =>
+  stabTraj(rho, x0)
+    .map((v, t) => `${stabX(t).toFixed(1)},${stabY(v).toFixed(1)}`)
+    .join(' ');
+const PTS_CONV_A = stabPts(0.8, 9);   // ρ<1, init far above the fixed point
+const PTS_CONV_B = stabPts(0.8, 0.5); // ρ<1, init near zero — same fixed point
+const PTS_DIV = stabPts(1.05, 0.5);   // ρ>1 — residual state explosion
+const PTS_USER = stabPts(0.95, 0.5);  // default slider curve (JS redraws)
+const FP_Y = stabY(1 / (1 - 0.8));    // fixed point of the ρ=0.8 pair
+
+// (d1) Huginn depth-sampling pmf: τ ~ N(log r̄ − σ²/2, σ), r ~ Poisson(e^τ) + 1
+// with σ = 1/2, r̄ = 32 (arXiv 2502.05171 §3.3) — numerically integrated here.
+const SIG = 0.5;
+const RBAR = 32;
+const MU = Math.log(RBAR) - (SIG * SIG) / 2;
+const R_MAX = 80;
+const pmf = new Array(R_MAX + 1).fill(0);
+let wsum = 0;
+for (let g = 0; g <= 120; g++) {
+  const z = -4 + (8 * g) / 120;
+  const w = Math.exp((-z * z) / 2);
+  wsum += w;
+  const lam = Math.exp(MU + SIG * z);
+  let p = Math.exp(-lam);
+  for (let k = 0; k < R_MAX; k++) {
+    pmf[k + 1] += w * p;
+    p *= lam / (k + 1);
+  }
+}
+for (let r = 1; r <= R_MAX; r++) pmf[r] /= wsum;
+const pmfMax = Math.max(...pmf);
+const depthBars = Array.from({ length: R_MAX }, (_, i) => ({
+  r: i + 1,
+  x: 60 + i * 8,
+  h: (pmf[i + 1] / pmfMax) * 170,
+}));
+
+// (e1) test-time scaling — schematic curves with the saturating-exponential
+// SHAPE Parcae fits (L(T) = L∞ + Z·e^{−zT}) and the task split Huginn reports
+// (HellaSwag near-saturates by r≈8; GSM8K still improves at r≈32–64).
+const rX = (r) => 70 + (Math.log2(r) / 6) * 630;
+const qA = (r) => 78 - 33 * Math.exp(-0.8 * (r - 1)); // recall-style task
+const qB = (r) => 70 - 40 * Math.exp(-0.05 * r);      // reasoning-style task
+const qY = (q) => 300 - (q / 100) * 250;
+const curvePts = (f) => {
+  const seg = [];
+  for (let i = 0; i <= 60; i++) {
+    const r = Math.pow(2, i / 10);
+    seg.push(`${rX(r).toFixed(1)},${qY(f(r)).toFixed(1)}`);
+  }
+  return seg.join(' ');
+};
+const PTS_QA = curvePts(qA);
+const PTS_QB = curvePts(qB);
+
+// (f) accounting bars — [RE] worked example: 4-layer core × 8 loops vs 32
+// unique layers, equal width. Units = "per-layer" (p params / 1 application /
+// 1 layer-read / 1 layer-cache). Scale: 32 units → 560 px.
+const U = 560 / 32;
+const accGroups = [
+  {
+    label: 'unique weight bytes (storage)',
+    y: 64,
+    bars: [
+      { name: '32L standard', w: 32 * U, cls: 'ab-std', txt: '32 p' },
+      { name: '4L core × 8', w: 4 * U, cls: 'ab-loop', txt: '4 p (+prelude/coda)', extra: 2 * U },
+    ],
+    verdict: '≈ 8× fewer unique bytes to store — the core IS the win',
+    tipEn: 'Storage and capacity: the looped model keeps 4 unique layers (plus a thin prelude/coda) where the standard net keeps 32. [RE] worked example at equal width.',
+    tipKo: '저장 용량: looped 모델은 unique layer 4개(+얇은 prelude/coda)만 저장하고, standard는 32개를 저장한다. [RE] 동일 폭 가정의 계산 예시.',
+  },
+  {
+    label: 'FLOPs / token',
+    y: 148,
+    bars: [
+      { name: '32L standard', w: 32 * U, cls: 'ab-std', txt: '32 layer-applications' },
+      { name: '4L core × 8', w: 32 * U, cls: 'ab-loop', txt: '4 × 8 = 32 — equal' },
+    ],
+    verdict: 'equal — FLOPs scale with r, not with unique layers',
+    tipEn: 'Compute does not shrink: 32 layer-applications either way. Looping trades storage for repeated compute. [RE]',
+    tipKo: '연산량은 줄지 않는다: 어느 쪽이든 32번의 layer-application. looping은 저장 공간을 반복 연산과 맞바꾼다. [RE]',
+  },
+  {
+    label: 'HBM weight-reads / token (batch-1 decode)',
+    y: 232,
+    bars: [
+      { name: '32L standard', w: 32 * U, cls: 'ab-std', txt: '32 layer-reads' },
+      { name: '4L core × 8', w: 32 * U, cls: 'ab-loop', txt: '32 layer-reads — equal' },
+    ],
+    verdict: 'equal — the core does not fit in SRAM, so it is re-read every loop',
+    tipEn: 'A 4-layer core at d=2048 is ≈400 MB in BF16 — far beyond on-chip SRAM, so each loop re-reads it from HBM. At matched effective depth, looping does NOT cut decode weight bandwidth. [RE]',
+    tipKo: 'd=2048에서 4-layer core는 BF16으로 ≈400 MB — on-chip SRAM을 한참 넘어서므로 loop마다 HBM에서 다시 읽는다. 동일 유효 깊이에서 looping은 decode weight bandwidth를 줄이지 못한다. [RE]',
+  },
+  {
+    label: 'KV-cache bytes / token',
+    y: 316,
+    bars: [
+      { name: '32L standard', w: 32 * U, cls: 'ab-std', txt: '32 layer-caches' },
+      { name: '4L × 8, naive', w: 32 * U, cls: 'ab-loop', txt: '8 iters × 4 layers = 32' },
+      { name: '4L × 8, i mod 4', w: 16 * U, cls: 'ab-kv', txt: '4 slots × 4 layers = 16 — 2×↓' },
+    ],
+    verdict: 'naive KV grows with loops; budgeted sharing claws it back',
+    tipEn: 'Each loop iteration runs attention again, so naive KV is per (iteration × core layer) — same as 32 unique layers. Huginn’s i-mod-k sharing with budget 4 halves it at zero reported MTBench cost (5.86). [RE on verified mechanism]',
+    tipKo: 'loop iteration마다 attention이 다시 돌므로 naive KV는 (iteration × core layer) 단위 — unique 32 layers와 같다. Huginn의 i mod k 공유(budget 4)는 보고된 MTBench 손실 0으로 (5.86) 이를 절반으로 줄인다. [검증된 메커니즘 위의 RE]',
+  },
+];
+---
+
+<Base
+  title="Looped transformers: depth as a runtime knob — Junwon Lee"
+  description="Interactive explorer of looped / recurrent-depth transformers: the prelude–core–coda sandwich, input re-injection (Huginn, Parcae, LOTUS), loop-axis stability, random-depth training, test-time depth scaling, and the params-vs-FLOPs-vs-bytes accounting."
+>
+  <div class="loop-page">
+    <section class="section">
+      <div class="container">
+        <p class="eyebrow">Study · Model anatomy</p>
+        <h1>
+          <span class="lang-en">Looped transformers: depth as a runtime knob</span>
+          <span class="lang-ko">Looped Transformer: 런타임 노브가 된 깊이</span>
+        </h1>
+        <p class="lede">
+          <span class="lang-en">
+            A looped transformer stores a few layers once and applies them many times: a prelude
+            embeds the input, a weight-tied core iterates, a coda decodes. Parameters stop tracking
+            depth — and depth becomes something you choose at inference time. This page walks the
+            verified mechanics of Huginn, Parcae, and LOTUS: how the loop is fed, why naive loops
+            explode, how random-depth training works, and what the efficiency ledger actually says.
+          </span>
+          <span class="lang-ko">
+            Looped transformer는 layer 몇 개를 한 번만 저장하고 여러 번 적용한다: prelude가 입력을
+            embed하고, weight-tied core가 반복되고, coda가 decode한다. 파라미터 수는 더 이상 깊이를
+            따라가지 않는다 — 깊이는 inference 시점에 고르는 값이 된다. 이 페이지는 Huginn, Parcae,
+            LOTUS의 검증된 메커니즘을 따라간다: loop에 입력을 어떻게 먹이는지, naive loop는 왜
+            폭발하는지, random-depth 학습은 어떻게 하는지, 그리고 효율 장부에 실제로 뭐가 적히는지.
+          </span>
+        </p>
+
+        <div class="toggle-row"><LangToggle /></div>
+
+        <div class="jump-row">
+          <a class="tag" href="#shape-view">1 · The shape</a>
+          <a class="tag" href="#feed-view">2 · Feeding the loop</a>
+          <a class="tag" href="#stab-view">3 · Stability</a>
+          <a class="tag" href="#train-view">4 · Training</a>
+          <a class="tag" href="#scale-view">5 · Test-time depth</a>
+          <a class="tag" href="#eff-view">6 · The accounting</a>
+        </div>
+
+        <div class="config-note">
+          <span class="config-lead">
+            <span class="lang-en">Models on this page — from the published papers and the public
+              <code>SandyResearch/parcae</code> repo:</span>
+            <span class="lang-ko">이 페이지의 모델들 — 공개 논문과 public
+              <code>SandyResearch/parcae</code> repo에서 확인:</span>
+          </span>
+          <span class="tag accent">Huginn 3.5B — prelude 2 / core 4 / coda 2, trained r̄ = 32</span>
+          <span class="tag">Parcae-1.3B — 8 / 8 / 8, r = 8</span>
+          <span class="tag">LOTUS 3B — K = 6 × c = 25 latents, R = 6</span>
+          <span class="tag">arXiv 2502.05171 · 2604.12946 · 2606.31779</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 1 · THE SHAPE ============ -->
+    <section class="section-tight" id="shape-view">
+      <div class="container">
+        <h2 class="viz-h">
+          <span class="lang-en">1 · The shape: two ways to be 32 layers deep</span>
+          <span class="lang-ko">1 · 형태: 32 layer 깊이가 되는 두 가지 방법</span>
+        </h2>
+        <p class="viz-sub">
+          <span class="lang-en">Left: a standard net, 32 unique layers. Right: the sandwich —
+            prelude → weight-tied core × 8 → coda. Both apply 32 layer-transformations per token;
+            only one stores 32 layers’ worth of weights. Hover every box.</span>
+          <span class="lang-ko">왼쪽: standard net, unique layer 32개. 오른쪽: 샌드위치 —
+            prelude → weight-tied core × 8 → coda. 둘 다 token마다 32번의 layer 변환을 적용하지만,
+            32개 layer 분량의 weight를 저장하는 쪽은 하나뿐이다. 모든 박스에 hover해 보자.</span>
+        </p>
+
+        <div class="viz-frame">
+          <div class="loop-scroll">
+          <svg viewBox="0 0 880 470" role="img" aria-label="A standard 32-layer transformer next to a looped transformer with a 2-layer prelude, a 4-layer weight-tied core looped 8 times, and a 2-layer coda" style="width:100%; height:auto; min-width:820px;">
+            <defs>
+              <marker id="arrL" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+                <path d="M0,0 L10,5 L0,10 z" fill="#87857c"></path>
+              </marker>
+              <marker id="arrLoop" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+                <path d="M0,0 L10,5 L0,10 z" fill="#c15f3c"></path>
+              </marker>
+            </defs>
+
+            <!-- ===== left: standard ===== -->
+            <text class="stitle" x="115" y="26" text-anchor="middle">standard — 32 unique layers</text>
+            {stdLayers.map((l) => (
+              <g data-tip={l.tipEn} data-tip-ko={l.tipKo}>
+                <rect class="std-cell" x="50" y={44 + l.i * 12} width="130" height="10" rx="2"></rect>
+              </g>
+            ))}
+            {[1, 8, 16, 24, 32].map((n) => (
+              <text class="mlabel" x="42" y={44 + (n - 1) * 12 + 9} text-anchor="end">{n}</text>
+            ))}
+            <g data-tip="Every layer is distinct: 32 p parameters total. Depth is frozen into the parameter count at training time." data-tip-ko="모든 layer가 서로 다르다: 총 32 p 파라미터. 깊이가 학습 시점에 파라미터 수에 얼어붙는다.">
+              <rect class="tally tally-std" x="50" y="436" width="130" height="26" rx="7"></rect>
+              <text class="smono" x="115" y="453" text-anchor="middle">32 p unique params</text>
+            </g>
+
+            <!-- ===== middle: equivalence note ===== -->
+            <g data-tip="Both stacks perform 32 layer-applications per token — identical FLOPs. What differs is how many of those applications share weights. [RE] worked example."
+               data-tip-ko="두 스택 모두 token마다 32번의 layer-application을 수행한다 — FLOPs는 동일. 다른 것은 그중 몇 번이 weight를 공유하느냐다. [RE] 계산 예시.">
+              <rect class="sbox sbox-warm" x="230" y="210" width="150" height="64" rx="9"></rect>
+              <text class="stitle sm" x="305" y="236" text-anchor="middle">same effective depth</text>
+              <text class="smono" x="305" y="256" text-anchor="middle">32 applications / token</text>
+            </g>
+            <line class="flowline-thin" x1="188" y1="242" x2="228" y2="242"></line>
+            <line class="flowline-thin" x1="382" y1="242" x2="428" y2="242"></line>
+
+            <!-- ===== right: looped sandwich ===== -->
+            <text class="stitle" x="620" y="26" text-anchor="middle">looped — prelude → core × 8 → coda</text>
+
+            <g data-tip="Prelude P: a few unique layers that embed the input into the loop’s working space. Huginn uses 2; Parcae-1.3B uses 8. Runs once per token." data-tip-ko="Prelude P: 입력을 loop의 작업 공간으로 embed하는 소수의 unique layer. Huginn은 2개, Parcae-1.3B는 8개. token마다 한 번만 실행.">
+              <rect class="sbox" x="470" y="44" width="300" height="30" rx="8"></rect>
+              <text class="stitle sm" x="620" y="63" text-anchor="middle">prelude P — 2 unique layers, runs once</text>
+            </g>
+            <line class="flowline" x1="620" y1="74" x2="620" y2="96" marker-end="url(#arrL)"></line>
+
+            <!-- core container -->
+            <g data-tip="The weight-tied core: these 4 layers are stored ONCE and applied 8 times. In Huginn the core R is 4 layers ≈ 1.5 B params of the 3.5 B total; Parcae-1.3B’s core is 8 layers." data-tip-ko="Weight-tied core: 이 4개 layer는 한 번만 저장되고 8번 적용된다. Huginn의 core R은 4개 layer ≈ 전체 3.5 B 중 1.5 B params; Parcae-1.3B의 core는 8개 layer.">
+              <rect class="core-frame" x="470" y="98" width="300" height="196" rx="12"></rect>
+              <text class="stitle taccent" x="620" y="122" text-anchor="middle">core R — weight-tied, drawn once</text>
+              {[0, 1, 2, 3].map((k) => (
+                <rect class="core-cell" x="500" y={134 + k * 34} width="240" height="26" rx="5"></rect>
+              ))}
+              {[0, 1, 2, 3].map((k) => (
+                <text class="smono corelbl" x="620" y={134 + k * 34 + 17} text-anchor="middle">shared layer {k + 1} of 4</text>
+              ))}
+            </g>
+            <!-- loop arrow -->
+            <path class="loopline" d="M770,270 H812 V130 H772" fill="none" marker-end="url(#arrLoop)"></path>
+            <g data-tip="The loop: the core’s output re-enters the core 8 times. Weights are NOT duplicated — the arrow is the whole trick." data-tip-ko="Loop: core의 출력이 core로 8번 재진입한다. weight는 복제되지 않는다 — 이 화살표가 트릭의 전부다.">
+              <rect class="tally tally-loop" x="786" y="182" width="52" height="30" rx="7"></rect>
+              <text class="smono taccent" x="812" y="201" text-anchor="middle">× 8</text>
+            </g>
+
+            <line class="flowline" x1="620" y1="294" x2="620" y2="316" marker-end="url(#arrL)"></line>
+            <g data-tip="Coda C: unique layers that decode the final loop state into logits. Huginn uses 2 (plus the tied embedding, 0.5 B params)." data-tip-ko="Coda C: 마지막 loop state를 logits로 decode하는 unique layer. Huginn은 2개 (+ tied embedding 0.5 B params).">
+              <rect class="sbox" x="470" y="318" width="300" height="30" rx="8"></rect>
+              <text class="stitle sm" x="620" y="337" text-anchor="middle">coda C — 2 unique layers → logits</text>
+            </g>
+
+            <g data-tip="Unique parameter storage: 4 p in the core + a thin prelude/coda — versus 32 p. FLOPs stay equal (32 applications either way). [RE] worked example at equal width."
+               data-tip-ko="Unique 파라미터 저장량: core 4 p + 얇은 prelude/coda — 32 p와 대비된다. FLOPs는 동일 (어느 쪽이든 32번 적용). [RE] 동일 폭 계산 예시.">
+              <rect class="tally tally-looped" x="470" y="368" width="300" height="26" rx="7"></rect>
+              <text class="smono" x="620" y="385" text-anchor="middle">4 p core + prelude/coda ≈ 8× fewer unique params</text>
+            </g>
+
+            <g data-tip="Layer splits from the papers (unfolded counts derived): Huginn 3.5B = ~1.5 B non-recurrent prelude+head, 1.5 B recurrent core, 0.5 B tied embeddings — and at r̄=32 it unfolds to 2 + 4×32 + 2 = 132 layer-applications. Parcae-1.3B (8/8/8, r=8) unfolds to 80 applications from 24 unique layers."
+               data-tip-ko="논문의 layer 분할 (펼친 횟수는 계산값): Huginn 3.5B = non-recurrent prelude+head ~1.5 B, recurrent core 1.5 B, tied embedding 0.5 B — r̄=32에서 2 + 4×32 + 2 = 132번의 layer-application으로 펼쳐진다. Parcae-1.3B (8/8/8, r=8)는 unique layer 24개에서 80번 적용.">
+              <rect class="sbox sbox-warm" x="430" y="410" width="410" height="52" rx="9"></rect>
+              <text class="ssub" x="635" y="431" text-anchor="middle">Huginn 3.5B — 1.5B prelude+head · 1.5B core · 0.5B embed; r̄=32 → 132 apps (derived)</text>
+              <text class="ssub" x="635" y="449" text-anchor="middle">Parcae-1.3B — 8/8/8, r=8 → 80 apps from 24 unique layers</text>
+            </g>
+          </svg>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 2 · FEEDING THE LOOP ============ -->
+    <section class="section-tight" id="feed-view">
+      <div class="container">
+        <h2 class="viz-h">
+          <span class="lang-en">2 · Feeding the loop: how one token’s state cycles</span>
+          <span class="lang-ko">2 · Loop에 입력 먹이기: token 하나의 state 순환</span>
+        </h2>
+        <p class="viz-sub">
+          <span class="lang-en">The load-bearing detail. Every serious looped LM re-injects the
+            input <em>at every iteration</em> — the recurrence is s<sub>i</sub> = R(e, s<sub>i−1</sub>),
+            not h<sub>t+1</sub> = f(h<sub>t</sub>). Pick a variant to redraw the wiring, then step
+            one token’s residual stream through the core.</span>
+          <span class="lang-ko">하중을 받치는 디테일. 제대로 된 looped LM은 전부 입력을
+            <em>매 iteration마다</em> 재주입한다 — recurrence는 s<sub>i</sub> = R(e, s<sub>i−1</sub>)이지
+            h<sub>t+1</sub> = f(h<sub>t</sub>)가 아니다. variant를 골라 배선을 다시 그린 뒤, token
+            하나의 residual stream을 core에 한 스텝씩 통과시켜 보자.</span>
+        </p>
+
+        <div class="viz-frame">
+          <div class="mask-modes" role="group" aria-label="Injection variant">
+            <button class="mode-btn" id="vb-ut" type="button">Universal Transformer — plain</button>
+            <button class="mode-btn on" id="vb-hug" type="button">Huginn — concat + adapter</button>
+            <button class="mode-btn" id="vb-par" type="button">Parcae — decay-SSM injection</button>
+            <button class="mode-btn" id="vb-lot" type="button">LOTUS — additive E + h</button>
+          </div>
+
+          <div class="dt-controls">
+            <button class="btn ghost btn-sm" id="btnFReset" type="button">⟲ Reset</button>
+            <button class="btn ghost btn-sm" id="btnFPrev" type="button">← Prev</button>
+            <button class="btn btn-sm" id="btnFNext" type="button">Next →</button>
+            <button class="btn ghost btn-sm" id="btnFPlay" type="button">▶ Play</button>
+            <span class="dt-step" id="feedStep">init — s₀</span>
+          </div>
+
+          <div class="loop-scroll">
+          <svg id="feedSvg" viewBox="0 0 880 520" role="img" aria-label="One token's residual stream cycling through a weight-tied core: prelude produces e, the state initializes from noise, and at every iteration the input is re-injected before the core applies the same weights again" style="width:100%; height:auto; min-width:820px;">
+            <!-- input column -->
+            <g data-tip="The token sequence entering the model." data-tip-ko="모델로 들어오는 token 시퀀스.">
+              <rect class="sbox" x="20" y="40" width="130" height="46" rx="9"></rect>
+              <text class="stitle sm" x="85" y="59" text-anchor="middle">x — input tokens</text>
+              <text class="smono" x="85" y="76" text-anchor="middle">[n]</text>
+            </g>
+            <line class="flowline" x1="85" y1="86" x2="85" y2="106" marker-end="url(#arrL)"></line>
+
+            <g id="gPre" data-tip="Prelude P — unique layers, run once. Huginn: 2 layers; Parcae-1.3B: 8. For LOTUS this slot is the single question pass that fills the KV cache C_pre." data-tip-ko="Prelude P — unique layer, 한 번 실행. Huginn 2개, Parcae-1.3B 8개. LOTUS에서는 이 자리가 question을 한 번 통과시켜 KV cache C_pre를 채우는 pass다.">
+              <rect class="sbox" x="20" y="108" width="130" height="54" rx="9"></rect>
+              <text class="stitle sm" x="85" y="128" text-anchor="middle" id="preT1">prelude P</text>
+              <text class="smono" x="85" y="146" text-anchor="middle" id="preT2">runs once</text>
+            </g>
+            <line class="flowline" x1="85" y1="162" x2="85" y2="182" marker-end="url(#arrL)"></line>
+
+            <g id="gE" data-tip="The injected signal. Huginn/Parcae: e = P(x), the prelude’s embedding of the input. LOTUS: E, learnable latent embeddings over K×c = 150 positions." data-tip-ko="주입되는 신호. Huginn/Parcae: e = P(x), prelude가 만든 입력 embedding. LOTUS: E, K×c = 150개 위치의 learnable latent embedding.">
+              <rect class="kv-chip" x="20" y="184" width="130" height="44" rx="9"></rect>
+              <text class="stitle sm taccent" x="85" y="203" text-anchor="middle" id="eT1">e = P(x)</text>
+              <text class="smono" x="85" y="220" text-anchor="middle" id="eT2">[n × h]</text>
+            </g>
+
+            <!-- e → junction (hidden in UT mode) -->
+            <path id="eToJct" class="injline" d="M150,206 H300 V177 H336" fill="none" marker-end="url(#arrLoop)"></path>
+            <text class="smono taccent" id="eLbl" x="226" y="198" text-anchor="middle">every iteration</text>
+            <!-- e → h0 (UT mode only) -->
+            <path id="eToH0" class="injline" d="M150,196 H250 V56 H356" fill="none" marker-end="url(#arrLoop)" style="display:none"></path>
+
+            <!-- h0 -->
+            <g id="gH0" data-tip="Where the loop state starts. Huginn: s₀ ~ N(0, σ²I) with σ² = 2/5 — random noise, and the trained model is path-independent (Anil et al. 2022 sense): the fixed point doesn’t care where you start. Parcae repo: state_init='like-init', truncated-normal at embedding-init std. LOTUS: a first forward pass over the learned latents — no noise. UT: the embedding itself."
+               data-tip-ko="Loop state의 시작점. Huginn: s₀ ~ N(0, σ²I), σ² = 2/5 — random noise이며, 학습된 모델은 path-independent(Anil et al. 2022의 의미)해서 fixed point는 시작점에 무관하다. Parcae repo: state_init='like-init', embedding-init std의 truncated-normal. LOTUS: learned latent 위의 첫 forward pass — noise 없음. UT: embedding 그 자체.">
+              <rect class="sbox sbox-init" x="360" y="30" width="260" height="52" rx="9"></rect>
+              <text class="stitle sm" x="490" y="50" text-anchor="middle" id="h0T1">s₀ ~ N(0, σ²·I) · σ² = 2/5</text>
+              <text class="smono" x="490" y="68" text-anchor="middle" id="h0T2">random noise init</text>
+            </g>
+            <line class="flowline" x1="490" y1="82" x2="490" y2="146" marker-end="url(#arrL)"></line>
+
+            <!-- injection junction -->
+            <g id="gJct">
+              <rect class="sbox sbox-accent" x="340" y="150" width="300" height="90" rx="11"></rect>
+              <text class="stitle taccent" x="490" y="176" text-anchor="middle" id="injTitle">input re-injection — concat + adapter A</text>
+              <text class="smono" x="490" y="200" text-anchor="middle" id="injEq">sᵢ = R( A·[ sᵢ₋₁ ; e ] )</text>
+              <text class="ssub" x="490" y="222" text-anchor="middle" id="injSub">A: ℝ²ʰ → ℝʰ, start of the core block</text>
+            </g>
+            <line class="flowline" x1="490" y1="240" x2="490" y2="266" marker-end="url(#arrL)"></line>
+
+            <!-- core -->
+            <g id="gCore" data-tip="The weight-tied loop body. Huginn: 4 layers, 1.5 B params; Parcae-1.3B: 8 layers; LOTUS: the ENTIRE pretrained 3B backbone, looped over only the latent positions." data-tip-ko="Weight-tied loop 본체. Huginn: 4 layers, 1.5 B params; Parcae-1.3B: 8 layers; LOTUS: 사전학습된 3B backbone 전체를 latent 위치들에만 반복 적용.">
+              <rect class="core-frame" x="340" y="268" width="300" height="106" rx="12"></rect>
+              <text class="stitle taccent" x="490" y="294" text-anchor="middle">core R — weight-tied block</text>
+              <text class="smono" x="490" y="316" text-anchor="middle" id="coreSub">4 layers · 1.5 B params (Huginn)</text>
+              <text class="smono" x="490" y="336" text-anchor="middle" id="iterBadge">i = 0 / 8</text>
+              <text class="ssub" x="490" y="358" text-anchor="middle">same weights, pass after pass</text>
+            </g>
+
+            <!-- weights chip -->
+            <g data-tip="The point of weight tying: every pass re-reads the SAME stored bytes. Unique storage shrinks ~r×; per-token FLOPs do not." data-tip-ko="Weight tying의 핵심: 매 pass가 같은 저장 byte를 다시 읽는다. unique 저장량은 ~r× 줄지만 token당 FLOPs는 줄지 않는다.">
+              <rect class="tally tally-loop" x="690" y="272" width="170" height="72" rx="9"></rect>
+              <text class="stitle sm" x="775" y="298" text-anchor="middle">weights: stored ONCE</text>
+              <text class="smono" x="775" y="318" text-anchor="middle">read again each pass</text>
+              <text class="smono" x="775" y="334" text-anchor="middle">(no new params per loop)</text>
+            </g>
+            <line class="flowline-thin" x1="688" y1="308" x2="644" y2="308" marker-end="url(#arrL)"></line>
+
+            <!-- loop back -->
+            <path class="loopline" d="M400,374 V430 H260 V220 H336" fill="none" marker-end="url(#arrLoop)"></path>
+            <text class="smono taccent" id="loopLbl" x="330" y="450" text-anchor="middle">hᵢ loops back · × r — trained r̄ = 32 (animated: 8)</text>
+
+            <!-- exit to coda -->
+            <path class="flowline" d="M640,356 H775 V396" fill="none" marker-end="url(#arrL)"></path>
+            <g data-tip="Coda C — unique layers decoding the FINAL loop state into logits: p = C(s_r). Only s_r reaches the output." data-tip-ko="Coda C — 마지막 loop state를 logits로 decode하는 unique layer: p = C(s_r). 출력에 닿는 것은 s_r뿐이다.">
+              <rect class="sbox" x="690" y="398" width="170" height="60" rx="9"></rect>
+              <text class="stitle sm" x="775" y="421" text-anchor="middle">coda C</text>
+              <text class="smono" x="775" y="440" text-anchor="middle">p = C(s_r) → logits</text>
+            </g>
+
+            <!-- LOTUS-only chip -->
+            <g id="gLot" style="display:none" data-tip="LOTUS computes the question’s KV cache C_pre once, and every loop iteration attends to it: h⁽ᵗ⁾ = f_θ(E + h⁽ᵗ⁻¹⁾ | C_pre). Input format: [Q, ⟨BoT⟩, K×c ⟨lat⟩ tokens, ⟨EoT⟩, A]." data-tip-ko="LOTUS는 question의 KV cache C_pre를 한 번만 계산하고, 매 loop iteration이 여기에 attend한다: h⁽ᵗ⁾ = f_θ(E + h⁽ᵗ⁻¹⁾ | C_pre). 입력 형식: [Q, ⟨BoT⟩, K×c ⟨lat⟩ tokens, ⟨EoT⟩, A].">
+              <rect class="sbox sbox-lin" x="20" y="290" width="260" height="80" rx="9"></rect>
+              <text class="stitle sm tlin" x="150" y="313" text-anchor="middle">C_pre — question KV cache</text>
+              <text class="smono" x="150" y="333" text-anchor="middle">computed once from Q,</text>
+              <text class="smono" x="150" y="349" text-anchor="middle">reused by every iteration</text>
+            </g>
+            <line id="lotArrow" class="stateline" x1="280" y1="330" x2="336" y2="330" marker-end="url(#arrL)" style="display:none"></line>
+
+            <!-- UT warning chip -->
+            <g id="gUt" style="display:none" data-tip="Huginn’s stated reason for re-injection, verbatim from arXiv 2502.05171 §3.1. Universal Transformer predates this diagnosis and relied on ACT halting." data-tip-ko="재주입에 대한 Huginn의 명시적 근거 — arXiv 2502.05171 §3.1 원문 그대로. Universal Transformer는 이 진단보다 앞서며, ACT halting에 의존했다.">
+              <rect class="warn-chip" x="20" y="392" width="300" height="92" rx="9"></rect>
+              <text class="ssub warn-t" x="170" y="416" text-anchor="middle">“If e was provided only at the start,</text>
+              <text class="ssub warn-t" x="170" y="434" text-anchor="middle">e.g. via s₀ = e, then the iterative process</text>
+              <text class="ssub warn-t" x="170" y="452" text-anchor="middle">would not be stable.”</text>
+              <text class="smono" x="170" y="472" text-anchor="middle">— Huginn, arXiv 2502.05171 §3.1</text>
+            </g>
+
+            <!-- pulse dot -->
+            <circle id="pulse" cx="490" cy="56" r="7" class="pulse-dot"></circle>
+          </svg>
+          </div>
+
+          <div class="trace-row" aria-label="Loop state trace">
+            <span class="smono trace-lbl">trace</span>
+            {['s₀', 's₁', 's₂', 's₃', 's₄', 's₅', 's₆', 's₇', 's₈'].map((s, i) => (
+              <span class={`tr-chip ${i === 0 ? 'on' : ''}`} data-i={i}>{s}</span>
+            ))}
+            <span class="tr-chip tr-out" data-i="9">p = C(s_r)</span>
+          </div>
+
+          <p class="dt-caption" id="feedCap"><span class="lang-en">Huginn starts the loop from
+            <b>random noise</b>: s₀ ~ N(0, σ²I), σ² = 2/5 — not zeros, not the embedding. The input
+            only ever arrives through the injection junction, and the trained model is
+            path-independent: the loop converges toward an input-conditioned fixed point regardless
+            of s₀.</span><span class="lang-ko">Huginn은 loop를 <b>random noise</b>에서 시작한다:
+            s₀ ~ N(0, σ²I), σ² = 2/5 — zero도 embedding도 아니다. 입력은 오직 injection junction을
+            통해서만 들어오고, 학습된 모델은 path-independent해서 s₀가 무엇이든 입력-조건부 fixed
+            point로 수렴한다.</span></p>
+
+          <noscript>
+            <p class="viz-sub">
+              <span class="lang-en">With JavaScript this panel steps one token through the loop and
+                redraws the wiring for all four variants. The static view shows Huginn’s wiring:
+                noise init s₀, concat-adapter injection A·[sᵢ₋₁; e] at every iteration, one
+                weight-tied 4-layer core, coda on the final state.</span>
+              <span class="lang-ko">JavaScript가 있으면 이 패널은 token 하나를 loop에 한 스텝씩
+                통과시키고 4개 variant의 배선을 다시 그린다. 정적 뷰는 Huginn의 배선이다: noise
+                init s₀, 매 iteration의 concat-adapter 주입 A·[sᵢ₋₁; e], weight-tied 4-layer core
+                하나, 마지막 state에 대한 coda.</span>
+            </p>
+          </noscript>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 3 · STABILITY ============ -->
+    <section class="section-tight" id="stab-view">
+      <div class="container">
+        <h2 class="viz-h">
+          <span class="lang-en">3 · Keeping the loop stable: ρ(Ā) decides</span>
+          <span class="lang-ko">3 · Loop 안정화: ρ(Ā)가 결정한다</span>
+        </h2>
+        <p class="viz-sub">
+          <span class="lang-en">Parcae’s diagnosis of why looped-LM training blows up: divergent
+            runs learn a spectral radius ρ(Ā) ≥ 1 in the injection parameters; convergent runs keep
+            ρ(Ā) &lt; 1. Drag the slider across the boundary.</span>
+          <span class="lang-ko">looped-LM 학습이 폭발하는 이유에 대한 Parcae의 진단: 발산하는
+            run은 injection 파라미터에서 spectral radius ρ(Ā) ≥ 1을 학습하고, 수렴하는 run은
+            ρ(Ā) &lt; 1을 유지한다. slider를 경계 너머로 움직여 보자.</span>
+        </p>
+
+        <div class="viz-frame">
+          <div class="eq-chips">
+            <span class="eq-chip" data-tip="The loop update, as Parcae models it: the injection transition Ā decays the state, B̄ injects the input, and R̄ is the transformer block’s residual contribution." data-tip-ko="Parcae가 모델링한 loop 업데이트: injection transition Ā가 state를 감쇠시키고, B̄가 입력을 주입하며, R̄는 transformer block의 residual 기여분이다.">h<sub>t+1</sub> = Ā·h<sub>t</sub> + B̄·e + R̄(h<sub>t</sub>, e)</span>
+            <span class="eq-chip" data-tip="The structural fix: parameterize A = Diag(−exp(log_A)) and discretize (ZOH) with a learnable Δ, so Ā = exp(ΔA) has spectral radius < 1 by construction — every diagonal decay entry lands in (0, 1)." data-tip-ko="구조적 해결책: A = Diag(−exp(log_A))로 파라미터화하고 learnable Δ로 (ZOH) 이산화하면 Ā = exp(ΔA)의 spectral radius가 구조적으로 1 미만 — 대각 decay 성분 전부가 (0, 1)에 들어간다.">Ā = exp(Δ·A), A = Diag(−exp(log_A)) → ρ(Ā) &lt; 1</span>
+            <span class="eq-chip" data-tip="Verbatim from the public repo, SandyResearch/parcae parcae_lm/modules/injection.py (DiagonalInjection docstring): x_{t+1} = exp(−dt·A)·x_t + dt·B@e, with dt = softplus(dt_bias), A = exp(A_log), B identity-initialized. A helper get_spectral_norm() returns decay.max()." data-tip-ko="Public repo 원문 — SandyResearch/parcae의 parcae_lm/modules/injection.py (DiagonalInjection docstring): x_{t+1} = exp(−dt·A)·x_t + dt·B@e, dt = softplus(dt_bias), A = exp(A_log), B는 identity 초기화. get_spectral_norm() 헬퍼가 decay.max()를 반환한다.">code: x·e^(−dt·A) + dt·B@e — injection.py</span>
+          </div>
+
+          <div class="loop-scroll">
+          <svg viewBox="0 0 740 360" role="img" aria-label="State norm over loop iterations: two initializations contracting to the same fixed point when the spectral radius is below one, versus residual state explosion when it is at least one" style="width:100%; height:auto; min-width:680px;">
+            <line x1="70" y1="300" x2="700" y2="300" stroke="#d1cfc5" stroke-width="1.5"></line>
+            <line x1="70" y1="50" x2="70" y2="300" stroke="#d1cfc5" stroke-width="1.5"></line>
+            <text class="mlabel" x="385" y="336" text-anchor="middle">loop iteration t</text>
+            <text class="mlabel" x="26" y="175" transform="rotate(-90 26 175)" text-anchor="middle">‖state‖ (schematic)</text>
+            {[0, 6, 12, 18, 24].map((t) => (
+              <text class="mlabel" x={stabX(t)} y="316" text-anchor="middle">{t}</text>
+            ))}
+
+            <line x1="70" y1={FP_Y} x2="700" y2={FP_Y} stroke="#b9b7ad" stroke-width="1" stroke-dasharray="2 5"></line>
+            <text class="mlabel" x="696" y={FP_Y - 7} text-anchor="end">input-conditioned fixed point h*</text>
+
+            <g data-tip="ρ = 0.8, two different initializations — one far above the fixed point, one near zero — converging to the SAME h*. This is Huginn’s path independence (in the sense of Anil et al. 2022): the trained loop’s destination is set by the input e, not by s₀." data-tip-ko="ρ = 0.8, 서로 다른 두 초기화 — 하나는 fixed point 위쪽 멀리, 하나는 0 근처 — 가 같은 h*로 수렴한다. Huginn의 path independence(Anil et al. 2022의 의미)가 이것이다: 학습된 loop의 종착지는 s₀가 아니라 입력 e가 정한다.">
+              <polyline class="curve-conv" points={PTS_CONV_A}></polyline>
+              <polyline class="curve-conv" points={PTS_CONV_B}></polyline>
+            </g>
+            <g data-tip="ρ = 1.05: the state norm compounds every iteration — Parcae’s “residual state explosion and loss spikes”. Divergent training runs are the ones that learned ρ(Ā) ≥ 1." data-tip-ko="ρ = 1.05: state norm이 매 iteration 복리로 커진다 — Parcae가 말한 “residual state explosion과 loss spike”. 발산한 학습 run들이 바로 ρ(Ā) ≥ 1을 학습한 run들이다.">
+              <polyline class="curve-div" points={PTS_DIV}></polyline>
+            </g>
+            <polyline id="trajUser" class="curve-user" points={PTS_USER}></polyline>
+
+            <g transform="translate(90, 58)">
+              <line class="curve-conv" x1="0" y1="0" x2="26" y2="0"></line>
+              <text class="ssub" x="32" y="4">ρ = 0.8 — two inits, one fixed point (path independence)</text>
+              <line class="curve-div" x1="0" y1="18" x2="26" y2="18"></line>
+              <text class="ssub" x="32" y="22">ρ = 1.05 — residual state explosion</text>
+              <line class="curve-user" x1="0" y1="36" x2="26" y2="36"></line>
+              <text class="ssub" x="32" y="40">your ρ (slider)</text>
+            </g>
+          </svg>
+          </div>
+
+          <div class="slider-row">
+            <span class="smono slider-lbl">ρ(Ā)</span>
+            <input type="range" id="rhoSlider" min="70" max="110" value="95" aria-label="Spectral radius of the state transition" />
+            <span class="smono" id="rhoVal">0.95</span>
+          </div>
+
+          <p class="dt-caption" id="stabCap"><span class="lang-en">ρ = 0.95: still contracting,
+            just slowly — the state closes most of the distance to its fixed point within ~20
+            iterations. Parcae makes this regime <b>structural</b>: the diagonal decay
+            e^(−Δ·A) is elementwise in (0, 1) by construction, so the injection transition cannot
+            learn its way past ρ = 1.</span><span class="lang-ko">ρ = 0.95: 여전히 수축하지만
+            느리다 — state는 ~20 iteration 안에 fixed point까지 거리 대부분을 좁힌다. Parcae는 이
+            영역을 <b>구조적으로</b> 보장한다: 대각 decay e^(−Δ·A)가 구조상 elementwise로 (0, 1)에
+            있으므로, injection transition은 학습으로도 ρ = 1을 넘을 수 없다.</span></p>
+
+          <p class="fine-note">
+            <span class="lang-en"><b>Precision note.</b> The ρ(Ā) &lt; 1 guarantee covers the
+              injection transition Ā only — the full loop map includes the transformer term
+              R̄(h, e), so end-to-end stability is empirical (Parcae shows it tracks ρ(Ā) in
+              practice). Huginn’s stability comes from a different pair: input re-injection every
+              step + noise init, with convergence to input-conditioned fixed points verified
+              post-training. Chart curves are a schematic scalar model x ← ρx + 1, not model
+              traces.</span>
+            <span class="lang-ko"><b>정밀 주석.</b> ρ(Ā) &lt; 1 보장은 injection transition Ā에만
+              해당한다 — 전체 loop map에는 transformer 항 R̄(h, e)가 포함되므로 end-to-end 안정성은
+              경험적이다 (Parcae는 실측에서 ρ(Ā)를 따라감을 보인다). Huginn의 안정성은 다른 조합에서
+              온다: 매 스텝 입력 재주입 + noise init, 그리고 학습 후 검증된 입력-조건부 fixed
+              point로의 수렴. 차트의 곡선은 x ← ρx + 1 스칼라 모형의 개략도이지 실제 모델 trace가
+              아니다.</span>
+          </p>
+
+          <div class="eq-chips">
+            <span class="eq-chip" data-tip="Parcae’s additional stabilizers beyond the diagonal injection: a normalization layer on the prelude output e (prelude_norm=True in shipped configs) and per-sequence depth sampling inside each batch to reduce loss spikes (recurrent_iteration_method='per-sequence')." data-tip-ko="대각 injection 외 Parcae의 추가 안정장치: prelude 출력 e에 대한 normalization (배포 config의 prelude_norm=True)과 loss spike를 줄이는 배치 내 per-sequence depth sampling (recurrent_iteration_method='per-sequence').">+ prelude output norm · per-sequence depth sampling (Parcae)</span>
+            <span class="eq-chip" data-tip="Huginn maintains path independence in the sense of Anil et al. (2022): the state converges toward input-conditioned fixed points regardless of initialization — verified on the trained model." data-tip-ko="Huginn은 Anil et al. (2022) 의미의 path independence를 유지한다: state가 초기화와 무관하게 입력-조건부 fixed point로 수렴 — 학습된 모델에서 검증됨.">+ noise init → path independence (Huginn)</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 4 · TRAINING ============ -->
+    <section class="section-tight" id="train-view">
+      <div class="container">
+        <h2 class="viz-h">
+          <span class="lang-en">4 · Training the loop: random depth, truncated gradients</span>
+          <span class="lang-ko">4 · Loop 학습: random depth와 truncated gradient</span>
+        </h2>
+        <p class="viz-sub">
+          <span class="lang-en">Three verified schemes. Depth is sampled per step so the model
+            never overfits one loop count; gradients flow through only a suffix of the loop;
+            and LOTUS adds dense supervision on the latent positions.</span>
+          <span class="lang-ko">검증된 세 가지 방식. depth를 스텝마다 샘플링해 모델이 특정 loop
+            수에 과적합하지 않게 하고, gradient는 loop의 suffix로만 흘리며, LOTUS는 latent 위치에
+            dense supervision을 더한다.</span>
+        </p>
+
+        <div class="viz-frame">
+          <h3 class="panel-h">
+            <span class="lang-en">4a · Depth is a random variable at train time</span>
+            <span class="lang-ko">4a · 학습 시 depth는 확률변수다</span>
+          </h3>
+          <p class="panel-sub">
+            <span class="lang-en">Huginn samples r per step from a log-normal Poisson:
+              τ ~ N(log r̄ − ½σ², σ), r ~ Poisson(e^τ) + 1, with σ = ½ and mean recurrence
+              r̄ = 32, over 800 B tokens. Parcae samples Poisson depths per sequence
+              (repo: <code>poisson-truncated-full</code>). The histogram below is that exact
+              Huginn distribution, computed numerically.</span>
+            <span class="lang-ko">Huginn은 스텝마다 log-normal Poisson에서 r을 뽑는다:
+              τ ~ N(log r̄ − ½σ², σ), r ~ Poisson(e^τ) + 1, σ = ½, 평균 recurrence r̄ = 32,
+              800 B token 학습. Parcae는 시퀀스별 Poisson depth를 샘플링한다
+              (repo: <code>poisson-truncated-full</code>). 아래 히스토그램은 Huginn의 그 분포를
+              수치적으로 계산한 것이다.</span>
+          </p>
+          <div class="loop-scroll">
+          <svg viewBox="0 0 760 260" role="img" aria-label="Probability mass of the sampled loop count r under Huginn's log-normal Poisson depth distribution with mean 32" style="width:100%; height:auto; min-width:700px;">
+            <g data-tip="P(r) under τ ~ N(log 32 − ⅛, ½), r ~ Poisson(e^τ) + 1 — computed by numerical integration over τ. Most mass sits near r̄ = 32, with a long right tail (clipped at r = 80): training regularly visits both shallow and very deep unrollings." data-tip-ko="τ ~ N(log 32 − ⅛, ½), r ~ Poisson(e^τ) + 1에서의 P(r) — τ에 대한 수치 적분으로 계산. 질량 대부분이 r̄ = 32 근처에 있고 오른쪽 꼬리가 길다 (r = 80에서 절단): 학습은 얕은 unrolling과 아주 깊은 unrolling을 모두 정기적으로 방문한다.">
+              {depthBars.map((b) => (
+                <rect class="pmf-bar" x={b.x} y={220 - b.h} width="6.4" height={Math.max(b.h, 0.5)} rx="1"></rect>
+              ))}
+            </g>
+            <line x1="60" y1="220" x2="702" y2="220" stroke="#d1cfc5" stroke-width="1.5"></line>
+            <line x1={60 + 31 * 8 + 3.2} y1="42" x2={60 + 31 * 8 + 3.2} y2="220" stroke="#141413" stroke-width="1" stroke-dasharray="3 4" opacity="0.6"></line>
+            <text class="mlabel" x={60 + 31 * 8 + 10} y="52">mean recurrence r̄ = 32</text>
+            {[1, 16, 32, 48, 64, 80].map((r) => (
+              <text class="mlabel" x={60 + (r - 1) * 8 + 3.2} y="238" text-anchor="middle">{r}</text>
+            ))}
+            <text class="mlabel" x="385" y="256" text-anchor="middle">sampled loop count r — log-normal Poisson, σ = ½ (Huginn §3.3)</text>
+          </svg>
+          </div>
+        </div>
+
+        <div class="viz-frame">
+          <h3 class="panel-h">
+            <span class="lang-en">4b · Truncated backprop: gradients only through the last k</span>
+            <span class="lang-ko">4b · Truncated backprop: 마지막 k개에만 gradient</span>
+          </h3>
+          <p class="panel-sub">
+            <span class="lang-en">Unrolling 32+ iterations for backprop would be ruinous. Huginn
+              backpropagates through only the <b>last k = 8</b> iterations — the earlier prefix runs
+              under no-grad. Parcae’s repo implements the same two-phase loop (no-grad prefix,
+              with-grad suffix) with μ_bwd = ⌈μ_rec/2⌉, e.g. 8 total / 4 backprop at 140M. LOTUS,
+              with only R = 6, backprops through all of them.</span>
+            <span class="lang-ko">32+ iteration을 backprop용으로 전부 펼치면 비용이 파멸적이다.
+              Huginn은 <b>마지막 k = 8</b> iteration만 backprop하고, 앞쪽 prefix는 no-grad로 돌린다.
+              Parcae repo도 같은 2-phase loop(no-grad prefix, with-grad suffix)를 구현하며
+              μ_bwd = ⌈μ_rec/2⌉ — 140M 기준 전체 8 / backprop 4. LOTUS는 R = 6뿐이라 전부
+              backprop한다.</span>
+          </p>
+          <div class="dt-controls">
+            <button class="btn ghost btn-sm" id="btnBptt" type="button">▶ Run backward pass</button>
+            <span class="dt-step" id="bpttStep">forward: 16 iterations sampled</span>
+          </div>
+          <div class="loop-scroll">
+          <svg viewBox="0 0 760 150" role="img" aria-label="Sixteen loop iterations: the first eight run under no-grad, gradients flow only through the last eight" style="width:100%; height:auto; min-width:700px;">
+            {Array.from({ length: 16 }, (_, i) => (
+              <g data-tip={i < 8
+                ? `Iteration ${i + 1} — forward only, torch.no_grad(). Its activations are never stored for backprop; it only shapes the state the gradient window will start from.`
+                : `Iteration ${i + 1} — inside the k = 8 gradient window: activations kept, gradients flow. (Huginn: “we backpropagate through only the last k iterations of the recurrent unit”.)`}
+                 data-tip-ko={i < 8
+                ? `Iteration ${i + 1} — forward만, torch.no_grad(). activation을 backprop용으로 저장하지 않는다; gradient window가 출발할 state를 만들어 줄 뿐이다.`
+                : `Iteration ${i + 1} — k = 8 gradient window 안: activation 유지, gradient가 흐른다. (Huginn: “recurrent unit의 마지막 k개 iteration만 backprop한다”.)`}>
+                <rect class={`bp-cell ${i < 8 ? 'bp-ng' : 'bp-g'}`} x={30 + i * 44} y="40" width="38" height="44" rx="7" data-i={i}></rect>
+                <text class="mlabel" x={49 + i * 44} y="66" text-anchor="middle">{i + 1}</text>
+              </g>
+            ))}
+            <text class="ssub" x="206" y="26" text-anchor="middle">no-grad prefix — forward only</text>
+            <text class="ssub bp-glbl" x="558" y="26" text-anchor="middle">gradient window — last k = 8</text>
+            <path id="bpArrow" class="bp-arrow" d="M734,105 H382" marker-end="url(#arrLoop)"></path>
+            <text class="smono" x="558" y="128" text-anchor="middle">∂L flows right → left, stops at the window edge</text>
+            <text class="smono" x="206" y="128" text-anchor="middle">torch.no_grad()</text>
+          </svg>
+          </div>
+        </div>
+
+        <div class="viz-frame">
+          <h3 class="panel-h">
+            <span class="lang-en">4c · LOTUS: dense latent supervision — dense across positions, at the final iteration</span>
+            <span class="lang-ko">4c · LOTUS: dense latent supervision — 위치에 대해 dense, 마지막 iteration에서</span>
+          </h3>
+          <p class="panel-sub">
+            <span class="lang-en">Every latent position’s <b>post-loop</b> state h⁽ᴿ⁾ is decoded
+              through the base LM head and scored against its gold CoT-step token — dense
+              across the K × c = 150 positions, applied at iteration R (not per-iteration). Either
+              loss alone collapses gold-step recovery to ~9% top-1; combined, 70.9% top-1 / 85.8%
+              top-5.</span>
+            <span class="lang-ko">모든 latent 위치의 <b>loop 통과 후</b> state h⁽ᴿ⁾를 base
+              LM head로 decode해 gold CoT-step token과 대조한다 — K × c = 150개 위치에 대해
+              dense하고, iteration R에서 적용된다 (iteration마다가 아니다). 두 loss 중 하나만 쓰면
+              gold-step 복원율이 ~9% top-1로 무너지고, 결합하면 70.9% top-1 / 85.8% top-5.</span>
+          </p>
+          <div class="loop-scroll">
+          <svg viewBox="0 0 760 250" role="img" aria-label="LOTUS input layout: question, six blocks of 25 latent tokens, answer; each latent position's final-iteration state is decoded through the LM head against a gold chain-of-thought step token" style="width:100%; height:auto; min-width:700px;">
+            <g data-tip="ℒ_step = mean CE over all K × c latent positions: each post-loop state hᵢⱼ⁽ᴿ⁾ decoded by the base LM head f_head against gold step token Tᵢⱼ." data-tip-ko="ℒ_step = 모든 K × c latent 위치에 대한 평균 CE: 각 loop 통과 후 state hᵢⱼ⁽ᴿ⁾를 base LM head f_head로 decode해 gold step token Tᵢⱼ와 대조.">
+              <rect class="sbox sbox-accent" x="200" y="24" width="360" height="44" rx="9"></rect>
+              <text class="stitle sm taccent" x="380" y="43" text-anchor="middle">f_head — base LM head (readout)</text>
+              <text class="smono" x="380" y="59" text-anchor="middle">CE( f_head(hᵢⱼ⁽ᴿ⁾), Tᵢⱼ ) — gold CoT step tokens</text>
+            </g>
+            {[0, 1, 2, 3, 4, 5].map((k) => (
+              <line class="flowline-thin" x1={205 + k * 62 + 25} y1="112" x2={230 + (k - 2.5) * 40 + 150} y2="70" marker-end="url(#arrL)"></line>
+            ))}
+
+            <g data-tip="The question is processed once; its KV cache C_pre is reused by every loop iteration." data-tip-ko="question은 한 번만 처리되고, 그 KV cache C_pre를 모든 loop iteration이 재사용한다.">
+              <rect class="sbox" x="20" y="114" width="120" height="46" rx="8"></rect>
+              <text class="stitle sm" x="80" y="134" text-anchor="middle">Q — question</text>
+              <text class="smono" x="80" y="151" text-anchor="middle">→ C_pre, once</text>
+            </g>
+            <rect class="tok-chip" x="146" y="120" width="34" height="34" rx="6"></rect>
+            <text class="mlabel" x="163" y="141" text-anchor="middle">BoT</text>
+            {[0, 1, 2, 3, 4, 5].map((k) => (
+              <g data-tip={`Latent block ${k + 1} of K = 6 — c = 25 ⟨lat⟩ tokens. Only these K × c positions are looped R = 6 times through the whole 3B backbone; each one is supervised against its gold CoT-step token at iteration R.`}
+                 data-tip-ko={`Latent block ${k + 1} / K = 6 — c = 25개의 ⟨lat⟩ token. 이 K × c 위치들만 3B backbone 전체를 R = 6번 통과하며, 각 위치는 iteration R에서 gold CoT-step token으로 supervision된다.`}>
+                <rect class="lat-chip" x={186 + k * 62} y="114" width="56" height="46" rx="8"></rect>
+                <text class="stitle sm tlin" x={214 + k * 62} y="134" text-anchor="middle">lat {k + 1}</text>
+                <text class="smono" x={214 + k * 62} y="151" text-anchor="middle">× 25</text>
+              </g>
+            ))}
+            <rect class="tok-chip" x="562" y="120" width="34" height="34" rx="6"></rect>
+            <text class="mlabel" x="579" y="141" text-anchor="middle">EoT</text>
+            <g data-tip="ℒ_ans: standard CE on the answer tokens, from a final forward pass with the post-loop latents inserted." data-tip-ko="ℒ_ans: loop 통과 후 latent들을 삽입한 마지막 forward pass에서 answer token들에 대한 표준 CE.">
+              <rect class="sbox" x="602" y="114" width="138" height="46" rx="8"></rect>
+              <text class="stitle sm" x="671" y="134" text-anchor="middle">A — answer</text>
+              <text class="smono" x="671" y="151" text-anchor="middle">ℒ_ans (CE)</text>
+            </g>
+
+            <text class="smono" x="380" y="196" text-anchor="middle">ℒ = ℒ_ans + λ_step · ℒ_step — full backprop through all R = 6 iterations</text>
+            <text class="ssub" x="380" y="220" text-anchor="middle">ablation: either loss alone → ~9% gold-step top-1; combined → 70.9% top-1 / 85.8% top-5 (arXiv 2606.31779)</text>
+          </svg>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 5 · TEST-TIME DEPTH ============ -->
+    <section class="section-tight" id="scale-view">
+      <div class="container">
+        <h2 class="viz-h">
+          <span class="lang-en">5 · Test-time depth: the runtime knob, and what it caches</span>
+          <span class="lang-ko">5 · Test-time depth: 런타임 노브, 그리고 무엇이 cache되는가</span>
+        </h2>
+        <p class="viz-sub">
+          <span class="lang-en">Trained under random r, the model accepts any r at inference.
+            Quality follows a saturating exponential — Parcae fits it explicitly as
+            ℒ(T) = ℒ<sub>∞</sub> + Z·e<sup>−zT</sup> — with task-dependent ceilings: Huginn reports
+            HellaSwag near-saturating at ~8 recurrences while GSM8K keeps improving to r ≈ 32–64.</span>
+          <span class="lang-ko">random r로 학습된 모델은 inference에서 어떤 r이든 받는다. 품질은
+            포화 지수 곡선을 따르고 — Parcae는 이를 ℒ(T) = ℒ<sub>∞</sub> + Z·e<sup>−zT</sup>로 명시적으로
+            피팅한다 — 천장은 task마다 다르다: Huginn 보고 기준 HellaSwag은 recurrence ~8에서 거의
+            포화하고 GSM8K는 r ≈ 32–64까지 계속 오른다.</span>
+        </p>
+
+        <div class="viz-frame">
+          <div class="loop-scroll">
+          <svg viewBox="0 0 740 360" role="img" aria-label="Schematic quality versus loop count: a recall-style task saturating by about eight loops and a reasoning-style task still improving at sixty-four, with the KL-threshold early-exit point marked" style="width:100%; height:auto; min-width:680px;">
+            <line x1="70" y1="300" x2="700" y2="300" stroke="#d1cfc5" stroke-width="1.5"></line>
+            <line x1="70" y1="50" x2="70" y2="300" stroke="#d1cfc5" stroke-width="1.5"></line>
+            <text class="mlabel" x="385" y="336" text-anchor="middle">test-time loop count r (log scale)</text>
+            <text class="mlabel" x="26" y="175" transform="rotate(-90 26 175)" text-anchor="middle">task metric (schematic)</text>
+            {[1, 2, 4, 8, 16, 32, 64].map((r) => (
+              <text class="mlabel" x={rX(r)} y="316" text-anchor="middle">{r}</text>
+            ))}
+
+            <g data-tip="Recall-style curve (schematic): near its ceiling by r ≈ 8 — the shape of Huginn’s report that “HellaSwag only needs 8 recurrences” to near-saturate. Extra loops past the knee buy almost nothing." data-tip-ko="Recall류 곡선 (개략): r ≈ 8이면 천장 근처 — “HellaSwag은 8 recurrence면 충분”하다는 Huginn 보고의 형태다. 무릎을 지난 추가 loop는 거의 아무것도 사 주지 않는다.">
+              <polyline class="curve-qa" points={PTS_QA}></polyline>
+            </g>
+            <g data-tip="Reasoning-style curve (schematic): still climbing at r = 32–64 — Huginn’s GSM8K behavior. The saturating-exponential form is Parcae’s fitted law ℒ(T) = ℒ∞ + Z·e^(−zT); its unified law also ties train-time loop count to data (exponents γ_μ ≈ 0.40, γ_D ≈ 0.78)." data-tip-ko="Reasoning류 곡선 (개략): r = 32–64에서도 상승 중 — Huginn의 GSM8K 거동. 포화 지수 형태는 Parcae의 피팅 법칙 ℒ(T) = ℒ∞ + Z·e^(−zT)이고, 통합 법칙은 train-time loop 수와 데이터를 함께 묶는다 (지수 γ_μ ≈ 0.40, γ_D ≈ 0.78).">
+              <polyline class="curve-qb" points={PTS_QB}></polyline>
+            </g>
+
+            <line x1={rX(8)} y1="60" x2={rX(8)} y2="300" stroke="#141413" stroke-width="1" stroke-dasharray="3 4" opacity="0.5"></line>
+            <g data-tip="Huginn’s zero-shot per-token early exit: stop looping when the KL divergence between successive iterations’ output distributions falls below 5×10⁻⁴ — i.e. exactly where a curve flattens. Different tokens exit at different depths." data-tip-ko="Huginn의 zero-shot per-token early exit: 연속된 iteration의 출력 분포 간 KL divergence가 5×10⁻⁴ 아래로 떨어지면 loop를 멈춘다 — 곡선이 평평해지는 바로 그 지점이다. token마다 다른 깊이에서 exit한다.">
+              <rect class="sbox sbox-warm" x={rX(8) - 108} y="42" width="216" height="34" rx="8"></rect>
+              <text class="ssub" x={rX(8)} y="63" text-anchor="middle">early exit: successive-iterate KL &lt; 5×10⁻⁴ (Huginn §6.1)</text>
+            </g>
+
+            <circle id="dotQA" class="dot-qa" cx={rX(8)} cy={qY(qA(8))} r="5.5"></circle>
+            <circle id="dotQB" class="dot-qb" cx={rX(8)} cy={qY(qB(8))} r="5.5"></circle>
+            <text class="smono" id="lblQA" x={rX(8) + 10} y={qY(qA(8)) - 8}>recall-style — saturated</text>
+            <text class="smono" id="lblQB" x={rX(8) + 10} y={qY(qB(8)) + 18}>reasoning-style — climbing</text>
+
+            <g transform="translate(90, 262)">
+              <line class="curve-qa" x1="0" y1="0" x2="26" y2="0"></line>
+              <text class="ssub" x="32" y="4">recall-style task (HellaSwag-like ceiling ~8)</text>
+              <line class="curve-qb" x1="0" y1="18" x2="26" y2="18"></line>
+              <text class="ssub" x="32" y="22">reasoning-style task (GSM8K-like, climbs to 32–64)</text>
+            </g>
+          </svg>
+          </div>
+
+          <div class="slider-row">
+            <span class="smono slider-lbl">r</span>
+            <input type="range" id="rSlider" min="0" max="60" value="30" aria-label="Test-time loop count" />
+            <span class="smono" id="rVal">r = 8</span>
+          </div>
+
+          <p class="dt-caption" id="scaleCap"><span class="lang-en">r = 8: the recall-style curve
+            has flattened — this is where per-token early exit fires — while the reasoning-style
+            curve is still climbing. Depth bought this way is compute, not parameters: FLOPs scale
+            linearly with r.</span><span class="lang-ko">r = 8: recall류 곡선은 평평해졌고 — 바로
+            여기서 per-token early exit이 발동한다 — reasoning류 곡선은 아직 오르는 중이다. 이렇게
+            산 깊이는 파라미터가 아니라 연산이다: FLOPs는 r에 선형으로 늘어난다.</span></p>
+
+          <div class="eq-chips">
+            <span class="eq-chip" data-tip="Huginn: zero-shot, per-token — no training change needed; the KL between successive iterates is the convergence test." data-tip-ko="Huginn: zero-shot, per-token — 학습 수정 불필요; 연속 iterate 간 KL이 수렴 판정이다.">Huginn — zero-shot KL exit</span>
+            <span class="eq-chip" data-tip="Mixture-of-Recursions (arXiv 2507.10524) instead LEARNS per-token depth with lightweight routers — expert-choice top-k continuation, or token-choice upfront assignment." data-tip-ko="Mixture-of-Recursions (arXiv 2507.10524)는 depth를 경량 router로 학습한다 — expert-choice top-k 연장 또는 token-choice 사전 배정.">MoR — learned routers</span>
+            <span class="eq-chip" data-tip="Ouro (arXiv 2510.25741) trains an entropy-regularized learned-depth objective; the released models ship total_ut_steps = 4 with an early_exit_threshold (1.0 = always full depth; the vLLM path runs all steps)." data-tip-ko="Ouro (arXiv 2510.25741)는 entropy-regularized learned-depth 목적함수로 학습; 공개 모델은 total_ut_steps = 4와 early_exit_threshold를 탑재 (1.0 = 항상 full depth; vLLM 경로는 전 스텝 실행).">Ouro — entropy-regularized depth</span>
+          </div>
+        </div>
+
+        <div class="viz-frame">
+          <h3 class="panel-h">
+            <span class="lang-en">5b · What the loop caches: KV along the iteration axis</span>
+            <span class="lang-ko">5b · Loop가 cache하는 것: iteration 축의 KV</span>
+          </h3>
+          <p class="panel-sub">
+            <span class="lang-en">Each loop iteration runs attention again, so at generation the
+              naive looped decoder stores KV per (iteration × core layer) — KV grows with
+              <em>effective</em> depth, not unique layers. The public Parcae cache
+              (<code>parcae_lm/utils/cache.py</code>, <code>ParcaeDynamicCache</code>) keys entries
+              by exactly that step index; Huginn’s fix is modulo-budget sharing.</span>
+            <span class="lang-ko">loop iteration마다 attention이 다시 돌기 때문에, naive looped
+              decoder는 생성 시 (iteration × core layer) 단위로 KV를 저장한다 — KV는 unique layer가
+              아니라 <em>유효</em> 깊이에 비례해 자란다. 공개된 Parcae cache
+              (<code>parcae_lm/utils/cache.py</code>의 <code>ParcaeDynamicCache</code>)가 정확히 그
+              step index로 엔트리를 keying하고, Huginn의 해법은 modulo-budget 공유다.</span>
+          </p>
+          <div class="mask-modes" role="group" aria-label="KV caching mode">
+            <button class="mode-btn on" id="kvNaiveBtn" type="button">naive — distinct KV per iteration</button>
+            <button class="mode-btn" id="kvModBtn" type="button">budget k = 4 — write slot i mod k</button>
+          </div>
+          <div class="loop-scroll">
+          <svg viewBox="0 0 740 300" role="img" aria-label="KV cache rows along the loop axis: eight distinct per-iteration caches in naive mode, collapsing onto four shared slots under Huginn's i mod k budget" style="width:100%; height:auto; min-width:680px;">
+            <g id="gKvNaive">
+              {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
+                <g data-tip={`Iteration ${i + 1} writes its own KV rows for every core layer — the default in the public Parcae cache (lookup_strategy='full', entries keyed by step_idx = recurrence step × core layer).`}
+                   data-tip-ko={`Iteration ${i + 1}이 모든 core layer에 대해 자기만의 KV row를 쓴다 — 공개 Parcae cache의 기본값 (lookup_strategy='full', step_idx = recurrence step × core layer로 keying).`}>
+                  <text class="smono" x="96" y={40 + i * 28 + 14} text-anchor="end">iter {i + 1}</text>
+                  <rect class="kv-row" x="110" y={40 + i * 28} width="420" height="20" rx="5"></rect>
+                  <text class="mlabel" x="320" y={40 + i * 28 + 14} text-anchor="middle">KV × core layers — its own copy</text>
+                </g>
+              ))}
+              <text class="smono taccent" x="560" y="152">total: 8 × (core KV)</text>
+              <text class="mlabel" x="560" y="170">grows with loop count</text>
+            </g>
+            <g id="gKvMod" style="display:none">
+              {[0, 1, 2, 3].map((j) => (
+                <g data-tip={`Shared slot ${j + 1} of k = 4: iterations ${j + 1} and ${j + 5} both read and write here (“at iteration i, read and write the cache entry i mod k” — Huginn §6.2).`}
+                   data-tip-ko={`공유 slot ${j + 1} / k = 4: iteration ${j + 1}과 ${j + 5}가 여기를 함께 읽고 쓴다 (“iteration i에서 cache entry i mod k를 읽고 쓴다” — Huginn §6.2).`}>
+                  <rect class="kv-row kv-shared" x="240" y={48 + j * 44} width="290" height="30" rx="6"></rect>
+                  <text class="mlabel" x="385" y={48 + j * 44 + 19} text-anchor="middle">slot {j + 1} — shared KV</text>
+                </g>
+              ))}
+              {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
+                <g>
+                  <text class="smono" x="96" y={40 + i * 28 + 14} text-anchor="end">iter {i + 1}</text>
+                  <path class="kv-link" d={`M110,${40 + i * 28 + 10} H180 V${48 + (i % 4) * 44 + 15} H236`} fill="none" marker-end="url(#arrL)"></path>
+                </g>
+              ))}
+              <text class="smono taccent" x="560" y="118">total: 4 × (core KV) — 2×↓ at r = 8</text>
+              <text class="mlabel" x="560" y="136">“cache budget of 4: 5.86” —</text>
+              <text class="mlabel" x="560" y="152">no MTBench drop (Huginn §6.2)</text>
+            </g>
+            <text class="ssub" x="30" y="276">related: MoR caches KV only at the recursion level a token is routed to (§2.2.2), or reuses first-recursion KV;</text>
+            <text class="ssub" x="30" y="292">the public Parcae cache also ships compress-first / last / stride / anchor remaps onto earlier slots.</text>
+          </svg>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 6 · EFFICIENCY LENS ============ -->
+    <section class="section-tight" id="eff-view">
+      <div class="container">
+        <h2 class="viz-h">
+          <span class="lang-en">6 · The accounting: params ≠ FLOPs ≠ bytes</span>
+          <span class="lang-ko">6 · 장부 정리: params ≠ FLOPs ≠ bytes</span>
+        </h2>
+        <p class="viz-sub">
+          <span class="lang-en">Worked example, all arithmetic labeled [RE]: a 4-layer core looped
+            8 times versus 32 unique layers at equal width. Four ledgers, four different
+            verdicts — hover each row.</span>
+          <span class="lang-ko">계산 예시, 산술 전부 [RE] 표기: 동일 폭에서 4-layer core × 8 loop
+            대 unique 32 layers. 장부 네 줄, 판정도 네 가지 — 각 행에 hover.</span>
+        </p>
+
+        <div class="viz-frame">
+          <div class="loop-scroll">
+          <svg viewBox="0 0 880 432" role="img" aria-label="Four ledgers comparing a looped 4-layer-core-times-8 model against a standard 32-layer model: unique parameter storage shrinks eight times, FLOPs and decode weight reads stay equal, and KV bytes halve only with modulo-budget sharing" style="width:100%; height:auto; min-width:820px;">
+            {accGroups.map((g) => (
+              <g data-tip={g.tipEn} data-tip-ko={g.tipKo}>
+                <text class="stitle sm" x="20" y={g.y - 14}>{g.label}</text>
+                {g.bars.map((b, bi) => (
+                  <g>
+                    <text class="smono" x="212" y={g.y + bi * 22 + 13} text-anchor="end">{b.name}</text>
+                    <rect class={`acc-bar ${b.cls}`} x="220" y={g.y + bi * 22} width={b.w} height="16" rx="4"></rect>
+                    {b.extra ? <rect class="acc-bar ab-extra" x={220 + b.w} y={g.y + bi * 22} width={b.extra} height="16" rx="4"></rect> : null}
+                    <text class="mlabel" x={224 + b.w + (b.extra || 0)} y={g.y + bi * 22 + 12}>{b.txt}</text>
+                  </g>
+                ))}
+                <text class="ssub" x="20" y={g.y + g.bars.length * 22 + 14}>→ {g.verdict}</text>
+              </g>
+            ))}
+            <text class="mlabel" x="20" y="424">[RE] worked example — 4L core × 8 loops vs 32L standard, equal width d; per-layer units. Core ≈ 400 MB BF16 at d = 2048 → never SRAM-resident.</text>
+          </svg>
+          </div>
+        </div>
+
+        <div class="card-grid eff-grid">
+          <div class="card">
+            <h3><span class="lang-en">Where looping pays</span><span class="lang-ko">Looping이 이득인 곳</span></h3>
+            <p>
+              <span class="lang-en"><b>Storage and capacity-per-byte.</b> Looped transformers match
+                standard ones on data-fitting tasks with under 10% of the parameters (arXiv
+                2311.12424). <b>Test-time compute</b> without more params or longer context —
+                Huginn’s r is a free knob. <b>KV, if you share it</b> along the loop axis. And
+                fewer unique bytes means cheaper communication and multi-copy serving.</span>
+              <span class="lang-ko"><b>저장량과 byte당 capacity.</b> looped transformer는 data-fitting
+                task에서 파라미터 10% 미만으로 standard와 대등하다 (arXiv 2311.12424). 파라미터도
+                context도 늘리지 않는 <b>test-time compute</b> — Huginn의 r은 공짜 노브다. loop 축으로
+                공유한다면 <b>KV도</b> 이득. unique byte가 적으니 통신과 다중 복제 serving도 싸진다.</span>
+            </p>
+          </div>
+          <div class="card">
+            <h3><span class="lang-en">Where it doesn’t</span><span class="lang-ko">이득이 아닌 곳</span></h3>
+            <p>
+              <span class="lang-en"><b>FLOPs scale with r</b> — 32 applications is 32 applications.
+                <b>Batch-1 decode bandwidth</b>: the core is re-read from HBM every loop, so at
+                matched effective depth the weight-read floor doesn’t drop [RE]. <b>Capacity floors
+                bite at small scale</b>: MoR’s 135M model underperforms vanilla. And per-task
+                ceilings saturate — more loops stop paying (§5).</span>
+              <span class="lang-ko"><b>FLOPs는 r에 비례</b> — 32번 적용은 32번 적용이다.
+                <b>batch-1 decode bandwidth</b>: core를 loop마다 HBM에서 다시 읽으므로, 동일 유효
+                깊이에서 weight-read 바닥은 내려가지 않는다 [RE]. <b>작은 스케일에선 capacity 바닥이
+                문다</b>: MoR 135M은 vanilla보다 못하다. 그리고 task별 천장이 포화하면 loop를 더 돌려도
+                득이 없다 (§5).</span>
+            </p>
+          </div>
+          <div class="card">
+            <h3><span class="lang-en">Published wins</span><span class="lang-ko">공개된 성과들</span></h3>
+            <p>
+              <span class="lang-en">Parcae: “up to 6.3% lower validation perplexity over prior
+                large-scale looped models”; at 1.3B, +2.99 CORE over a matched transformer — “up to
+                87.5%” the relative quality of one twice its size; the 770M ≈ a 1.3B transformer on Core.
+                Ouro: 1.4B/2.6B models (4 loop steps, per paper/shipped config) “match the results of up to 12B SOTA LLMs” (7.7T
+                tokens). MoR-4: up to 2.06× serving throughput. LOTUS: thought-phase 2.5–6.9×
+                faster than explicit CoT, 2.1× total, at ~parity accuracy.</span>
+              <span class="lang-ko">Parcae: “기존 대규모 looped 모델 대비 validation perplexity 최대
+                6.3% 감소”; 1.3B에서 matched transformer 대비 CORE +2.99 — 2배 크기 모델의 상대 품질
+                “최대 87.5%”; 770M ≈ 1.3B transformer (Core 기준). Ouro: 1.4B/2.6B(기본 4 loop steps)가 “최대 12B SOTA
+                LLM에 상응하는 결과” (7.7T tokens). MoR-4: serving throughput 최대 2.06×. LOTUS:
+                thought-phase가 explicit CoT보다 2.5–6.9× 빠르고, 전체 2.1×, 정확도는 ~동률.</span>
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ PROSE ============ -->
+    <section class="section">
+      <div class="container">
+        <div class="prose">
+          <h2>
+            <span class="lang-en">Reading the diagram</span>
+            <span class="lang-ko">다이어그램 읽는 법</span>
+          </h2>
+
+          <h3><span class="lang-en">It’s a sandwich, not a cycle</span>
+              <span class="lang-ko">순환 고리가 아니라 샌드위치다</span></h3>
+          <p>
+            <span class="lang-en">
+              The working design is prelude → weight-tied core × r → coda, and the detail that makes
+              it work is in panel 2: the recurrence is s<sub>i</sub> = R(e, s<sub>i−1</sub>), with the
+              input e re-entering at every iteration. Huginn states the reason plainly — with e only
+              at the start, the iteration is not stable. The three verified injection mechanisms
+              (concat + adapter, decay-SSM, additive E + h) are three answers to the same question,
+              and the public Parcae repo ships all three as selectable modules
+              (<code>LinearInjection</code>, <code>DiagonalInjection</code>,
+              <code>AdditiveInjection</code> in <code>parcae_lm/modules/injection.py</code>). Even
+              the initial state is deliberate: noise, so the model learns to converge from anywhere.
+            </span>
+            <span class="lang-ko">
+              작동하는 설계는 prelude → weight-tied core × r → coda이고, 이를 작동하게 만드는
+              디테일은 패널 2에 있다: recurrence는 s<sub>i</sub> = R(e, s<sub>i−1</sub>)이며, 입력
+              e가 매 iteration 재진입한다. Huginn은 이유를 명시한다 — e가 시작에만 들어오면 iteration이
+              불안정하다. 검증된 세 가지 주입 메커니즘(concat + adapter, decay-SSM, additive E + h)은
+              같은 질문에 대한 세 가지 답이고, 공개 Parcae repo는 셋 다 선택 가능한 모듈로 제공한다
+              (<code>parcae_lm/modules/injection.py</code>의 <code>LinearInjection</code>,
+              <code>DiagonalInjection</code>, <code>AdditiveInjection</code>). 초기 state까지도
+              의도적이다: noise에서 시작해, 어디서 출발하든 수렴하도록 학습시킨다.
+            </span>
+          </p>
+
+          <h3><span class="lang-en">Depth stops being an architecture constant</span>
+              <span class="lang-ko">깊이가 더 이상 아키텍처 상수가 아니다</span></h3>
+          <p>
+            <span class="lang-en">
+              Because r is sampled at training time (log-normal Poisson, mean 32 for Huginn), no
+              single depth is baked in — the model must produce something sensible at r = 4 and at
+              r = 64. That is what turns depth into a runtime knob: quality follows a saturating
+              exponential in r (Parcae fits it as a law), the ceiling is task-dependent (recall
+              saturates early, reasoning keeps climbing), and a per-token KL test tells you when a
+              token is done thinking. Depth becomes a scheduling decision, made per token, at
+              inference.
+            </span>
+            <span class="lang-ko">
+              r이 학습 시점에 샘플링되므로(Huginn은 평균 32의 log-normal Poisson) 특정 깊이가
+              구워지지 않는다 — 모델은 r = 4에서도 r = 64에서도 말이 되는 출력을 내야 한다. 이것이
+              깊이를 런타임 노브로 바꾼다: 품질은 r의 포화 지수 곡선을 따르고(Parcae는 법칙으로
+              피팅한다), 천장은 task마다 다르며(recall은 일찍 포화, reasoning은 계속 상승), token이
+              생각을 끝냈는지는 per-token KL 검사가 알려 준다. 깊이는 inference에서 token 단위로
+              내리는 스케줄링 결정이 된다.
+            </span>
+          </p>
+
+          <h3><span class="lang-en">The ledger has four different lines</span>
+              <span class="lang-ko">장부에는 서로 다른 네 줄이 있다</span></h3>
+          <p>
+            <span class="lang-en">
+              Weight tying divides <em>unique parameter storage</em> by ~r, and that is real: fewer
+              bytes to hold, ship, and replicate, more capability per stored byte. But FLOPs count
+              layer-<em>applications</em>, which looping does not reduce; and at batch-1 decode the
+              core (hundreds of MB) is re-read from HBM every pass, so the weight-bandwidth floor at
+              matched effective depth doesn’t move either [RE]. The subtlest line is KV: attention
+              runs every iteration, so naive KV grows with r — until you share slots i mod k along
+              the loop axis, which Huginn reports as free at budget 4. Params, FLOPs, weight bytes,
+              KV bytes: four ledgers, and looping helps two of them.
+            </span>
+            <span class="lang-ko">
+              weight tying은 <em>unique 파라미터 저장량</em>을 ~r로 나누고, 이것은 실질적이다:
+              보관·전송·복제할 byte가 줄고, 저장 byte당 능력은 커진다. 그러나 FLOPs는
+              layer-<em>application</em> 수를 세고, looping은 그걸 줄이지 않는다; batch-1 decode에선
+              수백 MB짜리 core를 pass마다 HBM에서 다시 읽으므로 동일 유효 깊이의 weight-bandwidth
+              바닥도 움직이지 않는다 [RE]. 가장 미묘한 줄은 KV다: iteration마다 attention이 돌아
+              naive KV는 r에 비례해 자란다 — loop 축에서 slot을 i mod k로 공유하기 전까지는. Huginn은
+              budget 4에서 이것이 공짜라고 보고한다. params, FLOPs, weight bytes, KV bytes: 장부 네
+              줄 중 looping이 돕는 것은 두 줄이다.
+            </span>
+          </p>
+        </div>
+
+        <div class="eff-note band-dark">
+          <h3>
+            <span class="lang-en">Why this matters for efficiency work</span>
+            <span class="lang-ko">효율화 연구에 왜 중요한가</span>
+          </h3>
+          <p>
+            <span class="lang-en">
+              Looped models redraw the serving map. First, they create a <em>new cache axis</em>:
+              KV per loop iteration, which is exactly the kind of structured redundancy compression
+              lives on — the published record already spans full per-iteration caches, modulo-budget
+              sharing, and routed recursion-wise caching. Second, they decouple the knobs: a model’s
+              quality can now be spent or saved per token at serve time (early exit), which turns
+              accelerator questions into scheduling questions. Third, they are honest about what
+              weight tying cannot buy — the decode weight-read floor stays put at matched depth, so
+              the interesting seams are where r is adaptive, batched, or amortized. That is the
+              lens this site keeps applying: find where the bytes actually move.
+            </span>
+            <span class="lang-ko">
+              looped 모델은 serving 지도를 다시 그린다. 첫째, <em>새로운 cache 축</em>을 만든다:
+              loop iteration별 KV — compression이 먹고 사는 바로 그 구조적 중복이며, 공개된 기록만
+              해도 full per-iteration cache, modulo-budget 공유, routing 기반 recursion-wise
+              caching까지 걸쳐 있다. 둘째, 노브를 분리한다: 모델 품질을 serve 시점에 token 단위로
+              쓰거나 아낄 수 있게 되면서(early exit), 가속 문제가 스케줄링 문제로 바뀐다. 셋째,
+              weight tying이 사 줄 수 없는 것에 정직하다 — 동일 깊이에서 decode weight-read 바닥은
+              그대로이므로, 흥미로운 틈새는 r이 적응적이거나 batch되거나 상각되는 지점이다. 이
+              사이트가 계속 들이대는 렌즈가 그것이다: byte가 실제로 움직이는 곳을 찾아라.
+            </span>
+          </p>
+          <div class="eff-chips">
+            <span class="eff-chip">unique params ÷ ~r — FLOPs × 1</span>
+            <span class="eff-chip">decode weight-reads: equal at matched depth [RE]</span>
+            <span class="eff-chip">KV: per-iteration axis → i mod k sharing (free at k=4, Huginn)</span>
+            <span class="eff-chip">depth = per-token runtime knob (KL &lt; 5×10⁻⁴)</span>
+          </div>
+        </div>
+
+        <div class="prose">
+          <h2>
+            <span class="lang-en">Going deeper</span>
+            <span class="lang-ko">더 깊이 보기</span>
+          </h2>
+          <ul class="deeper-list">
+            <li><a class="arrow-link" href="https://arxiv.org/abs/2502.05171" target="_blank" rel="noopener">Huginn — scaling test-time compute with latent recurrent depth (arXiv 2502.05171)</a></li>
+            <li><a class="arrow-link" href="https://arxiv.org/abs/2604.12946" target="_blank" rel="noopener">Parcae — stable looped LMs via SSM-style state transitions (arXiv 2604.12946)</a></li>
+            <li><a class="arrow-link" href="https://github.com/SandyResearch/parcae" target="_blank" rel="noopener">SandyResearch/parcae — the injection, loop, and cache code cited on this page</a></li>
+            <li><a class="arrow-link" href="https://arxiv.org/abs/2606.31779" target="_blank" rel="noopener">Bridging latent and explicit reasoning with looped transformers — “LOTUS” (arXiv 2606.31779)</a></li>
+            <li><a class="arrow-link" href="https://arxiv.org/abs/1807.03819" target="_blank" rel="noopener">Universal Transformers — the 2018 ancestor (arXiv 1807.03819)</a></li>
+            <li><a class="arrow-link" href="https://arxiv.org/abs/2311.12424" target="_blank" rel="noopener">Looped transformers learn iterative algorithms with &lt;10% of the params (arXiv 2311.12424)</a></li>
+            <li><a class="arrow-link" href="https://arxiv.org/abs/2507.10524" target="_blank" rel="noopener">Mixture-of-Recursions — learned per-token depth + recursion-wise KV (arXiv 2507.10524)</a></li>
+            <li><a class="arrow-link" href="https://arxiv.org/abs/2510.25741" target="_blank" rel="noopener">Ouro — looped LMs pretrained on 7.7T tokens (arXiv 2510.25741)</a></li>
+            <li><a class="arrow-link" href="/reviews/lotus/">This site’s review: LOTUS</a></li>
+            <li><a class="arrow-link" href="/study/models/sdar/">Study: SDAR architecture</a></li>
+            <li><a class="arrow-link" href="/study/models/hybrid-attention/">Study: hybrid attention anatomy (Qwen3.5)</a></li>
+          </ul>
+          <p class="fine-print">
+            <span class="lang-en">
+              Sources: Huginn facts from arXiv 2502.05171 (structure 2/4/2, param split, s₀ noise
+              σ² = 2/5, log-normal Poisson r̄ = 32 / σ = ½, truncated BPTT k = 8, KL early exit
+              5×10⁻⁴, i-mod-k KV budget with MTBench 5.86 at budget 4, HellaSwag-vs-GSM8K split,
+              ~50B-parameter-FLOPs compute equivalence). Parcae facts from arXiv 2604.12946 and the
+              public <code>SandyResearch/parcae</code> repo (model table 2/2/2@140M and 8/8/8@1.3B,
+              injection modules, <code>state_init</code>, depth samplers, μ_bwd = ⌈μ_rec/2⌉,
+              <code>ParcaeDynamicCache</code>, scaling-law forms and exponents, +2.99 CORE / 87.5% /
+              6.3% claims). LOTUS facts from arXiv 2606.31779 (official title “Bridging the Gap
+              Between Latent and Explicit Reasoning with Looped Transformers”; K = 6, c = 25, R = 6
+              at 3B on GSM8k-Aug; loss design and ablation; 70.0 ± 0.9 vs 71.5 in-domain; OOD 63.9
+              vs 62.1; thought-phase 2.5–6.9× / total 2.1×). UT, ALBERT, looped-TF-algorithms, MoR,
+              and Ouro as cited inline. Schematic charts (§3, §5) are labeled as such; every [RE]
+              item is this page’s arithmetic on those published inputs, not a measured or published
+              result. MoR’s speedup is quoted as “up to 2.06×” per its §3.3 (B=Max setting).
+            </span>
+            <span class="lang-ko">
+              출처: Huginn 관련 사실은 arXiv 2502.05171 (구조 2/4/2, 파라미터 분할, s₀ noise
+              σ² = 2/5, log-normal Poisson r̄ = 32 / σ = ½, truncated BPTT k = 8, KL early exit
+              5×10⁻⁴, budget 4에서 MTBench 5.86인 i-mod-k KV budget, HellaSwag-GSM8K 대비, ~50B
+              파라미터 FLOPs 상당의 compute). Parcae 관련 사실은 arXiv 2604.12946과 공개
+              <code>SandyResearch/parcae</code> repo (모델 표 140M 2/2/2, 1.3B 8/8/8, injection
+              모듈, <code>state_init</code>, depth sampler, μ_bwd = ⌈μ_rec/2⌉,
+              <code>ParcaeDynamicCache</code>, scaling law 형태와 지수, +2.99 CORE / 87.5% / 6.3%
+              주장). LOTUS 관련 사실은 arXiv 2606.31779 (공식 제목 “Bridging the Gap Between Latent
+              and Explicit Reasoning with Looped Transformers”; 3B, GSM8k-Aug에서 K = 6, c = 25,
+              R = 6; loss 설계와 ablation; in-domain 70.0 ± 0.9 vs 71.5; OOD 63.9 vs 62.1;
+              thought-phase 2.5–6.9× / 전체 2.1×). UT, ALBERT, looped-TF-algorithms, MoR, Ouro는
+              본문 인용처 그대로. 개략도 차트(§3, §5)는 그렇게 표기했고, 모든 [RE] 항목은 공개된
+              입력값 위에서 이 페이지가 한 산술이지 측정되거나 발표된 결과가 아니다. MoR의 speedup은
+              §3.3의 “최대 2.06×” (B=Max 설정)를 그대로 인용했다.
+            </span>
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <div id="loopTip" aria-hidden="true"></div>
+  </div>
+</Base>
+
+<style is:global>
+  /* ---- page chrome ---- */
+  .loop-page .toggle-row { margin: 1.2rem 0 0; }
+  .loop-page .jump-row { display: flex; gap: 0.6rem; flex-wrap: wrap; margin: 1.4rem 0 0; }
+  .loop-page .jump-row .tag { transition: border-color 0.2s, color 0.2s; }
+  .loop-page .jump-row .tag:hover { border-color: var(--accent); color: var(--accent-strong); }
+  .loop-page .config-note {
+    margin-top: 1.4rem; display: flex; flex-wrap: wrap; gap: 0.45rem; align-items: center;
+    font-size: 0.88rem; color: var(--text-secondary);
+  }
+  .loop-page .config-lead { flex-basis: 100%; margin-bottom: 0.15rem; }
+  .loop-page .viz-h { margin-bottom: 0.4rem; }
+  .loop-page .viz-sub { color: var(--text-secondary); max-width: 48em; margin: 0 0 0.4rem; }
+  .loop-page .loop-scroll { overflow-x: auto; }
+  .loop-page .panel-h { font-size: 1.05rem; margin: 0 0 0.35rem; }
+  .loop-page .panel-sub { color: var(--text-secondary); font-size: 0.92rem; max-width: 52em; margin: 0 0 0.9rem; line-height: 1.65; }
+  .loop-page .viz-frame + .viz-frame { margin-top: 1.4rem; }
+
+  /* ---- shared SVG vocabulary ---- */
+  .loop-page svg text { font-family: var(--font-sans); fill: var(--text); }
+  .loop-page .stitle { font-size: 13px; font-weight: 600; }
+  .loop-page .stitle.sm { font-size: 12px; }
+  .loop-page .ssub { font-size: 11px; fill: var(--text-secondary); }
+  .loop-page .smono { font-family: var(--font-mono); font-size: 10.5px; fill: var(--text-secondary); }
+  .loop-page .mlabel { font-family: var(--font-mono); font-size: 9.5px; fill: var(--text-tertiary); }
+  .loop-page .taccent { fill: var(--accent-strong); }
+  .loop-page .tlin { fill: var(--swatch-sky); }
+
+  .loop-page .sbox { fill: #ffffff; stroke: var(--line-strong); stroke-width: 1.3; }
+  .loop-page .sbox-warm { fill: var(--surface-warm); stroke: var(--line); }
+  .loop-page .sbox-accent { fill: #fdf6f2; stroke: var(--accent); stroke-dasharray: 5 4; stroke-width: 1.4; }
+  .loop-page .sbox-lin { fill: #f3f7fb; stroke: var(--swatch-sky); stroke-dasharray: 5 4; stroke-width: 1.4; }
+  .loop-page .sbox-init { fill: #f7f6f1; stroke: var(--swatch-heather); stroke-width: 1.4; }
+  .loop-page .kv-chip { fill: #fdf6f2; stroke: var(--accent); stroke-width: 1.4; }
+  .loop-page .warn-chip { fill: #fdf6f2; stroke: var(--accent-strong); stroke-width: 1.5; }
+  .loop-page .warn-t { fill: var(--accent-strong); font-style: italic; }
+
+  .loop-page .flowline { stroke: var(--text-tertiary); stroke-width: 1.6; fill: none; }
+  .loop-page .flowline-thin { stroke: var(--line-strong); stroke-width: 1.4; fill: none; }
+  .loop-page .loopline { stroke: var(--accent); stroke-width: 2; fill: none; stroke-dasharray: 6 4; }
+  .loop-page .injline { stroke: var(--accent-strong); stroke-width: 1.8; fill: none; }
+  .loop-page .stateline { stroke: var(--swatch-sky); stroke-width: 1.5; fill: none; stroke-dasharray: 5 4; }
+
+  /* ---- (a) shape ---- */
+  .loop-page .std-cell { fill: var(--swatch-slate); opacity: 0.75; transition: opacity 0.15s; }
+  .loop-page g:hover > .std-cell { opacity: 1; }
+  .loop-page .core-frame { fill: #fdf6f2; stroke: var(--accent); stroke-width: 1.6; }
+  .loop-page .core-cell { fill: #ffffff; stroke: var(--accent); stroke-width: 1.2; }
+  .loop-page .corelbl { fill: var(--accent-strong); }
+  .loop-page .tally { fill: var(--surface-warm); stroke: var(--line-strong); stroke-width: 1.2; }
+  .loop-page .tally-std { stroke: var(--swatch-slate); }
+  .loop-page .tally-loop { fill: #fdf6f2; stroke: var(--accent); }
+  .loop-page .tally-looped { stroke: var(--accent); fill: #fdf6f2; }
+
+  /* ---- (b) feed ---- */
+  .loop-page .pulse-dot {
+    fill: var(--accent-strong); stroke: #ffffff; stroke-width: 2;
+    transition: cx 0.45s ease, cy 0.45s ease;
+  }
+  .loop-page .trace-row {
+    display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; margin: 0.9rem 0;
+  }
+  .loop-page .trace-lbl { font-size: 0.78rem; color: var(--text-tertiary); }
+  .loop-page .tr-chip {
+    font-family: var(--font-mono); font-size: 0.74rem; color: var(--text-tertiary);
+    border: 1px solid var(--line-strong); border-radius: 999px; padding: 0.25em 0.75em;
+    background: var(--surface); transition: all 0.2s;
+  }
+  .loop-page .tr-chip.on { border-color: var(--accent); color: var(--accent-strong); background: #fdf6f2; }
+  .loop-page .tr-chip.tr-hide { display: none; }
+  .loop-page .tr-out.on { border-color: var(--text); color: var(--text); background: var(--surface-warm); }
+
+  /* ---- controls (shared) ---- */
+  .loop-page .dt-controls { display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; margin-bottom: 1rem; }
+  .loop-page .btn-sm { padding: 0.45em 1.1em; font-size: 0.85rem; }
+  .loop-page .btn[disabled] { opacity: 0.4; pointer-events: none; }
+  .loop-page .dt-step {
+    font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-secondary);
+    margin-left: auto; white-space: nowrap;
+  }
+  .loop-page .mask-modes { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.9rem; }
+  .loop-page .mode-btn {
+    font-family: var(--font-sans); font-size: 0.78rem; font-weight: 600; cursor: pointer;
+    padding: 0.4em 1em; border-radius: 999px; border: 1px solid var(--line-strong);
+    background: var(--surface); color: var(--text-secondary); transition: all 0.2s;
+  }
+  .loop-page .mode-btn.on { background: var(--text); border-color: var(--text); color: var(--bg); }
+  .loop-page .mode-btn:not(.on):hover { border-color: var(--accent); color: var(--accent-strong); }
+
+  .loop-page .slider-row { display: flex; align-items: center; gap: 0.8rem; margin: 0.9rem 0 1rem; }
+  .loop-page .slider-lbl { font-size: 0.8rem; color: var(--text-tertiary); font-family: var(--font-mono); }
+  .loop-page .slider-row input[type='range'] { flex: 1; accent-color: var(--accent-strong); }
+  .loop-page #rhoVal, .loop-page #rVal {
+    font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-secondary);
+    white-space: nowrap; min-width: 5em; text-align: right;
+  }
+
+  .loop-page .dt-caption {
+    margin: 0 0 0.8rem; padding: 0.9rem 1.1rem; min-height: 4.4em;
+    background: var(--surface-warm); border-left: 3px solid var(--accent);
+    border-radius: 0 var(--radius-s) var(--radius-s) 0; font-size: 0.95rem;
+  }
+  .loop-page .fine-note {
+    margin: 0.4rem 0 0.9rem; font-size: 0.85rem; color: var(--text-tertiary);
+    max-width: 60em; line-height: 1.65;
+  }
+  .loop-page .eq-chips { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.2rem 0 1rem; }
+  .loop-page .eq-chip {
+    font-family: var(--font-mono); font-size: 0.76rem; color: var(--text-secondary);
+    border: 1px solid var(--line-strong); border-radius: 999px; padding: 0.35em 0.9em;
+    background: var(--surface); cursor: help;
+  }
+  .loop-page .eq-chip:hover { border-color: var(--accent); color: var(--accent-strong); }
+
+  /* ---- (c) stability ---- */
+  .loop-page .curve-conv { stroke: var(--swatch-sky); stroke-width: 2.2; fill: none; }
+  .loop-page .curve-div { stroke: var(--accent-strong); stroke-width: 2.2; stroke-dasharray: 7 5; fill: none; }
+  .loop-page .curve-user { stroke: var(--text); stroke-width: 2.4; fill: none; }
+
+  /* ---- (d) training ---- */
+  .loop-page .pmf-bar { fill: var(--swatch-heather); opacity: 0.85; }
+  .loop-page .bp-cell { transition: all 0.2s; }
+  .loop-page .bp-ng { fill: var(--surface-warm); stroke: var(--line-strong); stroke-width: 1.2; }
+  .loop-page .bp-g { fill: #fdf6f2; stroke: var(--accent); stroke-width: 1.5; }
+  .loop-page .bp-cell.bp-hot { fill: var(--accent); }
+  .loop-page .bp-glbl { fill: var(--accent-strong); }
+  .loop-page .bp-arrow { stroke: var(--accent-strong); stroke-width: 2; fill: none; }
+  .loop-page .tok-chip { fill: var(--surface-warm); stroke: var(--line-strong); stroke-width: 1.2; }
+  .loop-page .lat-chip { fill: #f3f7fb; stroke: var(--swatch-sky); stroke-width: 1.4; }
+
+  /* ---- (e) scaling + KV ---- */
+  .loop-page .curve-qa { stroke: var(--swatch-slate); stroke-width: 2.2; fill: none; }
+  .loop-page .curve-qb { stroke: var(--accent-strong); stroke-width: 2.4; fill: none; }
+  .loop-page .dot-qa { fill: var(--swatch-slate); }
+  .loop-page .dot-qb { fill: var(--accent-strong); }
+  .loop-page .kv-row { fill: #fdf6f2; stroke: var(--accent); stroke-width: 1.2; }
+  .loop-page .kv-shared { fill: #f3f7fb; stroke: var(--swatch-sky); stroke-width: 1.4; }
+  .loop-page .kv-link { stroke: var(--line-strong); stroke-width: 1.3; }
+
+  /* ---- (f) accounting ---- */
+  .loop-page .acc-bar { transition: opacity 0.15s; }
+  .loop-page .ab-std { fill: var(--swatch-slate); opacity: 0.8; }
+  .loop-page .ab-loop { fill: var(--accent); opacity: 0.9; }
+  .loop-page .ab-kv { fill: var(--swatch-sky); opacity: 0.9; }
+  .loop-page .ab-extra { fill: var(--swatch-kraft); opacity: 0.7; }
+  .loop-page g:hover > g > .acc-bar { opacity: 1; }
+  .loop-page .eff-grid { margin-top: 1.6rem; }
+  .loop-page .eff-grid .card p { font-size: 0.92rem; line-height: 1.65; }
+
+  /* ---- efficiency note / deeper ---- */
+  .loop-page .eff-note {
+    border-radius: var(--radius-l); padding: clamp(1.4rem, 3vw, 2.2rem);
+    margin: 3rem 0; max-width: 860px;
+  }
+  .loop-page .eff-note h3 { color: var(--text-on-dark); margin-bottom: 0.7rem; }
+  .loop-page .eff-note p { font-size: 0.97rem; line-height: 1.7; }
+  .loop-page .eff-chips { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1.1rem; }
+  .loop-page .eff-chip {
+    font-family: var(--font-mono); font-size: 0.74rem; color: var(--text-on-dark);
+    border: 1px solid var(--line-on-dark); border-radius: 999px; padding: 0.35em 0.9em;
+    background: #1d1d1b;
+  }
+  .loop-page .deeper-list { list-style: none; padding: 0; margin: 0.6rem 0 1.6rem; display: flex; flex-direction: column; gap: 0.55rem; }
+  .loop-page .deeper-list .arrow-link { text-decoration: none; }
+  .loop-page .fine-print { font-size: 0.85rem; color: var(--text-tertiary); }
+
+  /* ---- tooltip ---- */
+  #loopTip {
+    position: fixed; z-index: 60; max-width: 320px; pointer-events: none;
+    background: var(--surface-dark); color: var(--text-on-dark);
+    font-family: var(--font-sans); font-size: 0.78rem; line-height: 1.5;
+    padding: 0.5rem 0.75rem; border-radius: 8px; opacity: 0;
+    transition: opacity 0.15s; box-shadow: 0 8px 24px rgba(20, 20, 19, 0.25);
+  }
+</style>
+
+<script>
+  // ============ shared tooltip (bilingual: data-tip / data-tip-ko) ============
+  const tip = document.getElementById('loopTip');
+  const curLang = () => (window.siteLang ? window.siteLang() : 'en');
+  document.querySelectorAll('[data-tip]').forEach((el) => {
+    el.addEventListener('mousemove', (e) => {
+      if (!tip) return;
+      const ko = el.getAttribute('data-tip-ko');
+      tip.textContent = (curLang() === 'ko' && ko ? ko : el.getAttribute('data-tip')) || '';
+      tip.style.opacity = '1';
+      const x = Math.min(e.clientX + 14, window.innerWidth - 336);
+      tip.style.left = x + 'px';
+      tip.style.top = e.clientY + 18 + 'px';
+    });
+    el.addEventListener('mouseleave', () => {
+      if (tip) tip.style.opacity = '0';
+    });
+  });
+
+  const $ = (id) => document.getElementById(id);
+  const setTxt = (id, s) => { const el = $(id); if (el) el.textContent = s; };
+  const setDisp = (id, show) => { const el = $(id); if (el) el.style.display = show ? '' : 'none'; };
+
+  // ============ (b) feeding the loop ============
+  const FEED = {
+    ut: {
+      r: 8,
+      pre: ['embedding', 'runs once'],
+      e: ['e — embedded input', '[n × h]'],
+      h0: ['h₀ = e — the embedding itself', 'the embedding enters once'],
+      inj: ['no re-injection of e', 'hᵢ = block(hᵢ₋₁ + pos/step enc.)', 'e only at the start — see the quote'],
+      core: 'one shared block (arXiv 1807.03819)',
+      loop: 'hᵢ loops back · × r — ACT per-position halting',
+      jctTip: 'Universal Transformer applies one shared transformation over depth with ACT dynamic halting; the input embedding enters only as h₀. Modern looped LMs abandoned exactly this wiring.',
+      jctTipKo: 'Universal Transformer는 공유된 변환 하나를 ACT dynamic halting과 함께 깊이 방향으로 반복 적용한다; input embedding은 h₀로만 들어온다. 현대 looped LM들이 버린 배선이 바로 이것이다.',
+      cap: {
+        init: {
+          en: 'h₀ is the embedding itself — the input embedding enters the loop once. Universal Transformer (2018) named the idea: a “parallel-in-time self-attentive recurrent sequence model”, Turing-complete under certain assumptions.',
+          ko: 'h₀가 embedding 그 자체다 — input embedding이 loop에 한 번만 들어온다. Universal Transformer(2018)가 이 아이디어를 명명했다: “parallel-in-time self-attentive recurrent sequence model”, 특정 가정 하에 Turing-complete.',
+        },
+        iter: {
+          en: 'Iteration {i} / {r}: the same block applies again with no re-injection of the input embedding (only coordinate/timestep encodings are re-added) — the configuration later looped LMs rejected. Huginn: “If e was provided only at the start … the iterative process would not be stable.” UT manages depth with ACT halting instead.',
+          ko: 'Iteration {i} / {r}: 같은 block이 input embedding의 재주입 없이 다시 적용된다 (좌표·timestep encoding만 매번 더해진다) — 이후의 looped LM들이 기각한 구성이다. Huginn: “e가 시작에만 주어지면 … iterative process는 불안정하다.” UT는 대신 ACT halting으로 깊이를 관리했다.',
+        },
+        end: {
+          en: 'Done. UT’s legacy is the shape (shared weights over depth, dynamic halting); ALBERT carried cross-layer parameter sharing to pretraining; the modern loop kept the recurrence but rebuilt how it is fed.',
+          ko: '끝. UT의 유산은 형태(깊이 방향 weight 공유, dynamic halting)다; ALBERT는 cross-layer 파라미터 공유를 pretraining으로 가져갔고, 현대의 loop는 recurrence는 유지하되 입력 공급 방식을 다시 설계했다.',
+        },
+      },
+    },
+    hug: {
+      r: 8,
+      pre: ['prelude P', 'runs once'],
+      e: ['e = P(x)', '[n × h]'],
+      h0: ['s₀ ~ N(0, σ²·I) · σ² = 2/5', 'random noise init'],
+      inj: ['input re-injection — concat + adapter A', 'sᵢ = R( A·[ sᵢ₋₁ ; e ] )', 'A: ℝ²ʰ → ℝʰ, start of the core block'],
+      core: '4 layers · 1.5 B params (Huginn)',
+      loop: 'hᵢ loops back · × r — trained r̄ = 32 (animated: 8)',
+      jctTip: 'Huginn’s injection: the core block R starts with an adapter matrix A mapping the concatenation of sᵢ and e (2h) back to hidden width h — so the input re-enters at every single iteration (arXiv 2502.05171 §3.2).',
+      jctTipKo: 'Huginn의 injection: core block R이 sᵢ와 e의 concatenation(2h)을 hidden 폭 h로 되돌리는 adapter 행렬 A로 시작한다 — 입력이 매 iteration 재진입한다 (arXiv 2502.05171 §3.2).',
+      cap: {
+        init: {
+          en: 'Huginn starts the loop from random noise: s₀ ~ N(0, σ²I), σ² = 2/5 — not zeros, not the embedding. The input only ever arrives through the injection junction, and the trained model is path-independent: it converges toward an input-conditioned fixed point regardless of s₀.',
+          ko: 'Huginn은 loop를 random noise에서 시작한다: s₀ ~ N(0, σ²I), σ² = 2/5 — zero도 embedding도 아니다. 입력은 오직 injection junction으로만 들어오고, 학습된 모델은 path-independent해서 s₀가 무엇이든 입력-조건부 fixed point로 수렴한다.',
+        },
+        iter: {
+          en: 'Iteration {i} / {r}: the adapter A folds [sᵢ₋₁ ; e] back to width h, then the 4-layer core transforms it — the same 1.5 B params as every other pass. Nothing new is fetched from storage; only the state moved.',
+          ko: 'Iteration {i} / {r}: adapter A가 [sᵢ₋₁ ; e]를 폭 h로 접어 넣고, 4-layer core가 변환한다 — 다른 모든 pass와 동일한 1.5 B params다. 저장소에서 새로 가져오는 것은 없다; 움직인 것은 state뿐이다.',
+        },
+        end: {
+          en: 'The coda decodes s_r into logits: p = C(s_r). Training used r̄ = 32 on average (132 layer-applications from a 3.5 B model — derived count); at test time r is yours to choose — that is section 5.',
+          ko: 'coda가 s_r을 logits로 decode한다: p = C(s_r). 학습은 평균 r̄ = 32를 썼고(3.5 B 모델에서 132번의 layer-application — 계산값), test 시점의 r은 사용자의 선택이다 — 그것이 섹션 5다.',
+        },
+      },
+    },
+    par: {
+      r: 8,
+      pre: ['prelude P', 'output normalized (prelude_norm)'],
+      e: ['e = P(x)', '[n × h]'],
+      h0: ['h₀ ~ trunc-normal (“like-init”)', 'embedding-init std (repo config)'],
+      inj: ['decay-SSM injection (DiagonalInjection)', 'hₜ₊₁ = e^(−Δ·A) ⊙ hₜ + Δ·(B e) + R̄', 'decay elementwise in (0,1) — ρ(Ā) < 1 built in'],
+      core: '8 layers (Parcae-1.3B, d = 1536)',
+      loop: 'hᵢ loops back · × r = 8 (Parcae-1.3B)',
+      jctTip: 'Parcae’s injection is a discretized negative-diagonal LTI-SSM on the loop axis: x_{t+1} = exp(−dt·A)·x_t + dt·B@e with dt = softplus(dt_bias), A = exp(A_log) > 0 — so the transition’s spectral radius is < 1 by construction (paper eq. + injection.py).',
+      jctTipKo: 'Parcae의 injection은 loop 축 위의 discretized negative-diagonal LTI-SSM이다: x_{t+1} = exp(−dt·A)·x_t + dt·B@e, dt = softplus(dt_bias), A = exp(A_log) > 0 — transition의 spectral radius가 구조적으로 1 미만이다 (논문 수식 + injection.py).',
+      cap: {
+        init: {
+          en: 'Parcae also starts from noise — the shipped configs use state_init = “like-init”, truncated-normal at the embedding-init std (parcae.py::initialize_state). The prelude output e is normalized before entering the loop.',
+          ko: 'Parcae도 noise에서 시작한다 — 배포 config는 state_init = “like-init”, embedding-init std의 truncated-normal을 쓴다 (parcae.py::initialize_state). prelude 출력 e는 loop에 들어가기 전에 normalize된다.',
+        },
+        iter: {
+          en: 'Iteration {i} / {r}: the diagonal decay e^(−Δ·A) shrinks the old state elementwise (every entry in (0,1) by construction), Δ·(B e) injects the input, and the transformer block adds its residual R̄. The injection transition cannot learn its way to ρ ≥ 1 — that is the whole §3 story.',
+          ko: 'Iteration {i} / {r}: 대각 decay e^(−Δ·A)가 이전 state를 elementwise로 줄이고(모든 성분이 구조상 (0,1)), Δ·(B e)가 입력을 주입하며, transformer block이 residual R̄를 더한다. injection transition은 학습으로도 ρ ≥ 1에 도달할 수 없다 — 그것이 §3의 전부다.',
+        },
+        end: {
+          en: 'After r = 8 loops, Parcae-1.3B has run 80 layer-applications from 24 unique layers. Published result: +2.99 CORE over a matched transformer — up to 87.5% the relative quality of one twice its size.',
+          ko: 'r = 8 loop 뒤 Parcae-1.3B는 unique layer 24개로 80번의 layer-application을 수행했다. 공개 결과: matched transformer 대비 CORE +2.99 — 2배 크기 모델의 상대 품질 최대 87.5%.',
+        },
+      },
+    },
+    lot: {
+      r: 6,
+      pre: ['f_θ(Q) — question pass', 'fills C_pre once'],
+      e: ['E — learned latents', 'K×c = 150 positions'],
+      h0: ['h⁽⁰⁾ = f_θ(E | C_pre)', 'first pass over latents — no noise'],
+      inj: ['additive re-injection', 'h⁽ᵗ⁾ = f_θ( E + h⁽ᵗ⁻¹⁾ | C_pre )', 'previous output ADDED to the fixed embeddings'],
+      core: 'entire 3B backbone f_θ — looped on latents only',
+      loop: 'h⁽ᵗ⁾ loops back · × R = 6 (LOTUS 3B)',
+      jctTip: 'LOTUS re-injects additively: the previous loop output is added to the learnable latent embeddings E and re-fed — h⁽ᵗ⁾ = f_θ(E + h⁽ᵗ⁻¹⁾ | C_pre) — while the question’s KV cache C_pre is computed once and reused (arXiv 2606.31779).',
+      jctTipKo: 'LOTUS는 덧셈으로 재주입한다: 직전 loop 출력을 learnable latent embedding E에 더해 다시 먹인다 — h⁽ᵗ⁾ = f_θ(E + h⁽ᵗ⁻¹⁾ | C_pre) — question의 KV cache C_pre는 한 번 계산해 재사용한다 (arXiv 2606.31779).',
+      cap: {
+        init: {
+          en: 'LOTUS differs at birth: h⁽⁰⁾ is not noise but a first forward pass of the whole pretrained backbone over K×c = 150 learned latent embeddings, attending to the question’s cached KV (C_pre — computed once).',
+          ko: 'LOTUS는 시작부터 다르다: h⁽⁰⁾는 noise가 아니라, 사전학습된 backbone 전체를 K×c = 150개의 learned latent embedding 위로 한 번 통과시킨 결과다 — question의 cache된 KV(C_pre, 한 번만 계산)에 attend하면서.',
+        },
+        iter: {
+          en: 'Iteration {i} / {r}: E + h⁽ᵗ⁻¹⁾ re-enters the FULL 3B backbone — the loop body here is the whole model, not a sub-block, and it runs only over the 150 latent positions while reusing C_pre.',
+          ko: 'Iteration {i} / {r}: E + h⁽ᵗ⁻¹⁾가 3B backbone 전체로 재진입한다 — 여기서 loop 본체는 sub-block이 아니라 모델 전체이고, C_pre를 재사용하며 150개 latent 위치 위에서만 돈다.',
+        },
+        end: {
+          en: 'After R = 6, the post-loop latents are inserted and the answer decodes. Published: 70.0 ± 0.9 GSM8K vs 71.5 explicit CoT, OOD 63.9 vs 62.1 — with the thought phase 2.5× faster (6.9× on the natural-language stress test; 2.1× total).',
+          ko: 'R = 6 이후, loop를 통과한 latent들이 삽입되고 answer가 decode된다. 공개 결과: GSM8K 70.0 ± 0.9 vs explicit CoT 71.5, OOD 63.9 vs 62.1 — thought phase는 2.5× 빠르다 (자연어 stress test에선 6.9×; 전체 2.1×).',
+        },
+      },
+    },
+  };
+
+  const P_INIT = [490, 56];
+  const P_JCT = [490, 195];
+  const P_CORE = [490, 322];
+  const P_CODA = [775, 428];
+
+  let fv = 'hug'; // variant key
+  let fs = 0;     // 0 = init, 1..r = iterations, r+1 = decode
+  let fTimer = null;
+  let fHop = null;
+
+  const feedCapEl = $('feedCap');
+
+  function movePulse(p) {
+    const d = $('pulse');
+    if (!d) return;
+    d.setAttribute('cx', p[0]);
+    d.setAttribute('cy', p[1]);
+  }
+
+  function renderFeed() {
+    const v = FEED[fv];
+    const lang = curLang();
+    // caption
+    let cap;
+    if (fs === 0) cap = v.cap.init;
+    else if (fs <= v.r) cap = v.cap.iter;
+    else cap = v.cap.end;
+    if (feedCapEl) {
+      feedCapEl.innerHTML = (lang === 'ko' ? cap.ko : cap.en)
+        .replace('{i}', String(fs))
+        .replace('{r}', String(v.r));
+    }
+    // counter + badge
+    setTxt('feedStep', fs === 0 ? 'init — s₀' : fs <= v.r ? `iteration ${fs} / ${v.r}` : 'decode — p = C(s_r)');
+    setTxt('iterBadge', fs <= v.r ? `i = ${fs} / ${v.r}` : 'done — s_r → coda');
+    // pulse
+    if (fHop) { clearTimeout(fHop); fHop = null; }
+    if (fs === 0) movePulse(P_INIT);
+    else if (fs <= v.r) {
+      movePulse(P_JCT);
+      fHop = setTimeout(() => movePulse(P_CORE), 460);
+    } else movePulse(P_CODA);
+    // trace chips
+    document.querySelectorAll('.tr-chip').forEach((c) => {
+      const i = Number(c.getAttribute('data-i'));
+      if (i === 9) { c.classList.toggle('on', fs > v.r); return; }
+      c.classList.toggle('tr-hide', i > v.r);
+      c.classList.toggle('on', i <= Math.min(fs, v.r));
+    });
+    // buttons
+    const bp = $('btnFPrev'), bn = $('btnFNext');
+    if (bp) bp.toggleAttribute('disabled', fs === 0);
+    if (bn) bn.toggleAttribute('disabled', fs > v.r);
+  }
+
+  function setVariant(key) {
+    fv = key;
+    fs = 0;
+    stopFeedPlay();
+    const v = FEED[key];
+    setTxt('preT1', v.pre[0]); setTxt('preT2', v.pre[1]);
+    setTxt('eT1', v.e[0]); setTxt('eT2', v.e[1]);
+    setTxt('h0T1', v.h0[0]); setTxt('h0T2', v.h0[1]);
+    setTxt('injTitle', v.inj[0]); setTxt('injEq', v.inj[1]); setTxt('injSub', v.inj[2]);
+    setTxt('coreSub', v.core); setTxt('loopLbl', v.loop);
+    const jct = $('gJct');
+    if (jct) { jct.setAttribute('data-tip', v.jctTip); jct.setAttribute('data-tip-ko', v.jctTipKo); }
+    const isUt = key === 'ut';
+    setDisp('eToJct', !isUt); setDisp('eLbl', !isUt); setDisp('eToH0', isUt);
+    setDisp('gUt', isUt);
+    setDisp('gLot', key === 'lot'); setDisp('lotArrow', key === 'lot');
+    ['ut', 'hug', 'par', 'lot'].forEach((k) => {
+      const b = $('vb-' + k);
+      if (b) b.classList.toggle('on', k === key);
+    });
+    renderFeed();
+  }
+
+  function stopFeedPlay() {
+    if (fTimer !== null) { clearInterval(fTimer); fTimer = null; }
+    const p = $('btnFPlay');
+    if (p) p.textContent = '▶ Play';
+  }
+
+  ['ut', 'hug', 'par', 'lot'].forEach((k) => {
+    const b = $('vb-' + k);
+    if (b) b.addEventListener('click', () => setVariant(k));
+  });
+  const bFn = $('btnFNext'), bFp = $('btnFPrev'), bFr = $('btnFReset'), bFpl = $('btnFPlay');
+  if (bFn) bFn.addEventListener('click', () => { stopFeedPlay(); fs = Math.min(fs + 1, FEED[fv].r + 1); renderFeed(); });
+  if (bFp) bFp.addEventListener('click', () => { stopFeedPlay(); fs = Math.max(fs - 1, 0); renderFeed(); });
+  if (bFr) bFr.addEventListener('click', () => { stopFeedPlay(); fs = 0; renderFeed(); });
+  if (bFpl) {
+    bFpl.addEventListener('click', () => {
+      if (fTimer !== null) { stopFeedPlay(); return; }
+      if (fs > FEED[fv].r) fs = 0;
+      bFpl.textContent = '❚❚ Pause';
+      fTimer = setInterval(() => {
+        if (fs > FEED[fv].r) { stopFeedPlay(); return; }
+        fs += 1;
+        renderFeed();
+      }, 1100);
+    });
+  }
+
+  // ============ (c) stability slider ============
+  const T_STAB = 24;
+  const stabX = (t) => 70 + (t / T_STAB) * 630;
+  const stabY = (v) => 300 - (Math.min(v, 12) / 12) * 250;
+  function stabPts(rho, x0) {
+    const seg = [];
+    let x = x0;
+    for (let t = 0; t <= T_STAB; t++) {
+      seg.push(`${stabX(t).toFixed(1)},${stabY(x).toFixed(1)}`);
+      x = rho * x + 1;
+    }
+    return seg.join(' ');
+  }
+  const stabCapEl = $('stabCap');
+  function renderStab(rho) {
+    const ln = $('trajUser');
+    if (ln) ln.setAttribute('points', stabPts(rho, 0.5));
+    setTxt('rhoVal', rho.toFixed(2));
+    if (!stabCapEl) return;
+    const lang = curLang();
+    if (rho < 1) {
+      const fp = (1 / (1 - rho)).toFixed(1);
+      stabCapEl.innerHTML = lang === 'ko'
+        ? `ρ = <b>${rho.toFixed(2)}</b> — 수축. state는 입력-조건부 fixed point(이 스칼라 모형에선 ${fp})로 접근한다. Parcae는 이 영역을 <b>구조적으로</b> 보장한다: 대각 decay e^(−Δ·A)가 elementwise로 (0, 1)에 있어 injection transition은 학습으로도 ρ = 1을 넘지 못한다.`
+        : `ρ = <b>${rho.toFixed(2)}</b> — contracting. The state approaches its input-conditioned fixed point (${fp} in this scalar model). Parcae makes this regime <b>structural</b>: the diagonal decay e^(−Δ·A) is elementwise in (0, 1), so the injection transition cannot learn its way past ρ = 1.`;
+    } else {
+      stabCapEl.innerHTML = lang === 'ko'
+        ? `ρ = <b>${rho.toFixed(2)}</b> — 발산. 매 iteration norm이 복리로 커진다: Parcae가 진단한 “residual state explosion과 loss spike”, 그리고 발산한 run들이 학습해 버린 ρ(Ā) ≥ 1이 바로 이것이다.`
+        : `ρ = <b>${rho.toFixed(2)}</b> — diverging. The norm compounds every iteration: Parcae’s “residual state explosion and loss spikes”, and exactly what divergent runs had learned — ρ(Ā) ≥ 1.`;
+    }
+  }
+  const rhoS = $('rhoSlider');
+  if (rhoS) rhoS.addEventListener('input', () => renderStab(Number(rhoS.value) / 100));
+
+  // ============ (d2) BPTT sweep ============
+  const bpBtn = $('btnBptt');
+  let bpTimer = null;
+  if (bpBtn) {
+    bpBtn.addEventListener('click', () => {
+      if (bpTimer !== null) return;
+      const cells = Array.from(document.querySelectorAll('.bp-cell')).reverse(); // 16 → 1
+      cells.forEach((c) => c.classList.remove('bp-hot'));
+      let j = 0;
+      setTxt('bpttStep', 'backward: ∂L flowing…');
+      bpTimer = setInterval(() => {
+        if (j >= 8) {
+          clearInterval(bpTimer); bpTimer = null;
+          setTxt('bpttStep', 'stopped at the window edge — first 8 iterations never see ∂L');
+          setTimeout(() => cells.forEach((c) => c.classList.remove('bp-hot')), 1800);
+          return;
+        }
+        cells[j].classList.add('bp-hot');
+        setTxt('bpttStep', `backward: iteration ${16 - j} ✓ (grad)`);
+        j += 1;
+      }, 320);
+    });
+  }
+
+  // ============ (e1) test-time depth slider ============
+  const rX = (r) => 70 + (Math.log2(r) / 6) * 630;
+  const qA = (r) => 78 - 33 * Math.exp(-0.8 * (r - 1));
+  const qB = (r) => 70 - 40 * Math.exp(-0.05 * r);
+  const qY = (q) => 300 - (q / 100) * 250;
+  const scaleCapEl = $('scaleCap');
+  function renderScale(rv) {
+    const r = Math.pow(2, rv / 10);
+    const rr = r >= 10 ? Math.round(r) : Math.round(r * 10) / 10;
+    setTxt('rVal', `r = ${rr}`);
+    const x = rX(r);
+    const da = $('dotQA'), db = $('dotQB'), la = $('lblQA'), lb = $('lblQB');
+    if (da) { da.setAttribute('cx', x); da.setAttribute('cy', qY(qA(r))); }
+    if (db) { db.setAttribute('cx', x); db.setAttribute('cy', qY(qB(r))); }
+    const anchorEnd = x > 560;
+    const lx = anchorEnd ? x - 10 : x + 10;
+    const gap = qA(r) - qB(r);
+    if (la) {
+      la.setAttribute('x', lx); la.setAttribute('text-anchor', anchorEnd ? 'end' : 'start');
+      la.setAttribute('y', qY(qA(r)) - 8);
+      la.textContent = r >= 8 ? 'recall-style — saturated' : 'recall-style';
+    }
+    if (lb) {
+      lb.setAttribute('x', lx); lb.setAttribute('text-anchor', anchorEnd ? 'end' : 'start');
+      lb.setAttribute('y', qY(qB(r)) + (gap < 8 ? 20 : 16));
+      lb.textContent = r >= 48 ? 'reasoning-style — still climbing' : 'reasoning-style';
+    }
+    if (!scaleCapEl) return;
+    const lang = curLang();
+    let en, ko;
+    if (r < 4) {
+      en = `r = <b>${rr}</b>: both curves are still steep — every extra loop pays. This is the regime where a shallow-unrolled looped model is simply a worse fixed net.`;
+      ko = `r = <b>${rr}</b>: 두 곡선 모두 아직 가파르다 — 추가 loop가 전부 돈값을 한다. 얕게 펼친 looped 모델이 그냥 더 나쁜 고정 네트워크인 영역이기도 하다.`;
+    } else if (r < 16) {
+      en = `r = <b>${rr}</b>: the recall-style curve has flattened — this is where per-token early exit fires (KL &lt; 5×10⁻⁴) — while the reasoning-style curve is still climbing. Depth bought this way is compute, not parameters.`;
+      ko = `r = <b>${rr}</b>: recall류 곡선은 평평해졌고 — 바로 여기서 per-token early exit이 발동한다 (KL &lt; 5×10⁻⁴) — reasoning류 곡선은 아직 오르는 중이다. 이렇게 산 깊이는 파라미터가 아니라 연산이다.`;
+    } else {
+      en = `r = <b>${rr}</b>: only the reasoning-style curve still pays for depth — Huginn reports GSM8K improving out to r ≈ 32–64 while HellaSwag needed ~8. FLOPs, meanwhile, have grown linearly the whole way.`;
+      ko = `r = <b>${rr}</b>: 이제 depth의 값어치를 하는 것은 reasoning류 곡선뿐이다 — Huginn 보고 기준 GSM8K는 r ≈ 32–64까지 오르고 HellaSwag은 ~8이면 됐다. 그동안 FLOPs는 내내 선형으로 늘었다.`;
+    }
+    scaleCapEl.innerHTML = lang === 'ko' ? ko : en;
+  }
+  const rS = $('rSlider');
+  if (rS) rS.addEventListener('input', () => renderScale(Number(rS.value)));
+
+  // ============ (e2) KV mode toggle ============
+  const kvN = $('kvNaiveBtn'), kvM = $('kvModBtn');
+  function setKv(modeNaive) {
+    setDisp('gKvNaive', modeNaive);
+    setDisp('gKvMod', !modeNaive);
+    if (kvN) kvN.classList.toggle('on', modeNaive);
+    if (kvM) kvM.classList.toggle('on', !modeNaive);
+  }
+  if (kvN) kvN.addEventListener('click', () => setKv(true));
+  if (kvM) kvM.addEventListener('click', () => setKv(false));
+
+  // ============ language re-render ============
+  window.addEventListener('site-langchange', () => {
+    renderFeed();
+    if (rhoS) renderStab(Number(rhoS.value) / 100);
+    if (rS) renderScale(Number(rS.value));
+  });
+
+  setVariant('hug');
+</script>
+
