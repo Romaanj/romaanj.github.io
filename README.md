@@ -51,14 +51,17 @@ without extension (`src/content/reviews/my-paper.md` → `/reviews/my-paper/`).
 | `topic`      | string?                           | reading-list section: `diffusion-llm` \| `kv-cache` \| `hybrid-architecture` \| `post-training` \| `on-device` \| `architecture` \| `compression` \| `serving` |
 | `links`      | string[] (default `[]`)           | slugs of related reviews → graph edges                       |
 | `resources`  | `{label, url}[]` (default `[]`)   | **verified** primary links only (arXiv / PDF / project / GitHub / dataset / checkpoint) |
+| `figures`    | `{src, caption, caption_ko?, credit}[]` (default `[]`) | 1–2 key figures pulled from the paper's arXiv HTML, served from `public/figures/<slug>/`; always credited (`Figure N from arXiv:<id> — authors' figure`), ≤ 2 MB each |
 | `analysis`   | `{ ko: {...}, en: {...} }`?       | bilingual 13-key structured analysis (below)                 |
 | `source`     | `autosweep` \| `manual`           | default `manual`                                             |
 | `rating`     | number? (1–5)                     |                                                               |
 
-**The 13-item analysis block.** `analysis.ko` and `analysis.en` each carry the
-same 13 keys in a **fixed order**, one information-dense sentence per key
-(identical content across the two languages). Key quantitative numbers may be
-marked `**bold**`; the renderer converts them.
+**The 13-item analysis block (enriched format).** `analysis.ko` and
+`analysis.en` each carry the same 13 keys in a **fixed order**, **2–4
+sentences per key** — the first sentence is the crisp information-dense claim,
+the rest add mechanism/context, with an apt analogy on a handful of items
+where it genuinely clarifies (identical content across the two languages).
+Key quantitative numbers may be marked `**bold**`; the renderer converts them.
 
 | # | key            | ko label    | en label            |
 |---|----------------|-------------|----------------------|
@@ -183,9 +186,12 @@ python3 scripts/publish_review.py <lit-note.md> --slug <slug> [--date YYYY-MM-DD
 
 It writes `src/content/reviews/<slug>.md` with `source: autosweep` and the full new-schema
 frontmatter as TODO stubs: `topic`, `summary` / `summary_ko`, `links: []`, `resources: []`
-(verified links only), and a complete bilingual `analysis:` block (`ko:` + `en:`, each with
-all 13 keys in fixed order, every value `'TODO'`), plus a minimal `## Notes` body. It
-refuses (exit 1) if the slug already exists. The daily lit autosweep calls this for each
-public-worthy paper, then the 13-item analysis is filled in both languages from the paper
-itself in a public-facing tone, and the result is committed to `src/content/reviews/` and
-pushed — the Pages action publishes it.
+(verified links only), `figures: []` (1–2 credited key figures from the paper's arXiv HTML,
+saved to `public/figures/<slug>/`), and a complete bilingual `analysis:` block (`ko:` +
+`en:`, each with all 13 keys in fixed order, every value `'TODO'`), plus a minimal
+`## Notes` body. It refuses (exit 1) if the slug already exists. The daily lit autosweep
+calls this for each public-worthy paper, then the 13-item analysis is filled in both
+languages from the paper itself in the enriched format (2–4 sentences per key, first
+sentence = the crisp claim) in a public-facing tone, figures are downloaded and credited,
+and the result is committed to `src/content/reviews/` (+ `public/figures/`) and pushed —
+the Pages action publishes it.

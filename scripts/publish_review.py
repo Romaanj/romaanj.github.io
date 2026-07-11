@@ -12,8 +12,9 @@ What it does:
       - the arXiv id (explicit `arXiv:`/`arxiv.org` reference in the body,
         or a bare id in the filename/body)
   * Emits src/content/reviews/<slug>.md with the full reviews frontmatter
-    (source: autosweep, summary/summary_ko placeholders, topic/links/resources
-    stubs, and a bilingual 13-item analysis block with every value TODO) plus a
+    (source: autosweep, summary/summary_ko placeholders, topic/links/resources/
+    figures stubs, and a bilingual 13-item analysis block with every value TODO
+    — enriched format: 2-4 sentences per key, first = the crisp claim) plus a
     minimal body template. It deliberately NEVER copies note prose — internal
     notes contain private research commentary that must not be published.
   * Refuses (exit 1) if the output slug already exists.
@@ -180,7 +181,12 @@ def main() -> None:
     lines.append("summary_ko: 'TODO'")
     lines.append("links: []  # slugs of related reviews already on the site")
     lines.append("resources: []  # verified primary links only ({label, url}); curl -sI 200 before adding")
-    lines.append("analysis:")
+    lines.append(
+        f"figures: []  # 1-2 key figures from arXiv HTML → /public/figures/{slug}/, credited; see AUTOSWEEP-INTEGRATION"
+    )
+    lines.append(
+        "analysis:  # per key: 2-4 sentences — first = one crisp information-dense claim; add an apt analogy where it genuinely clarifies"
+    )
     for lang in ("ko", "en"):
         lines.append(f"  {lang}:")
         for key in ANALYSIS_KEYS:

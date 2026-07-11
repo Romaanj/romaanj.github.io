@@ -1,0 +1,2034 @@
+---
+import Base from '../../../layouts/Base.astro';
+import LangToggle from '../../../components/LangToggle.astro';
+
+// ------------------------------------------------------------------
+// Every quantity on this page is either quoted from a cited paper /
+// official config.json (RoFormer, PI, YaRN, Barbero et al. 2410.06205,
+// GPT-NeoX, DeepSeek-V2, KVQuant, Qwen3-8B, Qwen3.5-27B, Llama-3-8B,
+// HF transformers, vLLM) or derived arithmetic labeled in place.
+// Convention used throughout: 0-indexed omega_i = base^(-2i/d),
+// i = 0..d/2-1 — the HF inv_freq form; RoFormer's 1-indexed
+// theta_i = base^(-2(i-1)/d) is the same ladder.
+// ------------------------------------------------------------------
+
+// ---- (c) dial wall: static default m = 64, base = 10,000, d = 128 ----
+const WALL_M0 = 64;
+const fmtLam = (v: number): string =>
+  v < 100 ? v.toFixed(1)
+  : v < 1000 ? String(Math.round(v))
+  : v < 100000 ? (v / 1000).toFixed(1).replace(/\.0$/, '') + 'K'
+  : (v / 1e6).toFixed(2) + 'M';
+const quart = (i: number) => (i < 16 ? 'cq0' : i < 32 ? 'cq1' : i < 48 ? 'cq2' : 'cq3');
+const clocks = Array.from({ length: 64 }, (_, i) => {
+  const om = Math.pow(10000, (-2 * i) / 128);
+  const lam = (2 * Math.PI) / om;
+  const a = (WALL_M0 * om) % (2 * Math.PI);
+  const col = i % 16;
+  const row = Math.floor(i / 16);
+  const cx = 38 + col * 57.5;
+  const cy = 46 + row * 74;
+  return {
+    i, q: quart(i), cx, cy,
+    hx: +(cx + 13 * Math.cos(a)).toFixed(2),
+    hy: +(cy - 13 * Math.sin(a)).toFixed(2),
+    lam: fmtLam(lam),
+  };
+});
+
+// spectrum strip: log-lambda axis from 5 to 6e6 tokens
+const specX = (lam: number) =>
+  +(40 + ((Math.log10(lam) - Math.log10(5)) / (Math.log10(6e6) - Math.log10(5))) * 880).toFixed(1);
+const specMarks = Array.from({ length: 64 }, (_, i) => ({
+  x: specX(2 * Math.PI * Math.pow(10000, (2 * i) / 128)),
+  q: quart(i),
+}));
+const specDecades = [10, 100, 1000, 1e4, 1e5, 1e6].map((v) => ({
+  x: specX(v),
+  label: v >= 1e6 ? '1M' : v >= 1000 ? v / 1000 + 'K' : String(v),
+}));
+const specCtx = specX(2048);
+
+// ---- (d) band-combination plot: static default, low-frequency-heavy ----
+const combTheta = [1, 0.1, 0.01, 0.001];
+const combA0 = [0.25, 0.45, 0.7, 1.0];
+const combS0 = combA0.reduce((s, a) => s + a, 0); // 2.4
+const combLine = (fn: (d: number) => number) => {
+  const pts: string[] = [];
+  for (let d = 0; d <= 80.001; d += 0.25) {
+    pts.push((60 + d * 10.625).toFixed(1) + ',' + (160 - (fn(d) / combS0) * 125).toFixed(1));
+  }
+  return pts.join(' ');
+};
+const combBands = combTheta.map((th, i) => combLine((d) => combA0[i] * Math.cos(d * th)));
+const combSum = combLine((d) =>
+  combA0.reduce((s, a, i) => s + a * Math.cos(d * combTheta[i]), 0)
+);
+
+// ---- (e) band-edit plot: static default YaRN, s = 4, L = 2,048 ----
+const eX = (i: number) => +(70 + i * (850 / 63)).toFixed(1);
+const eY = (f: number) => +(300 - Math.max(0, Math.min(1.02, f)) * 230).toFixed(1);
+const yarnFrac = (i: number, s: number) => {
+  const lam = 2 * Math.PI * Math.pow(10000, (2 * i) / 128);
+  const r = 2048 / lam; // rotations inside the ORIGINAL context (YaRN Eq. 8)
+  const g = r <= 1 ? 0 : r >= 32 ? 1 : (r - 1) / 31; // gamma ramp, alpha=1 beta=32
+  return (1 - g) / s + g; // h(theta)/theta (YaRN Eq. 13)
+};
+const yarnLine = Array.from({ length: 64 }, (_, i) => eX(i) + ',' + eY(yarnFrac(i, 4))).join(' ');
+// zone edges for L = 2,048: untouched i 0..16, blend 17..40, full 41..63
+const zU1 = eX(16.5);
+const zB1 = eX(40.5);
+---
+
+<Base
+  title="RoPE anatomy: the dial wall inside every attention head — Junwon Lee"
+  description="An interactive anatomy of rotary position embeddings: where the rotation lands in the attention path, what each of the 64 frequency dials does, how per-band cosines compose into attention logits, and how PI, NTK-aware scaling, YaRN and base-scaling edit the dial ladder for long context."
+>
+  <div class="rope-page">
+    <!-- ============ HERO ============ -->
+    <section class="section">
+      <div class="container">
+        <div class="hero-top">
+          <p class="eyebrow">Study · Model anatomy</p>
+          <LangToggle />
+        </div>
+        <h1>
+          <span class="lang-en">RoPE: sixty-four dials on every attention head</span>
+          <span class="lang-ko">RoPE: 모든 attention head에 달린 64개의 다이얼</span>
+        </h1>
+        <p class="lede">
+          <span class="lang-en">
+            Rotary position embeddings never touch the values and never add anything to the
+            residual stream — they spin each query/key channel pair by an angle proportional
+            to the token's position, at d/2 geometrically spaced speeds. This page locates
+            the exact insertion point in the attention path, hangs all 64 dials on one wall,
+            composes per-band cosines into attention logits, and shows how PI, NTK-aware
+            scaling, YaRN and base-scaling each edit the same dial ladder for long context —
+            every number from the cited papers, official configs, or a worked example
+            labeled as derived.
+          </span>
+          <span class="lang-ko">
+            Rotary position embedding은 value를 건드리지 않고 residual stream에 아무것도
+            더하지 않는다 — 각 query/key channel pair를 token position에 비례한 각도로,
+            d/2개의 기하급수 간격 속도로 회전시킬 뿐이다. 이 페이지는 attention 경로에서
+            RoPE가 꽂히는 정확한 지점을 찾고, 64개의 다이얼을 한 벽에 걸고, band별
+            cosine이 attention logit으로 합성되는 과정을 본 뒤, PI·NTK-aware·YaRN·
+            base-scaling이 같은 다이얼 사다리를 long context를 위해 어떻게 다르게
+            수정하는지 살핀다 — 모든 수치는 인용 논문·공식 config, 혹은 유도임을 표기한
+            계산에서 나온다.
+          </span>
+        </p>
+
+        <div class="jump-row">
+          <a class="tag" href="#where">a · Where it lands</a>
+          <a class="tag" href="#pair">b · One pair, one dial</a>
+          <a class="tag" href="#wall">c · The dial wall</a>
+          <a class="tag" href="#combine">d · Bands combine</a>
+          <a class="tag" href="#edits">e · Editing the bands</a>
+          <a class="tag" href="#systems">f · Systems corner</a>
+          <a class="tag" href="#worked">g · Worked example</a>
+        </div>
+
+        <div class="config-note">
+          <span class="config-lead">
+            <span class="lang-en">Verified references used on this page (papers / official
+              config.json / library source):</span>
+            <span class="lang-ko">이 페이지에서 사용하는 검증된 근거 (논문 / 공식
+              config.json / 라이브러리 소스):</span>
+          </span>
+          <span class="tag">RoFormer — Eq. 14–16, 34</span>
+          <span class="tag">Qwen3-8B — θ 1,000,000 · head_dim 128 · full rotary</span>
+          <span class="tag">Llama-3-8B — θ 500,000</span>
+          <span class="tag accent">YaRN — α = 1 · β = 32</span>
+          <span class="tag">Barbero et al. 2410.06205 — Gemma bands</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ a · WHERE THE ROTATION LANDS ============ -->
+    <section class="section-tight" id="where">
+      <div class="container">
+        <h2 class="viz-h">
+          <span class="lang-en">a · Where the rotation lands — q and k only, after the projections</span>
+          <span class="lang-ko">a · 회전이 꽂히는 곳 — projection 뒤의 q와 k에만</span>
+        </h2>
+        <p class="viz-sub">
+          <span class="lang-en">One attention layer, Qwen3-accurate. Hover every box — the V
+            path has the "why not v?" answer. RoFormer Eq. 14 defines RoPE as
+            R(mθ)·W q — the rotation lands after the linear projections, and after QK-norm
+            where the model has one.</span>
+          <span class="lang-ko">attention layer 하나를 Qwen3 기준으로 정확히 그렸다. 모든
+            box에 hover해 보라 — V 경로에 "왜 v는 아닌가?"의 답이 있다. RoFormer Eq. 14는
+            RoPE를 R(mθ)·W q로 정의한다: 회전은 linear projection 뒤, 그리고 QK-norm이
+            있는 모델에서는 그 뒤에 꽂힌다.</span>
+        </p>
+
+        <div class="viz-frame">
+          <div class="rope-scroll">
+            <svg viewBox="0 0 1000 352" role="img" style="width:100%; height:auto; min-width:940px;"
+              aria-label="Dataflow of one attention layer: hidden state through W_q, W_k, W_v; QK-norm; RoPE applied to q and k only; K cached post-RoPE; V untouched">
+              <defs>
+                <marker id="rp-arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                  <path d="M0,0 L10,5 L0,10 z" fill="#87857c"></path>
+                </marker>
+              </defs>
+
+              <g data-tip="The layer input off the residual stream. In RoPE models nothing position-shaped has been added before this point — there is no learned absolute position embedding at the bottom of the stack; position will enter only as a rotation angle downstream."
+                 data-tip-ko="residual stream에서 들어오는 layer 입력. RoPE 모델에서는 이 지점까지 position 성격의 어떤 것도 더해진 적이 없다 — stack 바닥에 학습된 absolute position embedding이 없고, position은 오직 아래쪽에서 회전 각도로만 들어온다.">
+                <rect class="sbox" x="16" y="150" width="104" height="48" rx="9"></rect>
+                <text class="stitle sm" x="68" y="170" text-anchor="middle">h_t — hidden</text>
+                <text class="smono" x="68" y="188" text-anchor="middle">per token</text>
+              </g>
+
+              <line class="flowline" x1="120" y1="164" x2="164" y2="76" marker-end="url(#rp-arr)"></line>
+              <line class="flowline" x1="120" y1="174" x2="164" y2="174" marker-end="url(#rp-arr)"></line>
+              <line class="flowline" x1="120" y1="184" x2="164" y2="272" marker-end="url(#rp-arr)"></line>
+
+              <g data-tip="Query projection: 32 heads × head_dim 128 (Qwen3-8B config). No position yet — RoFormer Eq. 14 puts the rotation AFTER this matrix: f(x, m) = R(mθ) · W_q x."
+                 data-tip-ko="Query projection: 32 heads × head_dim 128 (Qwen3-8B config). 아직 position은 없다 — RoFormer Eq. 14는 회전을 이 행렬 뒤에 둔다: f(x, m) = R(mθ) · W_q x.">
+                <rect class="sbox" x="168" y="44" width="104" height="48" rx="9"></rect>
+                <text class="stitle sm" x="220" y="64" text-anchor="middle">W_q</text>
+                <text class="smono" x="220" y="82" text-anchor="middle">32 h × 128</text>
+              </g>
+              <g data-tip="Key projection: 8 KV heads × 128 (Qwen3-8B is GQA — 4 query heads share each key). Position lands after this matrix, exactly as on the q path."
+                 data-tip-ko="Key projection: 8 KV heads × 128 (Qwen3-8B는 GQA — query head 4개가 key 하나를 공유). q 경로와 똑같이, position은 이 행렬 뒤에 들어온다.">
+                <rect class="sbox" x="168" y="150" width="104" height="48" rx="9"></rect>
+                <text class="stitle sm" x="220" y="170" text-anchor="middle">W_k</text>
+                <text class="smono" x="220" y="188" text-anchor="middle">8 h × 128</text>
+              </g>
+              <g data-tip="Why not v? Position must enter through the q·k score: R(m)ᵀR(n) = R(n−m) makes the logit depend only on relative distance — and that identity lives inside a dot product between two rotated vectors. v never meets k in a dot product, so rotating it would spin the content the head emits without creating any relative-position term. RoFormer accordingly defines the rotary map only for q and k (Eq. 14)."
+                 data-tip-ko="왜 v는 아닌가? position은 q·k score를 통해 들어와야 한다: R(m)ᵀR(n) = R(n−m) 덕분에 logit이 상대 거리에만 의존하는데, 이 항등식은 회전된 두 vector의 dot product 안에서만 성립한다. v는 어떤 dot product에서도 k를 만나지 않으므로, v를 회전시키면 상대-position 항은 하나도 생기지 않고 head가 내보내는 내용만 돌아간다. 그래서 RoFormer는 rotary map을 q와 k에만 정의한다 (Eq. 14).">
+                <rect class="sbox" x="168" y="256" width="104" height="48" rx="9"></rect>
+                <text class="stitle sm" x="220" y="276" text-anchor="middle">W_v</text>
+                <text class="smono" x="220" y="294" text-anchor="middle">8 h × 128</text>
+              </g>
+
+              <line class="flowline" x1="272" y1="68" x2="308" y2="68" marker-end="url(#rp-arr)"></line>
+              <line class="flowline" x1="272" y1="174" x2="308" y2="174" marker-end="url(#rp-arr)"></line>
+
+              <g data-tip="QK-norm: RMSNorm over head_dim, Qwen3-class models only. Verified order in HF modeling_qwen3.py: q_proj → q_norm → apply_rotary_pos_emb → cache update. The norm sits BEFORE the rotation. (Llama has no QK-norm; RoPE placement is otherwise identical.)"
+                 data-tip-ko="QK-norm: head_dim에 대한 RMSNorm, Qwen3 계열에만 있다. HF modeling_qwen3.py에서 검증한 순서: q_proj → q_norm → apply_rotary_pos_emb → cache update. norm이 회전보다 먼저다. (Llama에는 QK-norm이 없고, RoPE 위치는 그 외에 동일하다.)">
+                <rect class="sbox sbox-dash" x="312" y="44" width="112" height="48" rx="9"></rect>
+                <text class="stitle sm" x="368" y="64" text-anchor="middle">q_norm (RMS)</text>
+                <text class="smono" x="368" y="82" text-anchor="middle">Qwen3 · before RoPE</text>
+              </g>
+              <g data-tip="Same RMSNorm on the key path — also before the rotation (verified code order, HF modeling_qwen3.py)."
+                 data-tip-ko="key 경로의 동일한 RMSNorm — 역시 회전보다 먼저다 (HF modeling_qwen3.py에서 검증한 코드 순서).">
+                <rect class="sbox sbox-dash" x="312" y="150" width="112" height="48" rx="9"></rect>
+                <text class="stitle sm" x="368" y="170" text-anchor="middle">k_norm (RMS)</text>
+                <text class="smono" x="368" y="188" text-anchor="middle">Qwen3 · before RoPE</text>
+              </g>
+
+              <line class="flowline" x1="424" y1="68" x2="462" y2="68" marker-end="url(#rp-arr)"></line>
+              <line class="flowline" x1="424" y1="174" x2="462" y2="174" marker-end="url(#rp-arr)"></line>
+
+              <g data-tip="The rotation: block-diagonal, d/2 = 64 independent 2×2 blocks, block i turning by m·ωᵢ. Implemented element-wise (RoFormer Eq. 34): x ⊗ cos(mθ) + rotate(x) ⊗ sin(mθ) — no matrix multiply. One cos/sin table is computed per forward (inv_freq ⊗ position_ids) and broadcast to every head and every layer."
+                 data-tip-ko="회전 그 자체: block-diagonal, 독립적인 2×2 block이 d/2 = 64개이고 block i는 m·ωᵢ만큼 돈다. 구현은 element-wise다 (RoFormer Eq. 34): x ⊗ cos(mθ) + rotate(x) ⊗ sin(mθ) — 행렬곱이 없다. cos/sin 테이블은 forward당 한 번 계산되어(inv_freq ⊗ position_ids) 모든 head·모든 layer에 broadcast된다.">
+                <circle class="ropec" cx="490" cy="68" r="24"></circle>
+                <text class="stitle sm" x="490" y="72" text-anchor="middle">R(m)</text>
+              </g>
+              <g data-tip="Identical rotation on the key path, at the key's own position n. Same cos/sin table, same 64 blocks."
+                 data-tip-ko="key 경로에도 동일한 회전이, key 자신의 position n에서 적용된다. 같은 cos/sin 테이블, 같은 64개 block.">
+                <circle class="ropec" cx="490" cy="174" r="24"></circle>
+                <text class="stitle sm" x="490" y="178" text-anchor="middle">R(n)</text>
+              </g>
+              <text class="ssub" x="490" y="122" text-anchor="middle">64 blocks of 2×2</text>
+
+              <line class="flowline" x1="514" y1="68" x2="552" y2="68" marker-end="url(#rp-arr)"></line>
+              <line class="flowline" x1="514" y1="174" x2="552" y2="174" marker-end="url(#rp-arr)"></line>
+
+              <g data-tip="The rotated query — used immediately for this step's scores, never cached."
+                 data-tip-ko="회전된 query — 이번 step의 score 계산에 바로 쓰이고, cache되지 않는다.">
+                <rect class="sbox" x="556" y="44" width="96" height="48" rx="9"></rect>
+                <text class="stitle sm" x="604" y="64" text-anchor="middle">q — rotated</text>
+                <text class="smono" x="604" y="82" text-anchor="middle">used this step</text>
+              </g>
+              <g data-tip="The rotated key, headed for the cache."
+                 data-tip-ko="회전된 key — cache로 향한다.">
+                <rect class="sbox" x="556" y="150" width="96" height="48" rx="9"></rect>
+                <text class="stitle sm" x="604" y="170" text-anchor="middle">k — rotated</text>
+                <text class="smono" x="604" y="188" text-anchor="middle">→ cache</text>
+              </g>
+
+              <line class="flowline" x1="652" y1="174" x2="696" y2="174" marker-end="url(#rp-arr)"></line>
+
+              <g data-tip="Rotate-at-write: in the HF path apply_rotary_pos_emb runs BEFORE past_key_values.update(...), so every cached K is stamped with the position it was written at. Reusing a cached K at a different position means un-rotating and re-rotating it. See the systems corner."
+                 data-tip-ko="Rotate-at-write: HF 경로에서 apply_rotary_pos_emb가 past_key_values.update(...)보다 먼저 실행되므로, cache된 모든 K에는 쓰일 당시의 position이 새겨져 있다. cache된 K를 다른 position에서 재사용하려면 회전을 풀고 다시 돌려야 한다. systems corner 참고.">
+                <rect class="sbox sbox-accent" x="700" y="150" width="130" height="48" rx="9"></rect>
+                <text class="stitle sm taccent" x="765" y="170" text-anchor="middle">K cache</text>
+                <text class="smono" x="765" y="188" text-anchor="middle">stored post-RoPE</text>
+              </g>
+              <g data-tip="V is cached exactly as projected — position-free. Nothing on this path ever sees a rotation."
+                 data-tip-ko="V는 projection된 그대로 cache된다 — position이 없다. 이 경로는 회전을 한 번도 만나지 않는다.">
+                <rect class="sbox" x="640" y="256" width="130" height="48" rx="9"></rect>
+                <text class="stitle sm" x="705" y="276" text-anchor="middle">V cache</text>
+                <text class="smono" x="705" y="294" text-anchor="middle">no RoPE — untouched</text>
+              </g>
+              <line class="flowline" x1="272" y1="280" x2="636" y2="280" marker-end="url(#rp-arr)"></line>
+              <text class="ssub" x="430" y="270" text-anchor="middle">v is never rotated — hover W_v for why</text>
+
+              <g data-tip="RoFormer Eq. 16: (R(m) W_q x_m)ᵀ (R(n) W_k x_n) = x_mᵀ W_qᵀ R(n−m) W_k x_n. The absolute positions cancel inside the dot product — only n−m survives. Section g checks this to machine precision."
+                 data-tip-ko="RoFormer Eq. 16: (R(m) W_q x_m)ᵀ (R(n) W_k x_n) = x_mᵀ W_qᵀ R(n−m) W_k x_n. 절대 position은 dot product 안에서 상쇄되고 n−m만 남는다. section g에서 machine precision까지 확인한다.">
+                <rect class="sbox sbox-score" x="868" y="150" width="116" height="48" rx="9"></rect>
+                <text class="stitle sm" x="926" y="170" text-anchor="middle">q·kᵀ → softmax</text>
+                <text class="smono" x="926" y="188" text-anchor="middle">depends on n−m</text>
+              </g>
+              <path class="flowline" d="M 652 68 H 926 V 146" fill="none" marker-end="url(#rp-arr)"></path>
+              <line class="flowline" x1="830" y1="174" x2="864" y2="174" marker-end="url(#rp-arr)"></line>
+              <path class="flowline" d="M 770 280 H 926 V 202" fill="none" marker-end="url(#rp-arr)"></path>
+              <text class="ssub" x="856" y="270" text-anchor="middle">softmax · V → output</text>
+
+              <text class="smono" x="16" y="340">cos/sin: computed once per forward (inv_freq ⊗ position_ids), broadcast to all heads and all layers — standard dense decoders (HF Qwen3; hybrid stacks and MLA differ, see fine print)</text>
+            </svg>
+          </div>
+
+          <p class="cap">
+            <span class="lang-en">RoPE is a rewrite of q and k only — post-projection,
+              post-QK-norm where one exists, applied with the same cos/sin table in every
+              layer and every head of a standard dense decoder. V passes through untouched,
+              and K enters the cache already rotated. Those two facts carry the whole
+              systems story in section f.</span>
+            <span class="lang-ko">RoPE는 오직 q와 k만 다시 쓴다 — projection 뒤, QK-norm이
+              있으면 그 뒤에서, 표준 dense decoder의 모든 layer·모든 head에 같은 cos/sin
+              테이블로 적용된다. V는 그대로 통과하고, K는 이미 회전된 채 cache에 들어간다.
+              이 두 사실이 section f의 systems 이야기 전부를 떠받친다.</span>
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ b · ONE PAIR = ONE DIAL ============ -->
+    <section class="section-tight" id="pair">
+      <div class="container">
+        <h2 class="viz-h">
+          <span class="lang-en">b · One pair = one dial — the 2×2 block, live</span>
+          <span class="lang-ko">b · pair 하나 = 다이얼 하나 — 2×2 block을 실시간으로</span>
+        </h2>
+        <p class="viz-sub">
+          <span class="lang-en">One (2i, 2i+1) channel pair from the d = 8 worked example
+            (section g). Drag the position sliders: q spins with m, k with n — and the pair
+            score only ever cares about n − m. Click "both +10" to watch both arrows move
+            while the score stands still.</span>
+          <span class="lang-ko">d = 8 예제(section g)에서 (2i, 2i+1) channel pair 하나를
+            떼어 왔다. position slider를 움직여 보라: q는 m을 따라, k는 n을 따라 돌지만
+            pair score는 오직 n − m에만 반응한다. "both +10"을 누르면 두 화살표는 도는데
+            score는 멈춰 있는 것을 볼 수 있다.</span>
+        </p>
+
+        <div class="viz-frame">
+          <div class="pair-controls">
+            <div class="ctl-row">
+              <span class="ctl-label">m (query pos)</span>
+              <input type="range" id="slM" min="0" max="50" step="1" value="3" />
+              <span class="ctl-val" id="vM">3</span>
+            </div>
+            <div class="ctl-row">
+              <span class="ctl-label">n (key pos)</span>
+              <input type="range" id="slN" min="0" max="50" step="1" value="7" />
+              <span class="ctl-val" id="vN">7</span>
+            </div>
+            <div class="pair-btns">
+              <button class="btn btn-sm" id="shiftBtn" type="button">both +10</button>
+              <span class="rp-chips" role="group" aria-label="Frequency band">
+                <button class="rp-chip band-chip on" data-band="0" type="button">pair 0 · ω=1</button>
+                <button class="rp-chip band-chip" data-band="1" type="button">pair 1 · ω=0.1</button>
+                <button class="rp-chip band-chip" data-band="2" type="button">pair 2 · ω=0.01</button>
+                <button class="rp-chip band-chip" data-band="3" type="button">pair 3 · ω=0.001</button>
+              </span>
+            </div>
+          </div>
+
+          <div class="pair-grid">
+            <div class="rope-scroll">
+              <svg viewBox="0 0 400 320" role="img" style="width:100%; height:auto; min-width:320px; max-width:430px;"
+                aria-label="Two 2D vectors q and k rotating on a circle as positions m and n change">
+                <defs>
+                  <marker id="rp-arr-q" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+                    <path d="M0,0 L10,5 L0,10 z" fill="#c15f3c"></path>
+                  </marker>
+                  <marker id="rp-arr-k" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+                    <path d="M0,0 L10,5 L0,10 z" fill="#576270"></path>
+                  </marker>
+                </defs>
+                <circle cx="190" cy="160" r="110" fill="none" stroke="var(--line-strong)" stroke-width="1.2" stroke-dasharray="3 4"></circle>
+                <line x1="70" y1="160" x2="310" y2="160" stroke="var(--line)" stroke-width="1"></line>
+                <line x1="190" y1="40" x2="190" y2="280" stroke="var(--line)" stroke-width="1"></line>
+                <line id="qGhost" class="ghostline gq" x1="190" y1="160" x2="300" y2="160"></line>
+                <line id="kGhost" class="ghostline gk" x1="190" y1="160" x2="190" y2="50"></line>
+                <line id="qArr" class="veca vq" x1="190" y1="160" x2="81.1" y2="144.5" marker-end="url(#rp-arr-q)"></line>
+                <line id="kArr" class="veca vk" x1="190" y1="160" x2="117.7" y2="77.1" marker-end="url(#rp-arr-k)"></line>
+                <text class="smono" x="30" y="136" fill="#c15f3c" id="qLab">R(m)q₍ᵢ₎</text>
+                <text class="smono" x="96" y="66" fill="#576270" id="kLab">R(n)k₍ᵢ₎</text>
+                <text class="ssub" x="304" y="176">angle 0</text>
+                <text class="ssub" x="20" y="306">dashed = the pair before rotation (m = n = 0)</text>
+              </svg>
+            </div>
+
+            <div class="pair-side">
+              <div class="formula" id="matBox">R(mω) — live 2×2 block, m = 3, ω = 1
+
+  ⎡ cos mω  −sin mω ⎤   ⎡ <b id="m00">−0.990</b>  <b id="m01">−0.141</b> ⎤
+  ⎣ sin mω   cos mω ⎦ = ⎣ <b id="m10">0.141</b>   <b id="m11">−0.990</b> ⎦</div>
+              <div class="wire-stats">
+                <span class="stat-chip">mω = <b id="cMth">3.000</b> rad</span>
+                <span class="stat-chip">nω = <b id="cNth">7.000</b> rad</span>
+                <span class="stat-chip">Δ = n−m = <b id="cDel">4</b></span>
+                <span class="stat-chip">pair score = <b id="cScore">0.7568</b></span>
+              </div>
+              <p class="fine-inline">
+                <span class="lang-en">pair score = ⟨R(mω)q₍ᵢ₎, R(nω)k₍ᵢ₎⟩ =
+                  c·cos(Δω) − s·sin(Δω), where c is the 2D dot and s the 2D cross of the
+                  unrotated pair — a function of Δ = n−m only (RoFormer Eq. 16; derivation
+                  in section d).</span>
+                <span class="lang-ko">pair score = ⟨R(mω)q₍ᵢ₎, R(nω)k₍ᵢ₎⟩ =
+                  c·cos(Δω) − s·sin(Δω). c는 회전 전 pair의 2D dot, s는 2D cross —
+                  오직 Δ = n−m만의 함수다 (RoFormer Eq. 16; 유도는 section d).</span>
+              </p>
+            </div>
+          </div>
+
+          <p class="cap" id="pairCap">
+            <span class="lang-en">Pair 0 is the fastest dial: ω = 1 rad/token, so q at m = 3
+              sits at 3 rad and k at n = 7 at 7 rad. Slide either position and the score
+              moves; shift both together and it does not — the absolute angles cancel inside
+              the dot product, leaving only Δω.</span>
+            <span class="lang-ko">pair 0은 가장 빠른 다이얼이다: ω = 1 rad/token이므로
+              m = 3의 q는 3 rad, n = 7의 k는 7 rad에 있다. 한쪽 position만 움직이면
+              score가 변하지만, 둘을 같이 밀면 변하지 않는다 — 절대 각도는 dot product
+              안에서 상쇄되고 Δω만 남는다.</span>
+          </p>
+
+          <!-- pairing conventions -->
+          <h3 class="sub-h">
+            <span class="lang-en">Which channels form a pair? Two conventions, one warning</span>
+            <span class="lang-ko">어떤 channel끼리 pair인가? 두 가지 관례, 한 가지 경고</span>
+          </h3>
+          <div class="rp-chips conv-row" role="group" aria-label="Pairing convention">
+            <button class="rp-chip conv-chip on" data-conv="inter" type="button">interleaved · GPT-J / rotate_gptj</button>
+            <button class="rp-chip conv-chip" data-conv="half" type="button">half-split · GPT-NeoX / rotate_half</button>
+          </div>
+
+          <div class="conv-panel" id="convInter"
+            data-tip="vLLM rotate_gptj: x1 = x[..., ::2]; x2 = x[..., 1::2]; stack((−x2, x1)).flatten — RoFormer's own math uses this adjacent-pair layout (Eq. 15, 34)."
+            data-tip-ko="vLLM rotate_gptj: x1 = x[..., ::2]; x2 = x[..., 1::2]; stack((−x2, x1)).flatten — RoFormer 본문의 수식이 바로 이 인접-pair 배치다 (Eq. 15, 34).">
+            <div class="conv-cells">
+              <span class="cc p0">x₀</span><span class="cc p0">x₁</span><span class="cc p1">x₂</span><span class="cc p1">x₃</span><span class="cc p2">x₄</span><span class="cc p2">x₅</span><span class="cc p3">x₆</span><span class="cc p3">x₇</span>
+            </div>
+            <p class="conv-note">
+              <span class="lang-en">Adjacent channels pair: (x₀,x₁)(x₂,x₃)(x₄,x₅)(x₆,x₇).
+                Rotate-vector: (−x₁, x₀, −x₃, x₂, −x₅, x₄, −x₇, x₆) — RoFormer Eq. 34's
+                element-wise form.</span>
+              <span class="lang-ko">인접 channel끼리 pair: (x₀,x₁)(x₂,x₃)(x₄,x₅)(x₆,x₇).
+                rotate-vector는 (−x₁, x₀, −x₃, x₂, −x₅, x₄, −x₇, x₆) — RoFormer Eq. 34의
+                element-wise 형태다.</span>
+            </p>
+          </div>
+
+          <div class="conv-panel" id="convHalf"
+            data-tip="HF / vLLM rotate_half (rotate_neox): x1 = x[..., :d//2]; x2 = x[..., d//2:]; cat((−x2, x1)). The cos/sin cache layout emb = cat((freqs, freqs)) exists to serve exactly this pairing."
+            data-tip-ko="HF / vLLM rotate_half (rotate_neox): x1 = x[..., :d//2]; x2 = x[..., d//2:]; cat((−x2, x1)). cos/sin cache 배치 emb = cat((freqs, freqs))가 정확히 이 pairing을 위한 것이다.">
+            <div class="conv-cells">
+              <span class="cc p0">x₀</span><span class="cc p1">x₁</span><span class="cc p2">x₂</span><span class="cc p3">x₃</span><span class="cc p0">x₄</span><span class="cc p1">x₅</span><span class="cc p2">x₆</span><span class="cc p3">x₇</span>
+            </div>
+            <p class="conv-note">
+              <span class="lang-en">Channel j pairs with j + d/2: (x₀,x₄)(x₁,x₅)(x₂,x₆)(x₃,x₇).
+                Rotate-vector: (−x₄, −x₅, −x₆, −x₇, x₀, x₁, x₂, x₃) — HF's rotate_half.</span>
+              <span class="lang-ko">channel j는 j + d/2와 pair: (x₀,x₄)(x₁,x₅)(x₂,x₆)(x₃,x₇).
+                rotate-vector는 (−x₄, −x₅, −x₆, −x₇, x₀, x₁, x₂, x₃) — HF의 rotate_half다.</span>
+            </p>
+          </div>
+
+          <p class="warn-note">
+            <span class="lang-en">⚠ Checkpoints don't mix. Both layouts are valid RoPE up to
+              a permutation of which W_q/W_k output channel meets which frequency — but a
+              trained checkpoint has its rows ordered for exactly one of them. Apply the
+              wrong one and every channel pair rotates at the wrong speed. Ground truth: HF's
+              convert_llama_weights_to_hf.py permutes the q/k weights ("permute for sliced
+              rotary") when converting Meta's interleaved checkpoint to the half-split
+              layout, and vLLM exposes is_neox_style per model. (The permutation-equivalence
+              reading is this page's derivation; the two code paths and the converter are
+              verified sources.)</span>
+            <span class="lang-ko">⚠ checkpoint는 섞이지 않는다. 두 배치 모두 "어느 W_q/W_k
+              출력 channel이 어느 frequency를 만나는가"의 순열 차이일 뿐 유효한 RoPE지만,
+              학습된 checkpoint의 행 순서는 정확히 한쪽에 맞춰져 있다. 반대쪽을 적용하면
+              모든 channel pair가 틀린 속도로 회전한다. 근거: HF의
+              convert_llama_weights_to_hf.py는 Meta의 interleaved checkpoint를 half-split
+              배치로 바꿀 때 q/k weight를 순열한다("permute for sliced rotary"). vLLM은
+              모델별로 is_neox_style을 노출한다. (순열-동치 해석은 이 페이지의 유도이고,
+              두 코드 경로와 변환기는 검증된 출처다.)</span>
+          </p>
+
+          <noscript>
+            <p class="viz-sub">
+              <span class="lang-en">With JavaScript the vectors, matrix and score are live;
+                the static view shows m = 3, n = 7 on pair 0 — and both convention panels at
+                once.</span>
+              <span class="lang-ko">JavaScript가 있으면 vector·행렬·score가 실시간으로
+                움직인다. 정적 화면은 pair 0의 m = 3, n = 7 상태와 두 관례 패널을 모두
+                보여준다.</span>
+            </p>
+          </noscript>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ c · THE DIAL WALL ============ -->
+    <section class="section-tight" id="wall">
+      <div class="container">
+        <h2 class="viz-h">
+          <span class="lang-en">c · The dial wall — all 64 speeds at once</span>
+          <span class="lang-ko">c · 다이얼 벽 — 64개의 속도를 한눈에</span>
+        </h2>
+        <p class="viz-sub">
+          <span class="lang-en">Every (2i, 2i+1) pair of a head_dim-128 head is a dial
+            advancing ωᵢ = base^(−2i/128) rad per token — an odometer with geometrically
+            geared hands. Drag the position: the fast dials whirl, the slow ones barely
+            creep. The number under each dial is its wavelength in tokens, λᵢ = 2π/ωᵢ
+            (YaRN Eq. 8).</span>
+          <span class="lang-ko">head_dim 128인 head의 (2i, 2i+1) pair 하나하나가 token당
+            ωᵢ = base^(−2i/128) rad씩 도는 다이얼이다 — 기하급수 기어비의 odometer.
+            position을 끌어 보라: 빠른 다이얼은 팽팽 돌고 느린 다이얼은 거의 기지 않는다.
+            각 다이얼 아래 숫자는 token 단위 wavelength, λᵢ = 2π/ωᵢ다 (YaRN Eq. 8).</span>
+        </p>
+
+        <div class="viz-frame">
+          <div class="wall-controls">
+            <div class="ctl-row ctl-wide">
+              <span class="ctl-label">position m</span>
+              <input type="range" id="slWall" min="0" max="1000" step="1" value="64" />
+              <span class="ctl-val" id="vWall">64</span>
+            </div>
+            <div class="rp-chips" role="group" aria-label="Jump to position">
+              <button class="rp-chip wjump" data-m="0" type="button">m=0</button>
+              <button class="rp-chip wjump on" data-m="64" type="button">64</button>
+              <button class="rp-chip wjump" data-m="512" type="button">512</button>
+              <button class="rp-chip wjump" data-m="4096" type="button">4,096</button>
+              <button class="rp-chip wjump" data-m="40960" type="button">40,960</button>
+              <button class="btn ghost btn-sm" id="wallPlay" type="button">▶ Play</button>
+            </div>
+            <div class="rp-chips" role="group" aria-label="RoPE base">
+              <span class="ctl-label">base</span>
+              <button class="rp-chip wbase on" data-b="10000" type="button">10,000 · RoFormer</button>
+              <button class="rp-chip wbase" data-b="500000" type="button">500,000 · Llama-3</button>
+              <button class="rp-chip wbase" data-b="1000000" type="button">1,000,000 · Qwen3</button>
+            </div>
+          </div>
+
+          <div class="rope-scroll">
+            <svg id="wallSvg" viewBox="0 0 960 322" role="img" style="width:100%; height:auto; min-width:920px;"
+              aria-label="64 dials, one per channel pair, each advancing at its own geometric speed; wavelength in tokens under each dial">
+              <g id="wallDyn">
+                <text class="rowlab" x="20" y="14">dials 0–63 · ωᵢ = base^(−2i/128) rad/token · hand = current angle m·ωᵢ (mod 2π) · label = λᵢ in tokens</text>
+                {clocks.map((c) => (
+                  <g>
+                    <circle class={`clk ${c.q}`} cx={c.cx} cy={c.cy} r="17"></circle>
+                    <line class="clk-tick" x1={c.cx + 14} y1={c.cy} x2={c.cx + 17} y2={c.cy}></line>
+                    <line class="clk-hand" x1={c.cx} y1={c.cy} x2={c.hx} y2={c.hy}></line>
+                    <text class="clk-lam" x={c.cx} y={c.cy + 29} text-anchor="middle">{c.lam}</text>
+                  </g>
+                ))}
+              </g>
+            </svg>
+          </div>
+
+          <div class="wire-stats" id="wallStats">
+            <span class="stat-chip">m = <b id="wcM">64</b></span>
+            <span class="stat-chip">dial 0: <b id="wcFast">10.2</b> full turns</span>
+            <span class="stat-chip">dial 63: <b id="wcSlow">0.0074 rad — 0.12% of a turn</b></span>
+            <span class="stat-chip">λ₆₃ = <b id="wcLmax">54,410</b> tokens</span>
+          </div>
+
+          <div class="rope-scroll">
+            <svg id="specSvg" viewBox="0 0 960 92" role="img" style="width:100%; height:auto; min-width:920px;"
+              aria-label="Log-scale spectrum of the 64 wavelengths, from about 6 tokens to millions of tokens, with the trained context marked">
+              <g id="specDyn">
+                <line x1="40" y1="48" x2="920" y2="48" stroke="var(--line-strong)" stroke-width="1.2"></line>
+                {specDecades.map((d) => (
+                  <g>
+                    <line x1={d.x} y1="44" x2={d.x} y2="52" stroke="var(--text-tertiary)" stroke-width="1"></line>
+                    <text class="ssub" x={d.x} y="68" text-anchor="middle">{d.label}</text>
+                  </g>
+                ))}
+                {specMarks.map((mk) => (
+                  <line class={`spec-mark ${mk.q}`} x1={mk.x} y1="30" x2={mk.x} y2="46"></line>
+                ))}
+                <line x1={specCtx} y1="14" x2={specCtx} y2="52" stroke="var(--accent-strong)" stroke-width="1.4" stroke-dasharray="4 3"></line>
+                <text class="smono" x={specCtx + 6} y="20" fill="var(--accent-strong)">trained ctx 2,048 (LLaMA-era)</text>
+                <text class="rowlab" x="20" y="88">wavelength λ (tokens, log scale) — dials to the right of the context marker never complete one turn in training</text>
+              </g>
+            </svg>
+          </div>
+
+          <p class="cap" id="wallCap">
+            <span class="lang-en">Base 10,000 (RoFormer): the ladder runs from λ₀ = 2π ≈ 6.28
+              tokens to λ₆₃ = 2π·10000^(126/128) ≈ 54,410 tokens [computed; slightly below
+              the 2π·base ≈ 62,832 approximation]. Dial 0 disambiguates neighbors; the last
+              dials barely move inside any real context — near position-free channels.
+              Switching the base stretches the whole wall at once: that is Llama-3's and
+              Qwen3's train-time long-context route (section e).</span>
+            <span class="lang-ko">base 10,000 (RoFormer): 사다리는 λ₀ = 2π ≈ 6.28 token에서
+              λ₆₃ = 2π·10000^(126/128) ≈ 54,410 token까지 뻗는다 [계산값; 2π·base ≈ 62,832
+              근사보다 약간 작다]. 다이얼 0은 이웃 token을 구분하고, 마지막 다이얼들은
+              어떤 실제 context 안에서도 거의 움직이지 않는다 — 사실상 position-free
+              channel이다. base를 바꾸면 벽 전체가 한 번에 늘어난다: 그것이 Llama-3와
+              Qwen3의 train-time long-context 경로다 (section e).</span>
+          </p>
+
+          <noscript>
+            <p class="viz-sub">
+              <span class="lang-en">With JavaScript the wall animates with position and the
+                base is switchable; the static view shows m = 64 at base 10,000.</span>
+              <span class="lang-ko">JavaScript가 있으면 벽이 position을 따라 움직이고 base를
+                바꿀 수 있다. 정적 화면은 base 10,000, m = 64 상태다.</span>
+            </p>
+          </noscript>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ d · HOW BANDS COMBINE ============ -->
+    <section class="section-tight" id="combine">
+      <div class="container">
+        <h2 class="viz-h">
+          <span class="lang-en">d · How the bands combine — the logit is a cosine series</span>
+          <span class="lang-ko">d · band는 어떻게 합쳐지는가 — logit은 cosine 급수다</span>
+        </h2>
+        <p class="viz-sub">
+          <span class="lang-en">Writing q and k as d/2 two-dim sub-vectors, the attention
+            logit at relative distance Δ is Σᵢ aᵢ·cos(Δωᵢ − φᵢ), where the per-band
+            amplitude aᵢ = ‖q₍ᵢ₎‖·‖k₍ᵢ₎‖ is the product of sub-vector norms [derived on
+            this page, numerically checked; consistent with RoFormer's complex form].
+            Set the four amplitudes of the d = 8 example (φᵢ = 0 here) and watch the
+            score-vs-distance curve compose.</span>
+          <span class="lang-ko">q와 k를 d/2개의 2차원 sub-vector로 쪼개 쓰면, 상대 거리
+            Δ에서의 attention logit은 Σᵢ aᵢ·cos(Δωᵢ − φᵢ)가 된다. band별 amplitude
+            aᵢ = ‖q₍ᵢ₎‖·‖k₍ᵢ₎‖는 sub-vector norm의 곱이다 [이 페이지의 유도, 수치 검증;
+            RoFormer의 복소수 형태와 일치]. d = 8 예제의 amplitude 네 개를 조절하며
+            (여기서는 φᵢ = 0) score-vs-distance 곡선이 합성되는 것을 보라.</span>
+        </p>
+
+        <div class="viz-frame">
+          <div class="comb-controls">
+            <div class="rp-chips" role="group" aria-label="Amplitude presets">
+              <button class="rp-chip comb-pre on" data-pre="sem" type="button">low-freq heavy · trained-like</button>
+              <button class="rp-chip comb-pre" data-pre="pos" type="button">high-freq heavy · positional head</button>
+              <button class="rp-chip comb-pre" data-pre="flat" type="button">equal · interference</button>
+            </div>
+            <div class="amp-rows">
+              <div class="ctl-row">
+                <span class="ctl-label">a₀ · ω=1 · λ 6.3</span>
+                <input type="range" class="amp-sl" data-i="0" min="0" max="100" step="1" value="25" />
+                <span class="ctl-val" id="vA0">0.25</span>
+              </div>
+              <div class="ctl-row">
+                <span class="ctl-label">a₁ · ω=0.1 · λ 63</span>
+                <input type="range" class="amp-sl" data-i="1" min="0" max="100" step="1" value="45" />
+                <span class="ctl-val" id="vA1">0.45</span>
+              </div>
+              <div class="ctl-row">
+                <span class="ctl-label">a₂ · ω=0.01 · λ 628</span>
+                <input type="range" class="amp-sl" data-i="2" min="0" max="100" step="1" value="70" />
+                <span class="ctl-val" id="vA2">0.70</span>
+              </div>
+              <div class="ctl-row">
+                <span class="ctl-label">a₃ · ω=0.001 · λ 6.3K</span>
+                <input type="range" class="amp-sl" data-i="3" min="0" max="100" step="1" value="100" />
+                <span class="ctl-val" id="vA3">1.00</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="rope-scroll">
+            <svg id="combSvg" viewBox="0 0 960 330" role="img" style="width:100%; height:auto; min-width:920px;"
+              aria-label="Per-band cosine traces and their sum: the attention logit as a function of relative distance">
+              <line x1="60" y1="160" x2="910" y2="160" stroke="var(--line-strong)" stroke-width="1"></line>
+              <line x1="60" y1="35" x2="60" y2="285" stroke="var(--line)" stroke-width="1"></line>
+              <text class="ssub" x="56" y="40" text-anchor="end">+Σaᵢ</text>
+              <text class="ssub" x="56" y="164" text-anchor="end">0</text>
+              <text class="ssub" x="56" y="290" text-anchor="end">−Σaᵢ</text>
+              {[0, 20, 40, 60, 80].map((d) => (
+                <text class="ssub" x={60 + d * 10.625} y="306" text-anchor="middle">{d}</text>
+              ))}
+              <text class="rowlab" x="700" y="322">relative distance Δ (tokens)</text>
+              <polyline id="cb0" class="comb-band cq0" points={combBands[0]}></polyline>
+              <polyline id="cb1" class="comb-band cq1" points={combBands[1]}></polyline>
+              <polyline id="cb2" class="comb-band cq2" points={combBands[2]}></polyline>
+              <polyline id="cb3" class="comb-band cq3" points={combBands[3]}></polyline>
+              <polyline id="cbSum" class="comb-sum" points={combSum}></polyline>
+              <text class="smono" x="70" y="30" fill="var(--accent-strong)">thick = Σ (the logit) · thin = individual bands</text>
+            </svg>
+          </div>
+
+          <div class="wire-stats">
+            <span class="stat-chip">peak at Δ=0: Σaᵢ = <b id="combPeak">2.40</b></span>
+            <span class="stat-chip">fast band re-rings every <b>6.28</b> tokens</span>
+          </div>
+
+          <p class="cap" id="combCap">
+            <span class="lang-en">Low-frequency-heavy — the shape Barbero et al. actually
+              measure in trained Gemma 7B: the largest norms sit on the lowest frequencies,
+              producing a slowly-varying, nearly distance-agnostic envelope; the fast dials
+              only add local texture. Try the other presets: high-freq weights carve a sharp
+              Δ = 0 peak that re-rings every λ₀ = 6.3 tokens, and equal weights show pure
+              interference — a decay-looking envelope with no band actually decaying.</span>
+            <span class="lang-ko">low-frequency 우세 — Barbero et al.이 학습된 Gemma 7B에서
+              실측한 바로 그 형태다: 가장 큰 norm이 가장 낮은 frequency에 실려, 거의
+              거리-불변인 느린 envelope을 만든다. 빠른 다이얼은 국소적인 결만 더한다. 다른
+              preset도 눌러 보라: high-freq 가중은 λ₀ = 6.3 token마다 다시 울리는 날카로운
+              Δ = 0 peak을 깎아 내고, equal 가중은 순수한 간섭을 보여준다 — 어느 band도
+              감쇠하지 않는데 감쇠처럼 보이는 envelope.</span>
+          </p>
+
+          <noscript>
+            <p class="viz-sub">
+              <span class="lang-en">The static curve shows the low-frequency-heavy preset
+                (a = 0.25, 0.45, 0.70, 1.00).</span>
+              <span class="lang-ko">정적 곡선은 low-frequency 우세 preset
+                (a = 0.25, 0.45, 0.70, 1.00)이다.</span>
+            </p>
+          </noscript>
+        </div>
+
+        <!-- what trained models do with the bands -->
+        <h3 class="sub-h">
+          <span class="lang-en">What trained models put on the bands — Barbero et al. (2410.06205)</span>
+          <span class="lang-ko">학습된 모델은 band에 무엇을 싣는가 — Barbero et al. (2410.06205)</span>
+        </h3>
+        <div class="card-grid barb-grid">
+          <div class="card">
+            <h3><span class="lang-en">Observed: norms pile onto slow dials</span><span class="lang-ko">관측: norm은 느린 다이얼에 쌓인다</span></h3>
+            <p>
+              <span class="lang-en">In pretrained Gemma 7B, training "has assigned much
+                higher norm on average to the lowest frequencies" — which, by the cosine
+                series above, means they "influence the dot product the most … at each
+                layer"; the authors "suspect they are used to carry semantic information."
+                High-frequency usage appears "especially at the very first and last layers."
+                This is observational analysis of a trained model, not an intervention.</span>
+              <span class="lang-ko">pretrained Gemma 7B에서 학습은 "가장 낮은 frequency에
+                평균적으로 훨씬 높은 norm을 할당"했다 — 위 cosine 급수에 따르면 이는 매
+                layer에서 dot product에 가장 크게 기여한다는 뜻이고, 저자들은 이 band가
+                "semantic 정보를 나른다"고 본다. high-frequency 사용은 "특히 첫 layer와
+                마지막 layer에서" 나타난다. 학습된 모델에 대한 관측 분석이며 개입 실험이
+                아니다.</span>
+            </p>
+            <span class="ev-chip">Gemma 7B · per-band 2-norm analysis</span>
+          </div>
+          <div class="card">
+            <h3><span class="lang-en">Observed: fast dials build positional heads</span><span class="lang-ko">관측: 빠른 다이얼은 positional head를 만든다</span></h3>
+            <p>
+              <span class="lang-en">Gemma 7B "learns to use RoPE to construct robust
+                'positional' attention patterns by exploiting the highest frequencies": a
+                diagonal head in the last layer (L27 H8, mostly high-frequency by their
+                Fig. 6), a previous-token head in the first layer, and an apostrophe-detector
+                head that is both semantic and positional. Theory to match: a RoPE head can
+                express pure positional selection and diagonal/off-diagonal patterns
+                (Prop. 3.1, Thm 5.3) where a NoPE head cannot (Prop. 5.2) — but with
+                low-but-nonzero frequencies, a head eventually fails to attend robustly to a
+                semantic target as context grows (Thm 6.1): slow-but-moving dials misalign,
+                motivating huge bases or truncation.</span>
+              <span class="lang-ko">Gemma 7B는 "가장 높은 frequency를 이용해 견고한
+                'positional' attention 패턴을 구성하도록 학습"된다: 마지막 layer의 diagonal
+                head(L27 H8, Fig. 6 기준 대부분 high-frequency), 첫 layer의 previous-token
+                head, 그리고 semantic과 positional을 겸하는 apostrophe 검출 head. 이론도
+                맞물린다: RoPE head는 순수 positional 선택과 diagonal/off-diagonal 패턴을
+                표현할 수 있지만(Prop. 3.1, Thm 5.3) NoPE head는 불가능하다(Prop. 5.2).
+                다만 0이 아닌 낮은 frequency는 context가 커지면 semantic 표적에 견고하게
+                attend하지 못하게 된다(Thm 6.1) — 느리지만 도는 다이얼은 결국 어긋나고,
+                거대한 base 혹은 truncation의 동기가 된다.</span>
+            </p>
+            <span class="ev-chip">Fig. 5–6 · Prop. 3.1 · Thm 5.3 / 6.1</span>
+          </div>
+        </div>
+
+        <div class="prope-panel">
+          <p class="scope-warn">
+            <span class="lang-en">Scope — read before the table: these are Gemma 2B models
+              retrained from scratch on Wiki/FlanV2 with p-RoPE (keep fraction p of the
+              frequencies, removing the lowest), NOT inference-time truncation of a
+              pretrained model. The paper contains no pretrained-model truncation
+              benchmark.</span>
+            <span class="lang-ko">범위 — 표를 읽기 전에: 아래는 p-RoPE(frequency의 비율
+              p만 남기고 가장 낮은 쪽을 제거)로 Wiki/FlanV2에서 처음부터 재학습한 Gemma
+              2B들이다. pretrained 모델의 inference-time truncation이 아니며, 논문에는
+              그런 벤치마크가 없다.</span>
+          </p>
+          <div class="rope-scroll">
+            <table class="prope-table">
+              <thead>
+                <tr>
+                  <th><span class="lang-en">variant</span><span class="lang-ko">variant</span></th>
+                  <th>Wiki val ppl</th>
+                  <th>FlanV2 val ppl</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td>NoPE</td><td>4.8594</td><td>6.6429</td></tr>
+                <tr><td>RoPE · θ = 10k</td><td>4.4627</td><td>6.4429</td></tr>
+                <tr><td>RoPE · θ = 500k</td><td>4.4485</td><td>6.4593</td></tr>
+                <tr class="best"><td>0.75-RoPE (lowest 25% removed)</td><td><b>4.4414</b></td><td><b>6.4422</b></td></tr>
+                <tr><td>0.75-RoPE · reversed</td><td>4.4592</td><td>6.4683</td></tr>
+                <tr><td>0.75-RoPE · partial</td><td>4.4537</td><td>6.4562</td></tr>
+                <tr><td>0.25-RoPE</td><td>4.5302</td><td>6.5111</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="fine-inline">
+            <span class="lang-en">Table 2, Barbero et al.: "truncating the lowest
+              frequencies not only maintains the same performance, but even seems to improve
+              the validation perplexity" — 0.75-RoPE "outperforms simply increasing the
+              wavelength (θ = 500k)"; the rationale is to give the model "robust semantic
+              channels that are distance agnostic." 0.25-RoPE is too aggressive and
+              degrades. (The reversed/partial variant definitions are the paper's labels,
+              reported secondhand.)</span>
+            <span class="lang-ko">Barbero et al. Table 2: "가장 낮은 frequency를 잘라내도
+              성능이 유지될 뿐 아니라 validation perplexity가 오히려 좋아지는 것으로
+              보인다" — 0.75-RoPE는 "단순히 wavelength를 키우는 것(θ = 500k)보다 낫다".
+              논거는 모델에게 "거리에 불변인 견고한 semantic channel"을 주자는 것.
+              0.25-RoPE는 과도해서 성능이 떨어진다. (reversed/partial variant의 정의는
+              논문의 라벨을 간접 인용한 것이다.)</span>
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ e · EDITING THE BANDS ============ -->
+    <section class="section-tight" id="edits">
+      <div class="container">
+        <h2 class="viz-h">
+          <span class="lang-en">e · Editing the bands — every long-context method on one axis</span>
+          <span class="lang-ko">e · band 수정하기 — 모든 long-context 기법을 한 축 위에</span>
+        </h2>
+        <p class="viz-sub">
+          <span class="lang-en">To stretch a context from L to s·L you must slow some dials
+            down. The whole design space is WHICH dials, by HOW MUCH: the y-axis below is
+            the per-dial frequency multiplier θ′ᵢ/θᵢ — 1 means untouched, 1/s means fully
+            interpolated. Switch methods and scale factors.</span>
+          <span class="lang-ko">context를 L에서 s·L로 늘리려면 어떤 다이얼들은 느리게
+            돌려야 한다. 설계 공간 전체가 "어느 다이얼을, 얼마나"다: 아래 y축은 다이얼별
+            frequency 배율 θ′ᵢ/θᵢ — 1이면 그대로, 1/s면 완전 interpolation이다. 기법과
+            scale factor를 바꿔 가며 보라.</span>
+        </p>
+
+        <div class="viz-frame">
+          <div class="wall-controls">
+            <div class="rp-chips" role="group" aria-label="Long-context method">
+              <button class="rp-chip em-chip" data-m="pi" type="button">PI · uniform</button>
+              <button class="rp-chip em-chip" data-m="ntk" type="button">NTK-aware · base tilt</button>
+              <button class="rp-chip em-chip on" data-m="yarn" type="button">YaRN · by-parts ramp</button>
+              <button class="rp-chip em-chip" data-m="base" type="button">Llama-3 · θ=500k at train time</button>
+            </div>
+            <div class="rp-chips" id="sRow" role="group" aria-label="Scale factor s">
+              <span class="ctl-label">s</span>
+              <button class="rp-chip es-chip" data-s="2" type="button">2</button>
+              <button class="rp-chip es-chip on" data-s="4" type="button">4</button>
+              <button class="rp-chip es-chip" data-s="8" type="button">8</button>
+              <button class="rp-chip es-chip" data-s="16" type="button">16</button>
+              <button class="rp-chip es-chip" data-s="32" type="button">32</button>
+            </div>
+          </div>
+
+          <div class="rope-scroll">
+            <svg id="editSvg" viewBox="0 0 960 372" role="img" style="width:100%; height:auto; min-width:920px;"
+              aria-label="Per-dial frequency multiplier for PI, NTK-aware, YaRN and base-scaling across the 64 dials">
+              <g id="zoneG">
+                <rect id="zoneU" class="zone zu" x="70" y="52" width={zU1 - 70} height="252"></rect>
+                <rect id="zoneB" class="zone zb" x={zU1} y="52" width={zB1 - zU1} height="252"></rect>
+                <rect id="zoneF" class="zone zf" x={zB1} y="52" width={920 - zB1} height="252"></rect>
+                <text id="zlU" class="ssub" x={(70 + zU1) / 2} y="66" text-anchor="middle">untouched · r &gt; β=32</text>
+                <text id="zlB" class="ssub" x={(zU1 + zB1) / 2} y="66" text-anchor="middle">blend · γ ramp</text>
+                <text id="zlF" class="ssub" x={(zB1 + 920) / 2} y="66" text-anchor="middle">full interpolation · r &lt; α=1</text>
+              </g>
+              <line x1="70" y1="70" x2="920" y2="70" stroke="var(--line-strong)" stroke-width="1" stroke-dasharray="2 3"></line>
+              <text class="ssub" x="66" y="74" text-anchor="end">×1</text>
+              <line id="sLine" x1="70" y1="242.5" x2="920" y2="242.5" stroke="var(--line-strong)" stroke-width="1" stroke-dasharray="2 3"></line>
+              <text class="ssub" id="sLab" x="66" y="246.5" text-anchor="end">×1/4</text>
+              <line x1="70" y1="300" x2="920" y2="300" stroke="var(--line)" stroke-width="1"></line>
+              <polyline id="editLine" class="edit-line" points={yarnLine}></polyline>
+              {[0, 16, 32, 48, 63].map((i) => (
+                <g>
+                  <text class="ssub" x={70 + i * (850 / 63)} y="320" text-anchor="middle">dial {i}</text>
+                  <text class="smono" x={70 + i * (850 / 63)} y="336" text-anchor="middle">
+                    {i === 0 ? 'λ 6.3' : i === 16 ? '63' : i === 32 ? '628' : i === 48 ? '6.3K' : '54K'}
+                  </text>
+                </g>
+              ))}
+              <text class="rowlab" x="20" y="360">x: dial index (wavelength at base 10,000) · y: frequency multiplier θ′ᵢ ÷ θᵢ · r = L/λ counts rotations inside the original context L = 2,048</text>
+            </svg>
+          </div>
+
+          <div class="wire-stats" id="editStats">
+            <span class="stat-chip" id="ec1">17 dials untouched · 24 blended · 23 fully interpolated</span>
+            <span class="stat-chip" id="ec2">temperature: logits × 0.1·ln s + 1 = 1.139 (s=4)</span>
+            <span class="stat-chip" id="ec3">α = 1 · β = 32 (Llama family, YaRN)</span>
+          </div>
+
+          <p class="cap" id="editCap">
+            <span class="lang-en">YaRN = NTK-by-parts + temperature. Per dial, r = L/λ counts
+              full rotations inside the original context L. Fast dials (r above β = 32) are
+              left untouched; dials whose wavelength exceeds the trained context (r below
+              α = 1) get full interpolation θ/s; the middle is linearly blended (Eq. 8, 10,
+              11, 13). One extra scalar — logits scaled by 0.1·ln(s) + 1 — rides along for
+              free: HF bakes it into the cos/sin cache as attention_scaling.</span>
+            <span class="lang-ko">YaRN = NTK-by-parts + temperature. 다이얼마다 r = L/λ가
+              원래 context L 안에서의 회전 수를 센다. 빠른 다이얼(r이 β = 32 초과)은
+              그대로 두고, wavelength가 학습 context보다 긴 다이얼(r이 α = 1 미만)은 완전
+              interpolation θ/s를 받고, 중간은 선형 blend된다 (Eq. 8, 10, 11, 13). 스칼라
+              하나가 덤으로 붙는다 — logit에 0.1·ln(s) + 1을 곱하는 temperature인데, HF는
+              이를 attention_scaling으로 cos/sin cache에 구워 넣는다.</span>
+          </p>
+
+          <noscript>
+            <p class="viz-sub">
+              <span class="lang-en">The static plot shows YaRN at s = 4; the four cards
+                below cover each method without JavaScript.</span>
+              <span class="lang-ko">정적 그래프는 s = 4의 YaRN이다. 아래 카드 네 장이
+                JavaScript 없이도 각 기법을 설명한다.</span>
+            </p>
+          </noscript>
+        </div>
+
+        <div class="card-grid to-grid">
+          <div class="card">
+            <h3>PI <span class="to-year">Chen et al. 2023 · 2306.15595</span></h3>
+            <p>
+              <span class="lang-en">Position Interpolation, Eq. 4: f′(x, m) = f(x, m·L/L′) —
+                indices down-scaled, so every dial slows by the same s. Motivation:
+                extrapolating past the trained length can produce "catastrophically high
+                attention scores"; the interpolated perturbation is bounded ≈600× tighter
+                (Thm 2.1, LLaMA constants). Works with ~1,000 fine-tune steps (2048 → 32768).
+                The cost, per YaRN: the uniform rescale "removes the high frequency
+                components of RoPE" — local order blurs, and PI fine-tunes degraded beyond
+                s ≈ 8.</span>
+              <span class="lang-ko">Position Interpolation, Eq. 4: f′(x, m) = f(x, m·L/L′) —
+                index를 줄이므로 모든 다이얼이 같은 s만큼 느려진다. 동기는 안전성:
+                학습 길이 밖으로 extrapolate하면 "파국적으로 높은 attention score"가 나올
+                수 있고, interpolation의 섭동은 약 600× 더 좁게 bound된다 (Thm 2.1, LLaMA
+                상수). fine-tune 약 1,000 step이면 된다 (2048 → 32768). 대가는, YaRN의
+                표현으로, 균일 rescale이 "RoPE의 high frequency 성분을 제거"한다는 것 —
+                국소 순서가 뭉개지고, PI fine-tune은 s ≈ 8을 넘으면 열화됐다.</span>
+            </p>
+            <span class="ev-chip">every dial ÷ s · fastest λ 6.3 → 6.3·s tokens</span>
+          </div>
+          <div class="card">
+            <h3>NTK-aware <span class="to-year">formalized in YaRN · Eq. 19–20</span></h3>
+            <p>
+              <span class="lang-en">Change the base instead: b′ = b·s^(d/(d−2)), designed so
+                "the lowest frequency needs to be scaled as much as linear positional scaling
+                and the highest frequency to stay constant." The result is a geometric tilt
+                of the ladder: dial 0 exactly unchanged, the last dial at exactly θ/s,
+                everything between graded [per-band ratio θ′ᵢ/θᵢ = s^(−2i/(d−2)), derived
+                from the quoted formula]. At s = 4, d = 128: b′ ≈ 40,890.</span>
+              <span class="lang-ko">대신 base를 바꾼다: b′ = b·s^(d/(d−2)). "가장 낮은
+                frequency는 linear scaling만큼 줄고 가장 높은 frequency는 그대로"가 되도록
+                설계됐다. 결과는 사다리의 기하급수 기울이기: 다이얼 0은 정확히 그대로,
+                마지막 다이얼은 정확히 θ/s, 그 사이는 등비로 눕는다 [band별 비율
+                θ′ᵢ/θᵢ = s^(−2i/(d−2)), 인용 공식에서 유도]. s = 4, d = 128이면
+                b′ ≈ 40,890.</span>
+            </p>
+            <span class="ev-chip">dial 0 fixed · dial 63 exactly ÷ s</span>
+          </div>
+          <div class="card">
+            <h3>YaRN <span class="to-year">Peng et al. 2023 · 2309.00071</span></h3>
+            <p>
+              <span class="lang-en">Make the tilt piecewise and explicit: per dial,
+                r(d) = L/λ_d; γ(r) = 0 below α, 1 above β, linear between; new frequency
+                h(θ) = (1−γ)·θ/s + γ·θ. Recommended α = 1, β = 32 for the Llama family —
+                dials that rotate more than 32 times inside L keep their exact speed; dials
+                that cannot finish one rotation get full PI treatment. Plus the attention
+                temperature √(1/t) = 0.1·ln(s) + 1.</span>
+              <span class="lang-ko">기울이기를 조각별로, 명시적으로: 다이얼마다
+                r(d) = L/λ_d; γ(r)는 α 아래 0, β 위 1, 사이 선형; 새 frequency는
+                h(θ) = (1−γ)·θ/s + γ·θ. Llama 계열 권장값 α = 1, β = 32 — L 안에서 32번
+                넘게 도는 다이얼은 속도를 정확히 지키고, 한 바퀴도 못 도는 다이얼은 완전한
+                PI 처리를 받는다. 여기에 attention temperature
+                √(1/t) = 0.1·ln(s) + 1이 더해진다.</span>
+            </p>
+            <span class="ev-chip">α=1 · β=32 · γ ramp over r = L/λ</span>
+          </div>
+          <div class="card">
+            <h3><span class="lang-en">Base-scaling</span><span class="lang-ko">Base-scaling</span> <span class="to-year">Llama-3 / Qwen3 configs</span></h3>
+            <p>
+              <span class="lang-en">The pretraining-era route: ship a bigger base from day
+                one. Llama-3-8B: rope_theta = 500,000 (config.json, max_position 8,192);
+                Qwen3-8B: 1,000,000 (max_position 40,960; rope_scaling null). The whole
+                ladder is stretched at train time — Llama-3's slowest dial has wavelength
+                ≈ 2.56M tokens [computed from λ = 2π·base^((d−2)/d)], so slow dials stay
+                near-static over any real context. Barbero et al.: increasing θ prevents
+                tokens "being erroneously misaligned simply due to the large context."</span>
+              <span class="lang-ko">pretraining 시절부터의 경로: 처음부터 큰 base로
+                출시한다. Llama-3-8B: rope_theta = 500,000 (config.json, max_position
+                8,192); Qwen3-8B: 1,000,000 (max_position 40,960; rope_scaling null).
+                사다리 전체가 train 시점에 늘어난다 — Llama-3의 가장 느린 다이얼은
+                wavelength ≈ 2.56M token [λ = 2π·base^((d−2)/d)에서 계산]이라, 느린
+                다이얼들은 어떤 실제 context에서도 거의 정지 상태다. Barbero et al.:
+                θ를 키우는 것은 token들이 "단지 context가 크다는 이유로 잘못
+                어긋나는" 것을 막는다.</span>
+            </p>
+            <span class="ev-chip">train-time · no post-hoc ramp</span>
+          </div>
+        </div>
+
+        <!-- partial rotary -->
+        <h3 class="sub-h">
+          <span class="lang-en">Partial RoPE — dials that never existed</span>
+          <span class="lang-ko">Partial RoPE — 처음부터 없는 다이얼</span>
+        </h3>
+        <div class="viz-frame">
+          <div class="prot-row">
+            <span class="prot-label">GPT-NeoX-20B<i>head_dim 96 · rotary_pct 0.25</i></span>
+            <div class="prot-track"
+              data-tip="GPT-NeoX paper: 'we follow Wang and Komatsuzaki [GPT-J] and instead apply it only to the first 25% of embedding vector dimensions. Our initial experiments indicate that this strikes the best balance of performance and computational efficiency.'"
+              data-tip-ko="GPT-NeoX 논문: 'Wang과 Komatsuzaki [GPT-J]를 따라 embedding vector 차원의 앞 25%에만 적용한다. 초기 실험에서 이것이 성능과 계산 효율의 최선의 균형이었다.'">
+              <span class="prot-rot" style="width:25%">24 rotated</span>
+              <span class="prot-free">72 dims — never rotated · position-free</span>
+            </div>
+          </div>
+          <div class="prot-row">
+            <span class="prot-label">Qwen3.5-27B<i>head_dim 256 · partial_rotary_factor 0.25</i></span>
+            <div class="prot-track"
+              data-tip="Qwen3.5-27B config.json: rope_parameters with partial_rotary_factor 0.25, rope_theta 10,000,000, mrope_interleaved true, mrope_section [11,11,10] — the 32 rotated pairs are split across temporal/height/width axes (multimodal mRoPE), and only every 4th layer is full attention (hybrid stack). Not a clean dense example — flags below."
+              data-tip-ko="Qwen3.5-27B config.json: rope_parameters에 partial_rotary_factor 0.25, rope_theta 10,000,000, mrope_interleaved true, mrope_section [11,11,10] — 회전되는 32개 pair가 temporal/height/width 축으로 나뉘고(멀티모달 mRoPE), 4개 layer마다 하나만 full attention이다(hybrid stack). 깔끔한 dense 예시가 아니다 — 아래 플래그 참고.">
+              <span class="prot-rot" style="width:25%">64 rotated</span>
+              <span class="prot-free">192 dims — never rotated · position-free</span>
+            </div>
+          </div>
+          <div class="wire-stats">
+            <span class="stat-chip">Qwen3.5 flags: hybrid — full attention every 4th layer</span>
+            <span class="stat-chip">mRoPE sections 11/11/10 (multimodal)</span>
+            <span class="stat-chip">θ = 10,000,000</span>
+          </div>
+          <p class="fine-inline">
+            <span class="lang-en">Attribution matters here: GPT-NeoX's stated reason for 25%
+              partial rotary is the performance/efficiency balance (following GPT-J). The
+              reading of unrotated dims as a deliberate "distance-agnostic semantic channel"
+              arrives later, with Barbero et al.'s p-RoPE (section d) — which removes the
+              lowest frequencies rather than leaving dims unrotated from the start.</span>
+            <span class="lang-ko">여기서는 attribution이 중요하다: GPT-NeoX가 밝힌 25%
+              partial rotary의 이유는 성능/효율 균형이다 (GPT-J를 따름). 회전되지 않는
+              차원을 의도적인 "거리-불변 semantic channel"로 읽는 해석은 나중에 Barbero
+              et al.의 p-RoPE(section d)와 함께 온다 — p-RoPE는 처음부터 안 돌리는 게
+              아니라 가장 낮은 frequency를 제거하는 쪽이다.</span>
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ f · SYSTEMS CORNER ============ -->
+    <section class="section-tight" id="systems">
+      <div class="container">
+        <h2 class="viz-h">
+          <span class="lang-en">f · Systems corner — where the rotation meets the cache</span>
+          <span class="lang-ko">f · Systems corner — 회전이 cache를 만나는 곳</span>
+        </h2>
+        <p class="viz-sub">
+          <span class="lang-en">Three published designs that exist because of section a's
+            two facts: K is cached post-RoPE, and position lives only in the q·k score.
+            Published claims only.</span>
+          <span class="lang-ko">section a의 두 사실 — K는 post-RoPE로 cache되고, position은
+            q·k score에만 산다 — 때문에 존재하는 세 가지 공개된 설계. 공개된 주장만
+            담았다.</span>
+        </p>
+
+        <div class="card-grid sys-grid">
+          <div class="card">
+            <h3><span class="lang-en">Rotate-at-write</span><span class="lang-ko">Rotate-at-write</span> <span class="to-year">HF transformers</span></h3>
+            <p>
+              <span class="lang-en">In the standard HF path, apply_rotary_pos_emb runs
+                before past_key_values.update(...) — verified code order in
+                modeling_qwen3.py. Every cached K is therefore stamped with the position it
+                was written at: a cached entry cannot be reused at a different position
+                without un-rotating and re-rotating it. vLLM's rotary layer follows the same
+                rotate-before-write convention (its rotary implementations verified; the
+                cache-write ordering itself is the standard reading).</span>
+              <span class="lang-ko">표준 HF 경로에서 apply_rotary_pos_emb는
+                past_key_values.update(...)보다 먼저 실행된다 — modeling_qwen3.py에서
+                검증한 코드 순서다. 따라서 cache된 모든 K에는 쓰인 시점의 position이
+                새겨져 있다: cache 항목을 다른 position에서 재사용하려면 회전을 풀고 다시
+                돌려야 한다. vLLM의 rotary layer도 같은 rotate-before-write 관례를 따른다
+                (rotary 구현은 검증됨; cache 쓰기 순서 자체는 표준적 해석).</span>
+            </p>
+            <span class="ev-chip">q_norm → RoPE → cache update — verified order</span>
+          </div>
+          <div class="card">
+            <h3><span class="lang-en">MLA — position as a side-channel</span><span class="lang-ko">MLA — side-channel로 옮긴 position</span> <span class="to-year">DeepSeek-V2 · 2405.04434</span></h3>
+            <p>
+              <span class="lang-en">Low-rank absorbed keys can't carry RoPE: "W^UK … will be
+                coupled with a position-sensitive RoPE matrix … [and] cannot be absorbed
+                into W^Q any more during inference." DeepSeek-V2's fix is decoupled RoPE:
+                per-head rotary queries plus ONE shared 64-dim rotary key per token
+                (d_h^R = 64), cached alongside the 512-dim latent — position lives only in
+                the 64-dim side-channel; the 512-dim latent is position-free by
+                construction. Full walkthrough in the
+                <a href="/study/models/attention-anatomy/">attention-anatomy deep-dive</a>.</span>
+              <span class="lang-ko">low-rank로 흡수된 key는 RoPE를 실을 수 없다: "W^UK는
+                position에 민감한 RoPE 행렬과 결합되어 … inference에서 더 이상 W^Q에
+                흡수될 수 없다." DeepSeek-V2의 해법이 decoupled RoPE다: head별 rotary
+                query와, token당 하나의 공유 64-dim rotary key(d_h^R = 64)를 512-dim
+                latent 옆에 cache한다 — position은 64-dim side-channel에만 살고, 512-dim
+                latent는 구조적으로 position-free다. 전체 과정은
+                <a href="/study/models/attention-anatomy/">attention-anatomy 딥다이브</a>
+                참고.</span>
+            </p>
+            <span class="ev-chip">cache = 512 position-free + 64 rotated</span>
+          </div>
+          <div class="card">
+            <h3><span class="lang-en">KVQuant — quantize before the rotation</span><span class="lang-ko">KVQuant — 회전 전에 quantize</span> <span class="to-year">Hooper et al. · 2401.18079</span></h3>
+            <p>
+              <span class="lang-en">Published rationale: keys "pre-RoPE exhibit clear
+                outliers in specific channels across different tokens", while "after
+                applying RoPE, the distribution becomes less structured … (this is expected,
+                as RoPE applies a rotation operation between pairs of channels)." Their
+                scheme quantizes keys pre-RoPE and applies the rotation on-the-fly after
+                dequantization with a fused kernel — a claimed 0.82 perplexity improvement
+                on Wikitext-2 for 3-bit LLaMA-7B versus post-RoPE per-channel quantization,
+                "without adding runtime overhead" (their claim). See the
+                <a href="/reviews/kvquant/">KVQuant review</a>.</span>
+              <span class="lang-ko">공개된 논거: key는 "pre-RoPE에서 token이 달라도 특정
+                channel에 뚜렷한 outlier"를 보이는 반면, "RoPE 적용 후에는 분포가 덜
+                구조적이 된다 … (RoPE가 channel pair 사이에 회전을 가하므로 예상되는
+                일이다)." 이들의 방식은 key를 pre-RoPE로 quantize하고, dequantization 후
+                fused kernel로 회전을 on-the-fly 적용한다 — 3-bit LLaMA-7B에서 post-RoPE
+                per-channel quantization 대비 Wikitext-2 perplexity 0.82 개선을 주장하며,
+                "runtime overhead 추가 없이"라는 것도 저자들의 주장이다.
+                <a href="/reviews/kvquant/">KVQuant 리뷰</a> 참고.</span>
+            </p>
+            <span class="ev-chip">quantize pre-RoPE → dequant → rotate on read</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ g · WORKED EXAMPLE ============ -->
+    <section class="section-tight" id="worked">
+      <div class="container">
+        <h2 class="viz-h">
+          <span class="lang-en">g · Worked example — d = 8, check every digit</span>
+          <span class="lang-ko">g · 수치 예제 — d = 8, 모든 자릿수를 직접 검산</span>
+        </h2>
+        <p class="viz-sub">
+          <span class="lang-en">The full pipeline at d = 8 (four pairs, base 10,000),
+            small enough to recompute by hand. All values machine-checked [derived on this
+            page]. Step through.</span>
+          <span class="lang-ko">d = 8(pair 4개, base 10,000)에서의 전체 파이프라인 — 손으로
+            재계산할 수 있을 만큼 작다. 모든 값은 기계 검산을 거쳤다 [이 페이지의 유도].
+            step을 넘겨 보라.</span>
+        </p>
+
+        <div class="viz-frame">
+          <div class="dt-controls">
+            <button class="btn ghost btn-sm" id="wxReset" type="button">⟲ Reset</button>
+            <button class="btn ghost btn-sm" id="wxPrev" type="button">← Prev</button>
+            <button class="btn btn-sm" id="wxNext" type="button">Next →</button>
+            <button class="btn ghost btn-sm" id="wxPlay" type="button">▶ Play</button>
+            <span class="dt-step" id="wxStep">Step 0 / 5 — Setup</span>
+          </div>
+
+          <div class="rope-scroll">
+            <div class="wx-table">
+              <div class="wx-row" data-wx="0">q = (1, 0, 0.5, −0.5, 0.2, 0.3, −0.4, 0.1) · k = (0, 1, 0.3, 0.7, −0.1, 0.2, 0.6, −0.2) · d = 8 · base 10,000 · ωᵢ = 10000^(−2i/8)</div>
+              <div class="wx-row" data-wx="1">ω = (1, 0.1, 0.01, 0.001) rad/token · λ = 2π/ω = (6.283, 62.83, 628.3, 6,283.2) tokens</div>
+              <div class="wx-row" data-wx="2">angles m·ω at m = 3: (3, 0.3, 0.03, 0.003) rad · at n = 7: (7, 0.7, 0.07, 0.007) rad</div>
+              <div class="wx-row" data-wx="3">pair 0 of q at m = 3: (1, 0) → (cos 3, sin 3) = (<b>−0.98999, 0.14112</b>)</div>
+              <div class="wx-row" data-wx="4">R(3)q = (−0.98999, 0.14112, 0.62543, −0.32991, 0.19091, 0.30586, −0.40030, 0.09880)<br />R(7)k = (−0.65699, 0.75390, −0.22150, 0.72865, −0.11374, 0.19252, 0.60139, −0.19580)</div>
+              <div class="wx-row" data-wx="5">⟨R(3)q, R(7)k⟩ = <b>0.154972</b> · ⟨q, R(4)k⟩ = <b>0.154972</b> · ⟨R(13)q, R(17)k⟩ = <b>0.154972</b></div>
+            </div>
+          </div>
+
+          <p class="cap" id="wxCap">
+            <span class="lang-en">A checkable micro-example: d = 8 gives four pairs; the
+              0-indexed convention ωᵢ = 10000^(−2i/8) fixes every speed. Each following step
+              adds one operation — ending at the relative-position identity verified three
+              ways to machine precision.</span>
+            <span class="lang-ko">검산 가능한 초소형 예제: d = 8이면 pair가 4개이고,
+              0-index 관례 ωᵢ = 10000^(−2i/8)이 모든 속도를 결정한다. step마다 연산이
+              하나씩 더해지며, 마지막에는 상대-position 항등식을 세 가지 방식으로 machine
+              precision까지 확인한다.</span>
+          </p>
+
+          <noscript>
+            <p class="viz-sub">
+              <span class="lang-en">Without JavaScript all six rows are shown at once.</span>
+              <span class="lang-ko">JavaScript가 없으면 여섯 행이 한 번에 표시된다.</span>
+            </p>
+          </noscript>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ PROSE ============ -->
+    <section class="section">
+      <div class="container">
+        <div class="prose">
+          <h2>
+            <span class="lang-en">Reading the diagram</span>
+            <span class="lang-ko">다이어그램 읽기</span>
+          </h2>
+
+          <h3>
+            <span class="lang-en">Position never exists as a vector — only as an angle</span>
+            <span class="lang-ko">position은 vector로 존재하지 않는다 — 오직 각도로만</span>
+          </h3>
+          <p>
+            <span class="lang-en">
+              RoPE models add no position embedding anywhere. Position enters as a phase:
+              block i of every head's q and k is spun by m·ωᵢ, and the only place that phase
+              becomes observable is the q·k dot product, where R(m)ᵀR(n) collapses to
+              R(n−m) — rotations compose additively per 2D block, so the absolute angles
+              cancel (RoFormer Eq. 16; section g checks it numerically). That is why the
+              rotation must land on q and k after their projections and nowhere else: the
+              score is the only bilinear meeting point, and v would just carry the spin into
+              the output without creating any relative-position term. In Qwen3-class code
+              the verified order is q_proj → q_norm → RoPE → cache update — QK-norm, where
+              it exists, sits before the rotation.
+            </span>
+            <span class="lang-ko">
+              RoPE 모델은 어디에도 position embedding을 더하지 않는다. position은 위상으로
+              들어온다: 모든 head의 q와 k에서 block i가 m·ωᵢ만큼 돌고, 그 위상이 관측
+              가능해지는 유일한 곳이 q·k dot product다 — 2D block마다 회전이 덧셈으로
+              합성되어 R(m)ᵀR(n)이 R(n−m)으로 붕괴하고, 절대 각도는 상쇄된다 (RoFormer
+              Eq. 16; section g에서 수치로 확인). 회전이 projection 뒤의 q와 k에만 꽂혀야
+              하는 이유가 이것이다: score가 유일한 bilinear 접점이고, v를 돌리면 상대-
+              position 항은 생기지 않은 채 출력 내용만 돌아간다. Qwen3 계열 코드에서
+              검증된 순서는 q_proj → q_norm → RoPE → cache update — QK-norm이 있는
+              모델에서는 norm이 회전보다 먼저다.
+            </span>
+          </p>
+
+          <h3>
+            <span class="lang-en">A head's reach is a cosine series</span>
+            <span class="lang-ko">head의 사정거리는 cosine 급수다</span>
+          </h3>
+          <p>
+            <span class="lang-en">
+              Split q and k into d/2 two-dim sub-vectors and the logit at distance Δ is
+              Σᵢ aᵢ·cos(Δωᵢ − φᵢ), with amplitude aᵢ = ‖q₍ᵢ₎‖·‖k₍ᵢ₎‖ — a derivation you can
+              verify against section g's numbers, and exactly the quantity Barbero et al.
+              measure when they report that trained Gemma places its largest norms on the
+              lowest frequencies. High-frequency bands buy sharp local structure — the
+              diagonal and previous-token heads at the first and last layers; low-frequency
+              bands act as nearly distance-agnostic content channels. RoFormer's long-term
+              decay curve should be read as an upper-bound envelope produced by many
+              incommensurate cosines dephasing, not a per-pair guarantee — and Barbero et
+              al. explicitly argue decay is "unlikely to be the core reason" RoPE helps.
+            </span>
+            <span class="lang-ko">
+              q와 k를 d/2개의 2차원 sub-vector로 쪼개면 거리 Δ에서의 logit은
+              Σᵢ aᵢ·cos(Δωᵢ − φᵢ)이고 amplitude는 aᵢ = ‖q₍ᵢ₎‖·‖k₍ᵢ₎‖다 — section g의
+              숫자로 직접 검산할 수 있는 유도이며, Barbero et al.이 "학습된 Gemma는 가장
+              큰 norm을 가장 낮은 frequency에 둔다"고 보고할 때 측정한 양이 정확히
+              이것이다. high-frequency band는 날카로운 국소 구조를 산다 — 첫·마지막
+              layer의 diagonal head와 previous-token head. low-frequency band는 거의
+              거리-불변인 내용 channel로 작동한다. RoFormer의 long-term decay 곡선은 서로
+              공약수 없는 여러 cosine이 어긋나며 만드는 upper-bound envelope로 읽어야지
+              pair별 보장이 아니다 — Barbero et al.은 decay가 RoPE가 잘 작동하는 "핵심
+              이유일 가능성은 낮다"고 명시적으로 반박한다.
+            </span>
+          </p>
+
+          <h3>
+            <span class="lang-en">Every long-context method is a band edit</span>
+            <span class="lang-ko">모든 long-context 기법은 band 수정이다</span>
+          </h3>
+          <p>
+            <span class="lang-en">
+              On one shared wavelength axis the four routes stop looking like rival tricks
+              and become one decision — which dials to slow, by how much. PI drags every
+              dial down equally and pays with blurred local order; NTK-aware tilts the
+              ladder, pinning the fast end and fully interpolating the slow end; YaRN makes
+              the tilt piecewise with an explicit r = L/λ ramp (α = 1, β = 32) plus a logit
+              temperature; big-base pretraining stretches the ladder before training so
+              nothing needs editing afterwards. Partial RoPE is the limiting edit — a
+              fraction of dials never turn at all. Which dials deserve protection is exactly
+              what the p-RoPE ablation asks from the training side, and there, removing the
+              lowest quarter of frequencies retrained slightly better than protecting them
+              with a bigger base.
+            </span>
+            <span class="lang-ko">
+              하나의 wavelength 축 위에 올려놓으면 네 경로는 경쟁하는 트릭이 아니라 하나의
+              결정이 된다 — 어느 다이얼을, 얼마나 늦출 것인가. PI는 모든 다이얼을
+              똑같이 끌어내리고 국소 순서의 흐릿함으로 값을 치른다. NTK-aware는 빠른 끝을
+              고정하고 느린 끝을 완전 interpolation하며 사다리를 기울인다. YaRN은 그
+              기울임을 r = L/λ ramp(α = 1, β = 32)로 조각별로 명시하고 logit temperature를
+              더한다. big-base pretraining은 학습 전에 사다리를 늘려 두어 이후 수정이
+              필요 없게 만든다. partial RoPE는 극한의 수정이다 — 일부 다이얼은 아예 돌지
+              않는다. 어느 다이얼을 보호해야 하는가는 p-RoPE ablation이 학습 쪽에서 던진
+              바로 그 질문인데, 거기서는 가장 낮은 frequency 4분의 1을 제거하고 재학습한
+              쪽이 더 큰 base로 보호한 쪽보다 근소하게 나았다.
+            </span>
+          </p>
+        </div>
+
+        <div class="eff-note band-dark">
+          <h3>
+            <span class="lang-en">Why the dial board matters for efficient inference</span>
+            <span class="lang-ko">왜 이 다이얼 보드가 효율적 inference에 중요한가</span>
+          </h3>
+          <p>
+            <span class="lang-en">
+              The KV cache stores rotated keys, so position is physically inside the cached
+              bytes: any system that moves, evicts, shares or compresses cached keys
+              inherits the dial board. The three published designs in the systems corner are
+              all responses to that one fact — DeepSeek's MLA carves position into a
+              separate 64-dim side-channel precisely so the other 512 dims stay absorbable;
+              KVQuant quantizes keys before the rotation because the rotation smears the
+              channel-wise outlier structure its quantizer relies on; and every
+              rotate-at-write cache commits each K entry to the position it was written at.
+              Reading rope_theta, partial_rotary_factor and rope_scaling out of a model's
+              config tells you — before any profiling — which dials exist, how fast they
+              turn, and which parts of the cached representation carry position at all.
+            </span>
+            <span class="lang-ko">
+              KV cache는 회전된 key를 저장하므로 position은 cache된 byte 안에 물리적으로
+              들어 있다: cache된 key를 옮기고, 내보내고, 공유하고, 압축하는 모든 시스템이
+              이 다이얼 보드를 물려받는다. systems corner의 세 공개 설계가 전부 이 한
+              사실에 대한 응답이다 — DeepSeek의 MLA는 나머지 512개 차원이 계속 흡수
+              가능하도록 position을 별도 64-dim side-channel로 도려냈고, KVQuant는 회전이
+              quantizer가 기대는 channel별 outlier 구조를 뭉개기 때문에 회전 전에
+              quantize하며, rotate-at-write cache는 모든 K 항목을 쓰인 시점의 position에
+              묶는다. 모델 config에서 rope_theta·partial_rotary_factor·rope_scaling을
+              읽으면 — profiling 없이도 — 어떤 다이얼이 존재하고, 얼마나 빨리 돌고,
+              cache된 표현의 어느 부분이 position을 나르는지 알 수 있다.
+            </span>
+          </p>
+          <div class="eff-chips">
+            <span class="eff-chip">position lives in the cached K bytes</span>
+            <span class="eff-chip">MLA: 512 position-free + 64 rotated</span>
+            <span class="eff-chip">KVQuant: quantize pre-RoPE, rotate on read</span>
+          </div>
+        </div>
+
+        <div class="prose">
+          <h2>
+            <span class="lang-en">Going deeper</span>
+            <span class="lang-ko">더 깊이 가기</span>
+          </h2>
+          <ul class="deeper-list">
+            <li><a class="arrow-link" href="https://arxiv.org/abs/2104.09864" target="_blank" rel="noopener">RoFormer: Enhanced Transformer with Rotary Position Embedding (Su et al., 2021)</a></li>
+            <li><a class="arrow-link" href="https://arxiv.org/abs/2306.15595" target="_blank" rel="noopener">Extending Context Window via Position Interpolation (Chen et al., 2023)</a></li>
+            <li><a class="arrow-link" href="https://arxiv.org/abs/2309.00071" target="_blank" rel="noopener">YaRN: Efficient Context Window Extension (Peng et al., 2023)</a></li>
+            <li><a class="arrow-link" href="https://arxiv.org/abs/2410.06205" target="_blank" rel="noopener">Barbero et al., 2024 — RoPE frequency analysis and p-RoPE (arXiv 2410.06205)</a></li>
+            <li><a class="arrow-link" href="https://arxiv.org/abs/2204.06745" target="_blank" rel="noopener">GPT-NeoX-20B — the 25% partial-rotary precedent (2022)</a></li>
+            <li><a class="arrow-link" href="https://arxiv.org/abs/2405.04434" target="_blank" rel="noopener">DeepSeek-V2 — decoupled RoPE inside MLA (2024)</a></li>
+            <li><a class="arrow-link" href="https://arxiv.org/abs/2401.18079" target="_blank" rel="noopener">KVQuant — pre-RoPE key quantization (Hooper et al., 2024)</a></li>
+            <li><a class="arrow-link" href="/study/models/attention-anatomy/">Attention-head anatomy — MLA's 512 + 64 cache, matrix by matrix</a></li>
+            <li><a class="arrow-link" href="/study/models/hybrid-attention/">Hybrid attention — partial RoPE inside Qwen3.5's linear + full stack</a></li>
+            <li><a class="arrow-link" href="/reviews/kvquant/">KVQuant review — the pre-RoPE quantization paper</a></li>
+          </ul>
+          <p class="fine-print">
+            <span class="lang-en">Sources verified July 2026: RoFormer Eq. 14–16/34 and
+              §3.4.3; PI Eq. 4 and Thm 2.1; YaRN Eq. 8–20 and Def. 2; Barbero et al.
+              2410.06205 (Gemma 7B norm/head analysis; Table 2 = Gemma 2B retrained from
+              scratch); GPT-NeoX-20B; DeepSeek-V2 §2.1; KVQuant; HF transformers
+              modeling_qwen3.py (inv_freq, rotate_half, QK-norm-before-RoPE, attention_scaling,
+              one cos/sin per forward broadcast to all heads and layers) and
+              convert_llama_weights_to_hf.py (q/k permute); vLLM rotary_embedding/common.py
+              (rotate_neox and rotate_gptj); config.json of Qwen3-8B (θ 10⁶, head_dim 128,
+              full rotary, max_position 40,960), Llama-3-8B (θ 500,000, max_position 8,192),
+              Qwen3.5-27B (partial_rotary_factor 0.25, θ 10⁷, hybrid + mRoPE). "Every layer,
+              every head" holds for standard dense decoders; Qwen3.5's hybrid stack rotates
+              only its full-attention layers and MLA rotates only a 64-dim sub-key. Derived
+              arithmetic — λ_max = 2π·base^((d−2)/d) ≈ 54,410 (base 10⁴) / ≈ 2.56M (base
+              5·10⁵), the NTK per-band ratio, the cosine-series decomposition, and the d = 8
+              example — is computed and labeled in place. Wavelength convention: 0-indexed
+              ωᵢ = base^(−2i/d); RoFormer's 1-indexed θᵢ is the same ladder.</span>
+            <span class="lang-ko">2026년 7월 검증한 출처: RoFormer Eq. 14–16/34, §3.4.3;
+              PI Eq. 4, Thm 2.1; YaRN Eq. 8–20, Def. 2; Barbero et al. 2410.06205 (Gemma 7B
+              norm/head 분석; Table 2는 처음부터 재학습한 Gemma 2B); GPT-NeoX-20B;
+              DeepSeek-V2 §2.1; KVQuant; HF transformers modeling_qwen3.py (inv_freq,
+              rotate_half, QK-norm이 RoPE보다 먼저, attention_scaling, forward당 한 번의
+              cos/sin을 전 head·전 layer에 broadcast)와 convert_llama_weights_to_hf.py
+              (q/k permute); vLLM rotary_embedding/common.py (rotate_neox·rotate_gptj);
+              Qwen3-8B (θ 10⁶, head_dim 128, full rotary, max_position 40,960),
+              Llama-3-8B (θ 500,000, max_position 8,192), Qwen3.5-27B
+              (partial_rotary_factor 0.25, θ 10⁷, hybrid + mRoPE)의 config.json. "모든
+              layer, 모든 head"는 표준 dense decoder에서 성립한다 — Qwen3.5의 hybrid
+              stack은 full-attention layer만 회전하고 MLA는 64-dim sub-key만 회전한다.
+              유도 계산 — λ_max = 2π·base^((d−2)/d) ≈ 54,410 (base 10⁴) / ≈ 2.56M (base
+              5·10⁵), NTK band별 비율, cosine 급수 분해, d = 8 예제 — 는 본문 해당 위치에
+              계산·표기했다. wavelength 관례: 0-index ωᵢ = base^(−2i/d); RoFormer의
+              1-index θᵢ와 같은 사다리다.</span>
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <div id="ropeTip" aria-hidden="true"></div>
+  </div>
+</Base>
+
+<style is:global>
+  /* ---- page chrome ---- */
+  .rope-page .hero-top { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 0.4rem; }
+  .rope-page .jump-row { display: flex; gap: 0.6rem; flex-wrap: wrap; margin: 1.6rem 0 0; }
+  .rope-page .jump-row .tag { transition: border-color 0.2s, color 0.2s; }
+  .rope-page .jump-row .tag:hover { border-color: var(--accent); color: var(--accent-strong); }
+  .rope-page .config-note {
+    margin-top: 1.4rem; display: flex; flex-wrap: wrap; gap: 0.45rem; align-items: center;
+    font-size: 0.88rem; color: var(--text-secondary);
+  }
+  .rope-page .config-lead { flex-basis: 100%; margin-bottom: 0.15rem; }
+  .rope-page .viz-h { margin-bottom: 0.4rem; }
+  .rope-page .viz-sub { color: var(--text-secondary); max-width: 52em; margin: 0 0 0.4rem; }
+  .rope-page .rope-scroll { overflow-x: auto; }
+  .rope-page .sub-h { margin: 2rem 0 0.6rem; font-size: 1.05rem; }
+
+  /* ---- shared SVG vocabulary ---- */
+  .rope-page svg text { font-family: var(--font-sans); fill: var(--text); }
+  .rope-page .stitle { font-size: 13px; font-weight: 600; }
+  .rope-page .stitle.sm { font-size: 12px; }
+  .rope-page .ssub { font-size: 11px; fill: var(--text-secondary); }
+  .rope-page .smono { font-family: var(--font-mono); font-size: 10.5px; fill: var(--text-secondary); }
+  .rope-page .taccent { fill: var(--accent-strong); }
+  .rope-page .rowlab { font-size: 12px; font-weight: 600; fill: var(--text-secondary); }
+  .rope-page .sbox { fill: #ffffff; stroke: var(--line-strong); stroke-width: 1.3; }
+  .rope-page .sbox-dash { stroke-dasharray: 5 4; }
+  .rope-page .sbox-accent { fill: #fdf6f2; stroke: var(--accent); stroke-width: 1.5; }
+  .rope-page .sbox-score { fill: var(--surface-warm); stroke: var(--line-strong); }
+  .rope-page .flowline { stroke: var(--text-tertiary); stroke-width: 1.6; fill: none; }
+  .rope-page .ropec { fill: #fdf6f2; stroke: var(--accent); stroke-width: 1.6; }
+  .rope-page [data-tip] { cursor: help; }
+
+  /* ---- controls ---- */
+  .rope-page .rp-chips { display: flex; gap: 0.45rem; flex-wrap: wrap; align-items: center; }
+  .rope-page .rp-chip {
+    font-family: var(--font-mono); font-size: 0.72rem; cursor: pointer;
+    padding: 0.36em 0.85em; border-radius: 999px; border: 1px solid var(--line-strong);
+    background: var(--surface); color: var(--text-secondary); transition: all 0.2s;
+  }
+  .rope-page .rp-chip.on { background: var(--text); border-color: var(--text); color: var(--bg); }
+  .rope-page .rp-chip:not(.on):hover { border-color: var(--accent); color: var(--accent-strong); }
+  .rope-page .rp-chip.off { opacity: 0.35; pointer-events: none; }
+  .rope-page .btn-sm { padding: 0.45em 1.1em; font-size: 0.85rem; }
+  .rope-page .btn[disabled] { opacity: 0.4; pointer-events: none; }
+  .rope-page .ctl-row { display: grid; grid-template-columns: 150px minmax(120px, 320px) 56px; gap: 0.7rem; align-items: center; margin-bottom: 0.6rem; }
+  .rope-page .ctl-row.ctl-wide { grid-template-columns: 90px minmax(160px, 420px) 64px; }
+  .rope-page .ctl-label { font-size: 0.76rem; font-weight: 600; color: var(--text-secondary); }
+  .rope-page .ctl-row input[type='range'] { width: 100%; accent-color: var(--accent); }
+  .rope-page .ctl-val { font-family: var(--font-mono); font-size: 0.78rem; color: var(--text); text-align: right; }
+  .rope-page .wall-controls { display: flex; flex-direction: column; gap: 0.6rem; margin-bottom: 1rem; }
+
+  /* ---- caption + chips ---- */
+  .rope-page .cap {
+    margin: 0.9rem 0 0; padding: 0.85rem 1.05rem; min-height: 4.2em;
+    background: var(--surface-warm); border-left: 3px solid var(--accent);
+    border-radius: 0 var(--radius-s, 8px) var(--radius-s, 8px) 0;
+    font-size: 0.92rem; color: var(--text-secondary);
+  }
+  .rope-page .wire-stats { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.8rem 0 0; }
+  .rope-page .stat-chip {
+    font-family: var(--font-mono); font-size: 0.74rem; color: var(--text-secondary);
+    border: 1px solid var(--line); border-radius: 999px; padding: 0.3em 0.85em;
+    background: var(--surface);
+  }
+  .rope-page .stat-chip b { color: var(--accent-strong); }
+  .rope-page .fine-inline { font-size: 0.78rem; color: var(--text-tertiary); margin: 0.8rem 0 0; max-width: 62em; }
+
+  /* ---- (b) pair dial ---- */
+  .rope-page .pair-controls { margin-bottom: 0.8rem; }
+  .rope-page .pair-btns { display: flex; gap: 0.8rem; flex-wrap: wrap; align-items: center; margin-top: 0.3rem; }
+  .rope-page .pair-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.4rem; align-items: start; }
+  @media (min-width: 900px) { .rope-page .pair-grid { grid-template-columns: minmax(300px, 430px) minmax(0, 1fr); } }
+  .rope-page .ghostline { stroke-width: 1.6; stroke-dasharray: 4 4; opacity: 0.5; }
+  .rope-page .gq { stroke: var(--accent); }
+  .rope-page .gk { stroke: var(--swatch-slate); }
+  .rope-page .veca { stroke-width: 2.4; }
+  .rope-page .vq { stroke: var(--accent); }
+  .rope-page .vk { stroke: var(--swatch-slate); }
+  .rope-page .formula {
+    font-family: var(--font-mono); font-size: 0.76rem; line-height: 1.7; white-space: pre-wrap;
+    color: var(--text-secondary); background: var(--surface-warm);
+    border: 1px solid var(--line); border-radius: var(--radius-s, 8px);
+    padding: 0.7rem 0.9rem; margin-bottom: 1rem; overflow-x: auto;
+  }
+  .rope-page .formula b { color: var(--accent-strong); font-weight: 600; }
+  .rope-page .conv-row { margin: 0.6rem 0 0.9rem; }
+  .rope-page .conv-panel {
+    border: 1px solid var(--line); border-radius: var(--radius-s, 8px);
+    padding: 0.9rem 1rem; margin-bottom: 0.8rem; background: var(--surface);
+  }
+  .rope-page .conv-panel.hidden { display: none; }
+  .rope-page .conv-cells { display: flex; gap: 0.35rem; flex-wrap: wrap; margin-bottom: 0.55rem; }
+  .rope-page .cc {
+    font-family: var(--font-mono); font-size: 0.78rem; padding: 0.35em 0.7em;
+    border-radius: 6px; border: 1px solid var(--line-strong); color: var(--text);
+  }
+  .rope-page .cc.p0 { background: #f2e4d6; }
+  .rope-page .cc.p1 { background: #e0eaf4; }
+  .rope-page .cc.p2 { background: #e6eadf; }
+  .rope-page .cc.p3 { background: #eae4f1; }
+  .rope-page .conv-note { font-size: 0.84rem; color: var(--text-secondary); margin: 0; }
+  .rope-page .warn-note {
+    margin: 0.9rem 0 0; padding: 0.85rem 1.05rem; font-size: 0.88rem;
+    color: var(--text-secondary); background: #fdf6f2;
+    border: 1px solid var(--accent); border-radius: var(--radius-s, 8px);
+  }
+
+  /* ---- (c) dial wall ---- */
+  .rope-page .clk { fill: #ffffff; stroke-width: 1.4; }
+  .rope-page .clk.cq0 { stroke: var(--accent); }
+  .rope-page .clk.cq1 { stroke: var(--swatch-kraft); }
+  .rope-page .clk.cq2 { stroke: var(--swatch-olive); }
+  .rope-page .clk.cq3 { stroke: var(--swatch-sky); }
+  .rope-page .clk-hand { stroke: var(--text); stroke-width: 1.8; stroke-linecap: round; }
+  .rope-page .clk-tick { stroke: var(--text-tertiary); stroke-width: 1; }
+  .rope-page .clk-lam { font-family: var(--font-mono); font-size: 8px; fill: var(--text-tertiary); }
+  .rope-page .spec-mark { stroke-width: 1.6; }
+  .rope-page .spec-mark.cq0 { stroke: var(--accent); }
+  .rope-page .spec-mark.cq1 { stroke: var(--swatch-kraft); }
+  .rope-page .spec-mark.cq2 { stroke: var(--swatch-olive); }
+  .rope-page .spec-mark.cq3 { stroke: var(--swatch-sky); }
+
+  /* ---- (d) combine ---- */
+  .rope-page .comb-controls { margin-bottom: 0.8rem; }
+  .rope-page .amp-rows { margin-top: 0.7rem; max-width: 560px; }
+  .rope-page .comb-band { fill: none; stroke-width: 1.2; opacity: 0.75; }
+  .rope-page .comb-band.cq0 { stroke: var(--accent); }
+  .rope-page .comb-band.cq1 { stroke: var(--swatch-kraft); }
+  .rope-page .comb-band.cq2 { stroke: var(--swatch-olive); }
+  .rope-page .comb-band.cq3 { stroke: var(--swatch-sky); }
+  .rope-page .comb-sum { fill: none; stroke: var(--accent-strong); stroke-width: 2.4; }
+  .rope-page .barb-grid { margin-top: 0.8rem; }
+  .rope-page .barb-grid .card p, .rope-page .sys-grid .card p, .rope-page .to-grid .card p { font-size: 0.9rem; line-height: 1.65; color: var(--text-secondary); margin: 0.6rem 0 0.8rem; }
+  .rope-page .prope-panel {
+    border: 1px solid var(--line); border-radius: var(--radius-m, 14px);
+    padding: 1.1rem 1.2rem; margin-top: 1.2rem; background: var(--surface);
+  }
+  .rope-page .scope-warn {
+    margin: 0 0 0.9rem; padding: 0.7rem 0.95rem; font-size: 0.85rem;
+    color: var(--text-secondary); background: #fdf6f2;
+    border-left: 3px solid var(--accent-strong); border-radius: 0 var(--radius-s, 8px) var(--radius-s, 8px) 0;
+  }
+  .rope-page .prope-table { border-collapse: collapse; font-size: 0.85rem; min-width: 460px; }
+  .rope-page .prope-table th, .rope-page .prope-table td {
+    border: 1px solid var(--line); padding: 0.45em 0.9em; text-align: left;
+  }
+  .rope-page .prope-table td:nth-child(2), .rope-page .prope-table td:nth-child(3) { font-family: var(--font-mono); font-size: 0.8rem; }
+  .rope-page .prope-table th { background: var(--surface-warm); font-weight: 600; }
+  .rope-page .prope-table tr.best td { background: #fdf6f2; }
+  .rope-page .prope-table tr.best b { color: var(--accent-strong); }
+
+  /* ---- (e) edits ---- */
+  .rope-page .zone { opacity: 0.5; }
+  .rope-page .zu { fill: #e6eadf; }
+  .rope-page .zb { fill: #f2e4d6; }
+  .rope-page .zf { fill: #f6e2d7; }
+  .rope-page .edit-line { fill: none; stroke: var(--accent-strong); stroke-width: 2.4; }
+  .rope-page .to-grid { margin-top: 1.4rem; }
+  .rope-page .to-grid .card h3, .rope-page .sys-grid .card h3 { display: flex; align-items: baseline; gap: 0.6rem; flex-wrap: wrap; }
+  .rope-page .to-year { font-family: var(--font-mono); font-size: 0.66rem; font-weight: 400; color: var(--text-tertiary); }
+  .rope-page .ev-chip {
+    display: inline-block; font-family: var(--font-mono); font-size: 0.68rem;
+    color: var(--accent-strong); border: 1px solid var(--line); border-radius: 999px;
+    padding: 0.3em 0.8em; background: var(--surface-warm);
+  }
+  .rope-page .prot-row { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 0.9rem; align-items: center; margin-bottom: 0.8rem; }
+  .rope-page .prot-label { font-size: 0.82rem; font-weight: 600; }
+  .rope-page .prot-label i { display: block; font-family: var(--font-mono); font-size: 0.66rem; font-style: normal; font-weight: 400; color: var(--text-tertiary); }
+  .rope-page .prot-track { display: flex; height: 30px; border: 1px solid var(--line-strong); border-radius: 6px; overflow: hidden; }
+  .rope-page .prot-rot {
+    background: var(--accent); color: #fff; font-family: var(--font-mono); font-size: 0.68rem;
+    display: flex; align-items: center; justify-content: center; white-space: nowrap;
+  }
+  .rope-page .prot-free {
+    flex: 1; background: var(--surface-warm); color: var(--text-secondary);
+    font-family: var(--font-mono); font-size: 0.68rem;
+    display: flex; align-items: center; justify-content: center; white-space: nowrap;
+  }
+  @media (max-width: 640px) { .rope-page .prot-row { grid-template-columns: minmax(0, 1fr); gap: 0.3rem; } }
+
+  /* ---- (f) systems ---- */
+  .rope-page .sys-grid { margin-top: 1.2rem; }
+  .rope-page .sys-grid .card a { color: var(--accent-strong); }
+
+  /* ---- (g) worked example ---- */
+  .rope-page .dt-controls { display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; margin-bottom: 1rem; }
+  .rope-page .dt-step { font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-secondary); margin-left: auto; white-space: nowrap; }
+  .rope-page .wx-table { min-width: 720px; }
+  .rope-page .wx-row {
+    font-family: var(--font-mono); font-size: 0.78rem; line-height: 1.7;
+    color: var(--text-secondary); padding: 0.55rem 0.9rem; margin-bottom: 0.4rem;
+    border: 1px solid var(--line); border-left: 3px solid var(--line-strong);
+    border-radius: 0 var(--radius-s, 8px) var(--radius-s, 8px) 0; background: var(--surface);
+    transition: opacity 0.3s, border-color 0.3s;
+  }
+  .rope-page .wx-row b { color: var(--accent-strong); }
+  .rope-page .wx-row.dimmed { opacity: 0.22; }
+  .rope-page .wx-row.now { border-left-color: var(--accent); background: #fdf6f2; }
+
+  /* ---- dark band + misc ---- */
+  .rope-page .eff-note { border-radius: var(--radius-l, 16px); padding: clamp(1.4rem, 3vw, 2.2rem); margin: 3rem 0; max-width: 880px; }
+  .rope-page .eff-note h3 { color: var(--text-on-dark); margin-bottom: 0.7rem; }
+  .rope-page .eff-note p { font-size: 0.97rem; line-height: 1.7; }
+  .rope-page .eff-chips { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1.1rem; }
+  .rope-page .eff-chip {
+    font-family: var(--font-mono); font-size: 0.74rem; color: var(--text-on-dark);
+    border: 1px solid var(--line-on-dark); border-radius: 999px; padding: 0.35em 0.9em;
+    background: #1d1d1b;
+  }
+  .rope-page .deeper-list { list-style: none; padding: 0; margin: 0.6rem 0 1.6rem; display: flex; flex-direction: column; gap: 0.55rem; }
+  .rope-page .deeper-list .arrow-link { text-decoration: none; }
+  .rope-page .fine-print { font-size: 0.85rem; color: var(--text-tertiary); }
+
+  /* ---- tooltip ---- */
+  #ropeTip {
+    position: fixed; z-index: 60; max-width: 320px; pointer-events: none;
+    background: var(--surface-dark); color: var(--text-on-dark);
+    font-family: var(--font-sans); font-size: 0.78rem; line-height: 1.5;
+    padding: 0.5rem 0.75rem; border-radius: 8px; opacity: 0;
+    transition: opacity 0.15s; box-shadow: 0 8px 24px rgba(20, 20, 19, 0.25);
+  }
+</style>
+
+<script>
+  // ---------- helpers ----------
+  const $ = (id: string) => document.getElementById(id);
+  function setCap(el: HTMLElement | null, en: string, ko: string) {
+    if (!el) return;
+    const e = el.querySelector('.lang-en');
+    const k = el.querySelector('.lang-ko');
+    if (e) e.textContent = en;
+    if (k) k.textContent = ko;
+  }
+  const curLang = () => ((window as any).siteLang ? (window as any).siteLang() : 'en');
+
+  // ---------- shared tooltip (bilingual, DELEGATED so re-rendered SVG keeps working) ----------
+  const tip = $('ropeTip');
+  document.addEventListener('mousemove', (e) => {
+    if (!tip) return;
+    const t = e.target as Element;
+    const el = t && t.closest ? t.closest('[data-tip]') : null;
+    if (!el || !el.closest('.rope-page')) { tip.style.opacity = '0'; return; }
+    const ko = el.getAttribute('data-tip-ko');
+    tip.textContent = (curLang() === 'ko' && ko ? ko : el.getAttribute('data-tip')) || '';
+    tip.style.opacity = '1';
+    tip.style.left = Math.min(e.clientX + 14, window.innerWidth - 336) + 'px';
+    tip.style.top = e.clientY + 18 + 'px';
+  });
+
+  // ================= b · ONE PAIR = ONE DIAL =================
+  // pairs of the d=8 worked example (section g)
+  const QP = [[1, 0], [0.5, -0.5], [0.2, 0.3], [-0.4, 0.1]];
+  const KP = [[0, 1], [0.3, 0.7], [-0.1, 0.2], [0.6, -0.2]];
+  const OMB = [1, 0.1, 0.01, 0.001];
+  const PCX = 190, PCY = 160, PR = 110; // keep in sync with the static SVG
+  const pb = { m: 3, n: 7, band: 0 };
+
+  const slM = $('slM') as HTMLInputElement | null;
+  const slN = $('slN') as HTMLInputElement | null;
+
+  function rot2(v: number[], a: number): number[] {
+    return [v[0] * Math.cos(a) - v[1] * Math.sin(a), v[0] * Math.sin(a) + v[1] * Math.cos(a)];
+  }
+  function setVec(id: string, v: number[]) {
+    const el = $(id);
+    if (!el) return;
+    el.setAttribute('x2', String(PCX + v[0] * PR));
+    el.setAttribute('y2', String(PCY - v[1] * PR));
+  }
+  const BAND_CAPS: { en: string; ko: string }[] = [
+    {
+      en: 'Pair 0 is the fastest dial: ω = 1 rad/token — it advances ≈57° (about a sixth of a turn) between neighboring tokens, so this band distinguishes m = 3 from m = 4 sharply. Shift both positions together and the score stands still: only Δω survives the dot product.',
+      ko: 'pair 0은 가장 빠른 다이얼이다: ω = 1 rad/token — 이웃 token 사이에 약 57°(약 1/6 바퀴) 돌아, 이 band는 m = 3과 m = 4를 날카롭게 구분한다. 두 position을 같이 밀면 score는 멈춰 있다: dot product에서 살아남는 것은 Δω뿐이다.',
+    },
+    {
+      en: 'Pair 1 turns 10× slower (ω = 0.1, λ = 62.8 tokens): within a sentence the arrows drift rather than spin. Same identity, gentler phase.',
+      ko: 'pair 1은 10배 느리게 돈다 (ω = 0.1, λ = 62.8 tokens): 문장 하나 안에서는 화살표가 도는 게 아니라 슬며시 밀린다. 같은 항등식, 더 완만한 위상.',
+    },
+    {
+      en: 'Pair 2 (ω = 0.01, λ = 628 tokens): across this whole slider range the rotation is a few degrees — the band is nearly position-blind at sentence scale.',
+      ko: 'pair 2 (ω = 0.01, λ = 628 tokens): 이 slider 범위 전체에서 회전은 몇 도에 불과하다 — 문장 규모에서는 사실상 position을 보지 못하는 band다.',
+    },
+    {
+      en: 'Pair 3 (ω = 0.001, λ = 6,283 tokens): the slow dial. At any position on this slider the pair is essentially unrotated — a distance-agnostic channel, which is exactly what the lowest bands become in real heads (section d).',
+      ko: 'pair 3 (ω = 0.001, λ = 6,283 tokens): 느린 다이얼. 이 slider의 어느 position에서도 pair는 사실상 회전하지 않는다 — 거리-불변 channel이고, 실제 head의 최저 band가 정확히 이렇게 쓰인다 (section d).',
+    },
+  ];
+
+  function pairRender() {
+    const om = OMB[pb.band];
+    const q0 = QP[pb.band], k0 = KP[pb.band];
+    const qr = rot2(q0, pb.m * om);
+    const kr = rot2(k0, pb.n * om);
+    setVec('qGhost', q0); setVec('kGhost', k0);
+    setVec('qArr', qr); setVec('kArr', kr);
+    const ql = $('qLab'), kl = $('kLab');
+    if (ql) { ql.setAttribute('x', String(PCX + qr[0] * PR * 1.22 - 24)); ql.setAttribute('y', String(PCY - qr[1] * PR * 1.22)); }
+    if (kl) { kl.setAttribute('x', String(PCX + kr[0] * PR * 1.22 - 24)); kl.setAttribute('y', String(PCY - kr[1] * PR * 1.22)); }
+    const c = Math.cos(pb.m * om), s = Math.sin(pb.m * om);
+    const put = (id: string, v: number) => { const el = $(id); if (el) el.textContent = v.toFixed(3).replace('-', '−'); };
+    put('m00', c); put('m01', -s); put('m10', s); put('m11', c);
+    const mb = $('matBox');
+    if (mb && mb.firstChild) mb.firstChild.textContent = `R(mω) — live 2×2 block, m = ${pb.m}, ω = ${om}\n\n  ⎡ cos mω  −sin mω ⎤   ⎡ `;
+    const dot = q0[0] * k0[0] + q0[1] * k0[1];
+    const crs = q0[0] * k0[1] - q0[1] * k0[0];
+    const del = (pb.n - pb.m) * om;
+    const score = dot * Math.cos(del) - crs * Math.sin(del);
+    const fx = (v: number, d: number) => v.toFixed(d).replace('-', '−');
+    const set = (id: string, txt: string) => { const el = $(id); if (el) el.textContent = txt; };
+    set('cMth', fx(pb.m * om, 3)); set('cNth', fx(pb.n * om, 3));
+    set('cDel', String(pb.n - pb.m)); set('cScore', fx(score, 4));
+    set('vM', String(pb.m)); set('vN', String(pb.n));
+    setCap($('pairCap'), BAND_CAPS[pb.band].en, BAND_CAPS[pb.band].ko);
+  }
+  if (slM) slM.addEventListener('input', () => { pb.m = Number(slM.value); pairRender(); });
+  if (slN) slN.addEventListener('input', () => { pb.n = Number(slN.value); pairRender(); });
+  const shiftBtn = $('shiftBtn');
+  if (shiftBtn) shiftBtn.addEventListener('click', () => {
+    if (pb.m + 10 > 50 || pb.n + 10 > 50) { pb.m = Math.max(0, pb.m - 40); pb.n = Math.max(0, pb.n - 40); }
+    else { pb.m += 10; pb.n += 10; }
+    if (slM) slM.value = String(pb.m);
+    if (slN) slN.value = String(pb.n);
+    pairRender();
+  });
+  document.querySelectorAll('.band-chip').forEach((b) => {
+    b.addEventListener('click', () => {
+      pb.band = Number((b as HTMLElement).dataset.band);
+      document.querySelectorAll('.band-chip').forEach((x) => x.classList.toggle('on', x === b));
+      pairRender();
+    });
+  });
+  document.querySelectorAll('.conv-chip').forEach((b) => {
+    b.addEventListener('click', () => {
+      const v = (b as HTMLElement).dataset.conv;
+      document.querySelectorAll('.conv-chip').forEach((x) => x.classList.toggle('on', x === b));
+      const pi = $('convInter'), ph = $('convHalf');
+      if (pi) pi.classList.toggle('hidden', v !== 'inter');
+      if (ph) ph.classList.toggle('hidden', v !== 'half');
+    });
+  });
+  // JS present: show one convention panel at a time (both visible without JS)
+  const ph0 = $('convHalf');
+  if (ph0) ph0.classList.add('hidden');
+  pairRender();
+
+  // ================= c · THE DIAL WALL =================
+  // geometry mirrored from the static SSR markup — keep in sync
+  const wall = { m: 64, base: 10000 };
+  let wallTimer: ReturnType<typeof setInterval> | null = null;
+  const fmtLamJs = (v: number): string =>
+    v < 100 ? v.toFixed(1)
+    : v < 1000 ? String(Math.round(v))
+    : v < 100000 ? (v / 1000).toFixed(1).replace(/\.0$/, '') + 'K'
+    : (v / 1e6).toFixed(2) + 'M';
+  const quartJs = (i: number) => (i < 16 ? 'cq0' : i < 32 ? 'cq1' : i < 48 ? 'cq2' : 'cq3');
+  const CTX_OF: Record<number, { L: number; lab: string }> = {
+    10000: { L: 2048, lab: 'trained ctx 2,048 (LLaMA-era)' },
+    500000: { L: 8192, lab: 'max_position 8,192 (Llama-3-8B)' },
+    1000000: { L: 40960, lab: 'max_position 40,960 (Qwen3-8B)' },
+  };
+  const specXJs = (lam: number) =>
+    40 + ((Math.log10(lam) - Math.log10(5)) / (Math.log10(6e6) - Math.log10(5))) * 880;
+
+  function wallRender() {
+    const wd = $('wallDyn');
+    if (wd) {
+      let s = `<text class="rowlab" x="20" y="14">dials 0–63 · ωᵢ = base^(−2i/128) rad/token · hand = current angle m·ωᵢ (mod 2π) · label = λᵢ in tokens</text>`;
+      for (let i = 0; i < 64; i++) {
+        const om = Math.pow(wall.base, (-2 * i) / 128);
+        const lam = (2 * Math.PI) / om;
+        const a = (wall.m * om) % (2 * Math.PI);
+        const cx = 38 + (i % 16) * 57.5;
+        const cy = 46 + Math.floor(i / 16) * 74;
+        const turns = (wall.m * om) / (2 * Math.PI);
+        const tipEn = `dial ${i} — ω = ${om < 0.001 ? om.toExponential(2) : om.toFixed(om < 0.01 ? 5 : 3)} rad/token · λ = ${lam < 1000 ? lam.toFixed(1) : Math.round(lam).toLocaleString('en-US')} tokens · at m = ${wall.m.toLocaleString('en-US')}: ${turns >= 1 ? turns.toFixed(1) + ' full turns' : a.toFixed(3) + ' rad'}`;
+        const tipKo = `dial ${i} — ω = ${om < 0.001 ? om.toExponential(2) : om.toFixed(om < 0.01 ? 5 : 3)} rad/token · λ = ${lam < 1000 ? lam.toFixed(1) : Math.round(lam).toLocaleString('en-US')} tokens · m = ${wall.m.toLocaleString('en-US')}에서 ${turns >= 1 ? turns.toFixed(1) + '바퀴' : a.toFixed(3) + ' rad'}`;
+        s += `<g data-tip="${tipEn}" data-tip-ko="${tipKo}">` +
+          `<circle class="clk ${quartJs(i)}" cx="${cx}" cy="${cy}" r="17"></circle>` +
+          `<line class="clk-tick" x1="${cx + 14}" y1="${cy}" x2="${cx + 17}" y2="${cy}"></line>` +
+          `<line class="clk-hand" x1="${cx}" y1="${cy}" x2="${(cx + 13 * Math.cos(a)).toFixed(2)}" y2="${(cy - 13 * Math.sin(a)).toFixed(2)}"></line>` +
+          `<text class="clk-lam" x="${cx}" y="${cy + 29}" text-anchor="middle">${fmtLamJs(lam)}</text></g>`;
+      }
+      wd.innerHTML = s;
+    }
+    const sd = $('specDyn');
+    if (sd) {
+      let s = `<line x1="40" y1="48" x2="920" y2="48" stroke="var(--line-strong)" stroke-width="1.2"></line>`;
+      [10, 100, 1000, 1e4, 1e5, 1e6].forEach((v) => {
+        const x = specXJs(v).toFixed(1);
+        s += `<line x1="${x}" y1="44" x2="${x}" y2="52" stroke="var(--text-tertiary)" stroke-width="1"></line>` +
+          `<text class="ssub" x="${x}" y="68" text-anchor="middle">${v >= 1e6 ? '1M' : v >= 1000 ? v / 1000 + 'K' : v}</text>`;
+      });
+      for (let i = 0; i < 64; i++) {
+        const lam = 2 * Math.PI * Math.pow(wall.base, (2 * i) / 128);
+        s += `<line class="spec-mark ${quartJs(i)}" x1="${specXJs(lam).toFixed(1)}" y1="30" x2="${specXJs(lam).toFixed(1)}" y2="46"></line>`;
+      }
+      const cm = CTX_OF[wall.base];
+      const cX = specXJs(cm.L).toFixed(1);
+      s += `<line x1="${cX}" y1="14" x2="${cX}" y2="52" stroke="var(--accent-strong)" stroke-width="1.4" stroke-dasharray="4 3"></line>` +
+        `<text class="smono" x="${Number(cX) + 6}" y="20" fill="var(--accent-strong)">${cm.lab}</text>` +
+        `<text class="rowlab" x="20" y="88">wavelength λ (tokens, log scale) — dials to the right of the context marker never complete one turn in training</text>`;
+      sd.innerHTML = s;
+    }
+    const om63 = Math.pow(wall.base, -126 / 128);
+    const a63 = wall.m * om63;
+    const put = (id: string, txt: string) => { const el = $(id); if (el) el.textContent = txt; };
+    put('wcM', wall.m.toLocaleString('en-US'));
+    put('wcFast', (wall.m / (2 * Math.PI)).toFixed(1));
+    put('wcSlow', a63 >= 2 * Math.PI
+      ? (a63 / (2 * Math.PI)).toFixed(2) + ' turns'
+      : a63.toFixed(4) + ' rad — ' + ((a63 / (2 * Math.PI)) * 100).toFixed(2) + '% of a turn');
+    put('wcLmax', Math.round((2 * Math.PI) / om63).toLocaleString('en-US'));
+    const vw = $('vWall'); if (vw) vw.textContent = wall.m.toLocaleString('en-US');
+    const sl = $('slWall') as HTMLInputElement | null;
+    if (sl) sl.value = String(Math.min(wall.m, 1000));
+    document.querySelectorAll('.wjump').forEach((x) =>
+      x.classList.toggle('on', Number((x as HTMLElement).dataset.m) === wall.m));
+  }
+  const WALL_CAPS: Record<number, { en: string; ko: string }> = {
+    10000: {
+      en: 'Base 10,000 (RoFormer): the ladder runs from λ₀ = 2π ≈ 6.28 tokens to λ₆₃ = 2π·10000^(126/128) ≈ 54,410 tokens [computed; slightly below the 2π·base ≈ 62,832 approximation]. Dial 0 disambiguates neighbors; the last dials barely move inside any real context — near position-free channels.',
+      ko: 'base 10,000 (RoFormer): 사다리는 λ₀ = 2π ≈ 6.28 token에서 λ₆₃ = 2π·10000^(126/128) ≈ 54,410 token까지 뻗는다 [계산값; 2π·base ≈ 62,832 근사보다 약간 작다]. 다이얼 0은 이웃 token을 구분하고, 마지막 다이얼들은 어떤 실제 context 안에서도 거의 움직이지 않는다 — 사실상 position-free channel이다.',
+    },
+    500000: {
+      en: 'Base 500,000 — Llama-3’s train-time route (rope_theta in config.json). The whole wall stretches: the slowest dial’s wavelength becomes ≈ 2.56M tokens [computed], so at max_position 8,192 it turns only ≈1.15° [computed]. Barbero et al.: a larger θ prevents tokens “being erroneously misaligned simply due to the large context.”',
+      ko: 'base 500,000 — Llama-3의 train-time 경로 (config.json의 rope_theta). 벽 전체가 늘어난다: 가장 느린 다이얼의 wavelength가 ≈ 2.56M token이 되어 [계산값], max_position 8,192에서도 약 1.15°만 돈다 [계산값]. Barbero et al.: 큰 θ는 token들이 “단지 context가 크다는 이유로 잘못 어긋나는” 것을 막는다.',
+    },
+    1000000: {
+      en: 'Base 1,000,000 — Qwen3-8B ships this (rope_theta 10⁶, max_position 40,960, rope_scaling null). The slowest dial’s wavelength is ≈ 5.06M tokens [computed]: over the full 40K context it moves about 0.05 rad. The top of the ladder is position-free by construction.',
+      ko: 'base 1,000,000 — Qwen3-8B의 출고 사양이다 (rope_theta 10⁶, max_position 40,960, rope_scaling null). 가장 느린 다이얼의 wavelength는 ≈ 5.06M token [계산값]: 40K context 전체에서 약 0.05 rad 움직인다. 사다리 꼭대기는 구조적으로 position-free다.',
+    },
+  };
+  function wallStop() {
+    if (wallTimer !== null) { clearInterval(wallTimer); wallTimer = null; }
+    const wp = $('wallPlay'); if (wp) wp.textContent = '▶ Play';
+  }
+  const slWall = $('slWall') as HTMLInputElement | null;
+  if (slWall) slWall.addEventListener('input', () => { wallStop(); wall.m = Number(slWall.value); wallRender(); });
+  document.querySelectorAll('.wjump').forEach((b) => {
+    b.addEventListener('click', () => { wallStop(); wall.m = Number((b as HTMLElement).dataset.m); wallRender(); });
+  });
+  document.querySelectorAll('.wbase').forEach((b) => {
+    b.addEventListener('click', () => {
+      wall.base = Number((b as HTMLElement).dataset.b);
+      document.querySelectorAll('.wbase').forEach((x) => x.classList.toggle('on', x === b));
+      const c = WALL_CAPS[wall.base];
+      setCap($('wallCap'), c.en, c.ko);
+      wallRender();
+    });
+  });
+  const wallPlay = $('wallPlay');
+  if (wallPlay) wallPlay.addEventListener('click', () => {
+    if (wallTimer !== null) { wallStop(); return; }
+    wallPlay.textContent = '❚❚ Pause';
+    wallTimer = setInterval(() => {
+      wall.m = wall.m >= 1000 ? 0 : wall.m + 2;
+      wallRender();
+    }, 50);
+  });
+  wallRender();
+
+  // ================= d · HOW BANDS COMBINE =================
+  const CTH = [1, 0.1, 0.01, 0.001];
+  const amps = [0.25, 0.45, 0.7, 1.0];
+  const COMB_PRE: Record<string, number[]> = {
+    sem: [0.25, 0.45, 0.7, 1.0],
+    pos: [1.0, 0.35, 0.1, 0.05],
+    flat: [0.6, 0.6, 0.6, 0.6],
+  };
+  const COMB_CAPS: Record<string, { en: string; ko: string }> = {
+    sem: {
+      en: 'Low-frequency-heavy — the shape Barbero et al. actually measure in trained Gemma 7B: the largest norms sit on the lowest frequencies, producing a slowly-varying, nearly distance-agnostic envelope; the fast dials only add local texture.',
+      ko: 'low-frequency 우세 — Barbero et al.이 학습된 Gemma 7B에서 실측한 형태다: 가장 큰 norm이 가장 낮은 frequency에 실려 거의 거리-불변인 느린 envelope을 만들고, 빠른 다이얼은 국소적인 결만 더한다.',
+    },
+    pos: {
+      en: 'High-frequency-heavy — a positional head: the fast band carves a sharp peak at Δ = 0 that collapses within a couple of tokens and re-rings at multiples of λ₀ = 6.3. Gemma’s last-layer diagonal head (L27 H8) and first-layer previous-token head live here (Barbero et al., Fig. 5–6).',
+      ko: 'high-frequency 우세 — positional head다: 빠른 band가 Δ = 0에 날카로운 peak을 깎아 내고, 그 peak은 몇 token 만에 무너졌다가 λ₀ = 6.3의 배수마다 다시 울린다. Gemma의 마지막 layer diagonal head(L27 H8)와 첫 layer previous-token head가 여기 산다 (Barbero et al., Fig. 5–6).',
+    },
+    flat: {
+      en: 'Equal weights — pure interference: all bands align at Δ = 0, then dephase at different rates. The sum looks like decay although no band decays — RoFormer’s long-term-decay curve is this dephasing bounded from above, and Barbero et al. argue decay is “unlikely to be the core reason” RoPE helps.',
+      ko: '균등 가중 — 순수한 간섭: 모든 band가 Δ = 0에서 정렬했다가 서로 다른 속도로 어긋난다. 어느 band도 감쇠하지 않는데 합은 감쇠처럼 보인다 — RoFormer의 long-term decay 곡선은 이 어긋남의 상한이고, Barbero et al.은 decay가 RoPE 효용의 “핵심 이유일 가능성은 낮다”고 논증한다.',
+    },
+    custom: {
+      en: 'Custom mix — logit(Δ) = Σ aᵢ·cos(Δωᵢ) with φᵢ = 0 here. In a real head aᵢ = ‖q₍ᵢ₎‖·‖k₍ᵢ₎‖ and each band also picks a phase φᵢ (the 2D angle from k₍ᵢ₎ to q₍ᵢ₎), shifting its cosine left or right.',
+      ko: '직접 조합 — 여기서는 φᵢ = 0으로 logit(Δ) = Σ aᵢ·cos(Δωᵢ). 실제 head에서는 aᵢ = ‖q₍ᵢ₎‖·‖k₍ᵢ₎‖이고 band마다 위상 φᵢ(k₍ᵢ₎에서 q₍ᵢ₎로의 2D 각도)도 골라 cosine을 좌우로 민다.',
+    },
+  };
+  function combRender() {
+    const S = Math.max(1, amps.reduce((s, a) => s + a, 0));
+    const line = (fn: (d: number) => number) => {
+      const pts: string[] = [];
+      for (let d = 0; d <= 80.001; d += 0.25) {
+        pts.push((60 + d * 10.625).toFixed(1) + ',' + (160 - (fn(d) / S) * 125).toFixed(1));
+      }
+      return pts.join(' ');
+    };
+    for (let i = 0; i < 4; i++) {
+      const el = $('cb' + i);
+      if (el) el.setAttribute('points', line((d) => amps[i] * Math.cos(d * CTH[i])));
+      const v = $('vA' + i);
+      if (v) v.textContent = amps[i].toFixed(2);
+    }
+    const sm = $('cbSum');
+    if (sm) sm.setAttribute('points', line((d) => amps.reduce((s, a, i) => s + a * Math.cos(d * CTH[i]), 0)));
+    const pk = $('combPeak');
+    if (pk) pk.textContent = amps.reduce((s, a) => s + a, 0).toFixed(2);
+  }
+  document.querySelectorAll('.amp-sl').forEach((s) => {
+    s.addEventListener('input', () => {
+      amps[Number((s as HTMLElement).dataset.i)] = Number((s as HTMLInputElement).value) / 100;
+      document.querySelectorAll('.comb-pre').forEach((x) => x.classList.remove('on'));
+      setCap($('combCap'), COMB_CAPS.custom.en, COMB_CAPS.custom.ko);
+      combRender();
+    });
+  });
+  document.querySelectorAll('.comb-pre').forEach((b) => {
+    b.addEventListener('click', () => {
+      const p = COMB_PRE[(b as HTMLElement).dataset.pre || 'sem'];
+      for (let i = 0; i < 4; i++) amps[i] = p[i];
+      document.querySelectorAll('.amp-sl').forEach((s) => {
+        (s as HTMLInputElement).value = String(p[Number((s as HTMLElement).dataset.i)] * 100);
+      });
+      document.querySelectorAll('.comb-pre').forEach((x) => x.classList.toggle('on', x === b));
+      const c = COMB_CAPS[(b as HTMLElement).dataset.pre || 'sem'];
+      setCap($('combCap'), c.en, c.ko);
+      combRender();
+    });
+  });
+  combRender();
+
+  // ================= e · EDITING THE BANDS =================
+  const ed = { m: 'yarn', s: 4 };
+  const edX = (i: number) => 70 + i * (850 / 63);
+  const edY = (f: number) => 300 - Math.max(0, Math.min(1.02, f)) * 230;
+  function edFrac(i: number): number {
+    if (ed.m === 'pi') return 1 / ed.s;
+    if (ed.m === 'ntk') return Math.pow(ed.s, (-2 * i) / 126);
+    if (ed.m === 'base') return Math.pow(50, (-2 * i) / 128); // theta(500k)/theta(10k)
+    const lam = 2 * Math.PI * Math.pow(10000, (2 * i) / 128);
+    const r = 2048 / lam;
+    const g = r <= 1 ? 0 : r >= 32 ? 1 : (r - 1) / 31;
+    return (1 - g) / ed.s + g;
+  }
+  const EDIT_CAPS: Record<string, { en: string; ko: string }> = {
+    pi: {
+      en: 'Position Interpolation: f′(x, m) = f(x, m·L/L′) — one flat line at 1/s; every dial including the fastest slows equally. Safe (interpolation bound ≈600× tighter than extrapolation, Thm 2.1) and cheap (~1,000 fine-tune steps), but YaRN’s criticism bites: the rescale “removes the high frequency components”, and PI fine-tunes degraded beyond s ≈ 8.',
+      ko: 'Position Interpolation: f′(x, m) = f(x, m·L/L′) — 1/s 높이의 수평선 하나다. 가장 빠른 다이얼까지 전부 똑같이 느려진다. 안전하고(interpolation bound가 extrapolation보다 약 600× 좁음, Thm 2.1) 싸지만(fine-tune 약 1,000 step), YaRN의 비판이 정확히 여기를 찌른다: 이 rescale은 “high frequency 성분을 제거”하며, PI fine-tune은 s ≈ 8을 넘으면 열화됐다.',
+    },
+    ntk: {
+      en: 'NTK-aware: change the base, b′ = b·s^(d/(d−2)) — a geometric tilt of the whole ladder. Dial 0 is unchanged exactly; the last dial gets exactly θ/s; everything between is graded [per-band ratio s^(−2i/(d−2)), derived from YaRN Eq. 19–20].',
+      ko: 'NTK-aware: base를 바꾼다, b′ = b·s^(d/(d−2)) — 사다리 전체의 기하급수 기울이기다. 다이얼 0은 정확히 그대로, 마지막 다이얼은 정확히 θ/s, 그 사이는 등비로 눕는다 [band별 비율 s^(−2i/(d−2)), YaRN Eq. 19–20에서 유도].',
+    },
+    yarn: {
+      en: 'YaRN = NTK-by-parts + temperature. Per dial, r = L/λ counts full rotations inside the original context L. Fast dials (r above β = 32) stay untouched; dials whose wavelength exceeds the trained context (r below α = 1) get full interpolation θ/s; the middle blends linearly (Eq. 8, 10, 11, 13). Logits are additionally scaled by 0.1·ln(s) + 1 — HF bakes this into the cos/sin cache as attention_scaling.',
+      ko: 'YaRN = NTK-by-parts + temperature. 다이얼마다 r = L/λ가 원래 context L 안에서의 회전 수를 센다. 빠른 다이얼(r이 β = 32 초과)은 그대로, wavelength가 학습 context보다 긴 다이얼(r이 α = 1 미만)은 완전 interpolation θ/s, 중간은 선형 blend다 (Eq. 8, 10, 11, 13). 추가로 logit에 0.1·ln(s) + 1을 곱한다 — HF는 이를 attention_scaling으로 cos/sin cache에 굽는다.',
+    },
+    base: {
+      en: 'The train-time route: Llama-3 ships rope_theta = 500,000; the curve shows θ(500k) ÷ θ(10k) per dial — no ramp, no fine-tune patch, the ladder simply grew before training. The slowest dial’s wavelength becomes ≈ 2.56M tokens [computed]. Qwen3-8B goes further with θ = 10⁶.',
+      ko: 'train-time 경로: Llama-3는 rope_theta = 500,000으로 출고된다. 곡선은 다이얼별 θ(500k) ÷ θ(10k)다 — ramp도 fine-tune 패치도 없이, 학습 전에 사다리가 이미 자란 것이다. 가장 느린 다이얼의 wavelength는 ≈ 2.56M token이 된다 [계산값]. Qwen3-8B는 θ = 10⁶으로 더 나아간다.',
+    },
+  };
+  function editRender() {
+    const line = Array.from({ length: 64 }, (_, i) => edX(i).toFixed(1) + ',' + edY(edFrac(i)).toFixed(1)).join(' ');
+    const el = $('editLine');
+    if (el) el.setAttribute('points', line);
+    const zg = $('zoneG');
+    if (zg) (zg as unknown as SVGGElement).style.opacity = ed.m === 'yarn' ? '1' : '0';
+    const sLine = $('sLine'), sLab = $('sLab');
+    const showS = ed.m !== 'base';
+    if (sLine) {
+      sLine.style.opacity = showS ? '1' : '0';
+      sLine.setAttribute('y1', String(edY(1 / ed.s)));
+      sLine.setAttribute('y2', String(edY(1 / ed.s)));
+    }
+    if (sLab) {
+      sLab.style.opacity = showS ? '1' : '0';
+      sLab.setAttribute('y', String(edY(1 / ed.s) + 4));
+      sLab.textContent = '×1/' + ed.s;
+    }
+    const put = (id: string, txt: string) => { const el2 = $(id); if (el2) el2.textContent = txt; };
+    const temp = (0.1 * Math.log(ed.s) + 1).toFixed(3);
+    const bp = Math.round(10000 * Math.pow(ed.s, 128 / 126)).toLocaleString('en-US');
+    if (ed.m === 'pi') {
+      put('ec1', 'all 64 dials ÷ ' + ed.s + ' — fastest λ 6.3 → ' + (6.28 * ed.s).toFixed(1) + ' tokens');
+      put('ec2', 'bound: interpolation ≈600× tighter than extrapolation (Thm 2.1)');
+      put('ec3', 'YaRN: PI fine-tunes degraded beyond s ≈ 8');
+    } else if (ed.m === 'ntk') {
+      put('ec1', 'b′ = 10,000 · ' + ed.s + '^(128/126) ≈ ' + bp);
+      put('ec2', 'dial 0: ×1 exactly · dial 63: ×1/' + ed.s + ' exactly');
+      put('ec3', 'geometric grading between the endpoints');
+    } else if (ed.m === 'yarn') {
+      put('ec1', '17 dials untouched · 24 blended · 23 fully interpolated (L=2,048)');
+      put('ec2', 'temperature: logits × 0.1·ln s + 1 = ' + temp + ' (s=' + ed.s + ')');
+      put('ec3', 'α = 1 · β = 32 (Llama family, YaRN)');
+    } else {
+      put('ec1', 'θ 10,000 → 500,000 at train time (Llama-3 config.json)');
+      put('ec2', 'λ₆₃: 54,410 → ≈ 2.56M tokens [computed]');
+      put('ec3', 'Qwen3-8B: θ = 1,000,000 · max_position 40,960');
+    }
+    document.querySelectorAll('.es-chip').forEach((x) => x.classList.toggle('off', ed.m === 'base'));
+    const c = EDIT_CAPS[ed.m];
+    setCap($('editCap'), c.en, c.ko);
+  }
+  document.querySelectorAll('.em-chip').forEach((b) => {
+    b.addEventListener('click', () => {
+      ed.m = (b as HTMLElement).dataset.m || 'yarn';
+      document.querySelectorAll('.em-chip').forEach((x) => x.classList.toggle('on', x === b));
+      editRender();
+    });
+  });
+  document.querySelectorAll('.es-chip').forEach((b) => {
+    b.addEventListener('click', () => {
+      ed.s = Number((b as HTMLElement).dataset.s);
+      document.querySelectorAll('.es-chip').forEach((x) => x.classList.toggle('on', x === b));
+      editRender();
+    });
+  });
+  editRender();
+
+  // ================= g · WORKED EXAMPLE =================
+  const WX_CAPS: { name: string; cap: { en: string; ko: string } }[] = [
+    { name: 'Setup', cap: {
+      en: 'A checkable micro-example: d = 8 gives four pairs; the 0-indexed convention ωᵢ = 10000^(−2i/8) fixes every speed. Each following step adds one operation — ending at the relative-position identity verified three ways to machine precision.',
+      ko: '검산 가능한 초소형 예제: d = 8이면 pair가 4개이고, 0-index 관례 ωᵢ = 10000^(−2i/8)이 모든 속도를 결정한다. step마다 연산이 하나씩 더해지며, 마지막에는 상대-position 항등식을 세 가지 방식으로 machine precision까지 확인한다.' } },
+    { name: 'Speeds', cap: {
+      en: 'Four dial speeds spanning three orders of magnitude: the fast dial turns 1 rad per token (λ = 6.28 — ≈57°, about a sixth of a turn, between neighbors); the slow dial 0.001 rad (λ = 6,283 — effectively static in an 8-token sentence).',
+      ko: '세 자릿수에 걸친 네 개의 다이얼 속도: 빠른 다이얼은 token당 1 rad (λ = 6.28 — 이웃 token 사이 약 57°, 약 1/6 바퀴), 느린 다이얼은 0.001 rad (λ = 6,283 — 8-token 문장에서는 사실상 정지).' } },
+    { name: 'Angles', cap: {
+      en: 'Angle = position × speed, per dial: at m = 3 the fast dial sits at 3 rad while the slow one has moved 0.003 rad. Same ladder evaluated at n = 7 for the key.',
+      ko: '각도 = position × 속도, 다이얼마다: m = 3에서 빠른 다이얼은 3 rad에 있고 느린 다이얼은 0.003 rad만 움직였다. key에는 같은 사다리를 n = 7에서 평가한다.' } },
+    { name: 'One pair', cap: {
+      en: 'One pair rotated: q’s pair 0 = (1, 0) at m = 3 lands at (cos 3, sin 3) = (−0.98999, 0.14112). That single 2×2 product is the entire per-pair operation — section b shows it live.',
+      ko: 'pair 하나의 회전: q의 pair 0 = (1, 0)이 m = 3에서 (cos 3, sin 3) = (−0.98999, 0.14112)에 도착한다. 이 2×2 곱 하나가 pair당 연산의 전부다 — section b에서 실시간으로 볼 수 있다.' } },
+    { name: 'Full vectors', cap: {
+      en: 'All four pairs rotated at once: R(3)q and R(7)k written out in full. Note how little the last pair moved — the slow dials barely participate at these positions.',
+      ko: '네 pair를 한꺼번에 회전: R(3)q와 R(7)k 전체를 적었다. 마지막 pair가 얼마나 조금 움직였는지 보라 — 이 position대에서 느린 다이얼은 거의 참여하지 않는다.' } },
+    { name: 'The identity', cap: {
+      en: 'The punchline: ⟨R(3)q, R(7)k⟩ = 0.154972 equals ⟨q, R(4)k⟩ — rotating only the key by Δ = 4 — and equals ⟨R(13)q, R(17)k⟩ after shifting both positions by +10. Only n − m survives (RoFormer Eq. 16), to machine precision.',
+      ko: '결론: ⟨R(3)q, R(7)k⟩ = 0.154972는 key만 Δ = 4만큼 돌린 ⟨q, R(4)k⟩와 같고, 두 position을 +10 민 ⟨R(13)q, R(17)k⟩와도 같다. 살아남는 것은 n − m뿐이다 (RoFormer Eq. 16) — machine precision까지.' } },
+  ];
+  const wxRows = Array.from(document.querySelectorAll('.wx-row'));
+  const wxStepEl = $('wxStep');
+  const wxPrev = $('wxPrev'), wxNext = $('wxNext'), wxPlay = $('wxPlay'), wxReset = $('wxReset');
+  let wxCur = 0;
+  let wxTimer: ReturnType<typeof setInterval> | null = null;
+  function wxGo(i: number) {
+    wxCur = Math.max(0, Math.min(WX_CAPS.length - 1, i));
+    wxRows.forEach((r) => {
+      const k = Number((r as HTMLElement).dataset.wx);
+      r.classList.toggle('dimmed', k > wxCur);
+      r.classList.toggle('now', k === wxCur);
+    });
+    const st = WX_CAPS[wxCur];
+    setCap($('wxCap'), st.cap.en, st.cap.ko);
+    if (wxStepEl) wxStepEl.textContent = 'Step ' + wxCur + ' / ' + (WX_CAPS.length - 1) + ' — ' + st.name;
+    if (wxPrev) wxPrev.toggleAttribute('disabled', wxCur === 0);
+    if (wxNext) wxNext.toggleAttribute('disabled', wxCur === WX_CAPS.length - 1);
+  }
+  function wxStop() {
+    if (wxTimer !== null) { clearInterval(wxTimer); wxTimer = null; }
+    if (wxPlay) wxPlay.textContent = '▶ Play';
+  }
+  if (wxPrev) wxPrev.addEventListener('click', () => { wxStop(); wxGo(wxCur - 1); });
+  if (wxNext) wxNext.addEventListener('click', () => { wxStop(); wxGo(wxCur + 1); });
+  if (wxReset) wxReset.addEventListener('click', () => { wxStop(); wxGo(0); });
+  if (wxPlay) wxPlay.addEventListener('click', () => {
+    if (wxTimer !== null) { wxStop(); return; }
+    if (wxCur === WX_CAPS.length - 1) wxGo(0);
+    wxPlay.textContent = '❚❚ Pause';
+    wxTimer = setInterval(() => {
+      if (wxCur >= WX_CAPS.length - 1) { wxStop(); return; }
+      wxGo(wxCur + 1);
+    }, 3200);
+  });
+  wxGo(0);
+</script>

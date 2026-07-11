@@ -162,6 +162,39 @@ const hasKoLede = Boolean(entry.data.summary_ko);
         <LangToggle />
       </div>
 
+      {entry.data.figures.length > 0 && (
+        <div class="review-figs">
+          {entry.data.figures.map((f) => (
+            <figure class="review-fig">
+              <a
+                class="fig-frame"
+                href={f.src}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <img
+                  src={f.src}
+                  alt={f.caption}
+                  loading="lazy"
+                  decoding="async"
+                />
+              </a>
+              <figcaption>
+                {f.caption_ko ? (
+                  <>
+                    <span class="fig-caption lang-en">{f.caption}</span>
+                    <span class="fig-caption lang-ko">{f.caption_ko}</span>
+                  </>
+                ) : (
+                  <span class="fig-caption">{f.caption}</span>
+                )}
+                <span class="fig-credit">{f.credit}</span>
+              </figcaption>
+            </figure>
+          ))}
+        </div>
+      )}
+
       {analysisRows.length > 0 && (
         <div class="analysis-block">
           <div class="summary-list">
@@ -304,10 +337,60 @@ const hasKoLede = Boolean(entry.data.summary_ko);
     margin-top: 1.6rem;
   }
 
+  /* ---- key figures from the paper (credited) ---- */
+  .review-figs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.1rem;
+    margin-top: 1.75rem;
+    max-width: 900px;
+  }
+  .review-fig {
+    flex: 1 1 340px;
+    min-width: 0;
+    margin: 0;
+  }
+  .fig-frame {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.75rem;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-m);
+    transition: border-color 0.15s ease;
+  }
+  .fig-frame:hover {
+    border-color: var(--accent);
+  }
+  .fig-frame img {
+    display: block;
+    max-width: 100%;
+    max-height: 480px;
+    object-fit: contain;
+    border-radius: calc(var(--radius-m) - 6px);
+  }
+  .review-fig figcaption {
+    margin-top: 0.6rem;
+    font-size: 0.83rem;
+    line-height: 1.55;
+    color: var(--text-secondary);
+  }
+  .fig-caption {
+    display: block;
+  }
+  .fig-credit {
+    display: block;
+    margin-top: 0.3rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.66rem;
+    color: var(--text-tertiary);
+  }
+
   /* ---- 13-item analysis: one column, never a grid ---- */
   .analysis-block {
     margin-top: 1.75rem;
-    max-width: 860px;
+    max-width: 900px;
   }
   .summary-list {
     display: flex;
@@ -342,18 +425,20 @@ const hasKoLede = Boolean(entry.data.summary_ko);
   }
   .row-body {
     min-width: 0;
+    flex: 1;
   }
   .row-text {
     margin: 0;
     font-size: 0.95rem;
-    line-height: 1.65;
+    line-height: 1.7;
     color: var(--text);
     overflow-wrap: anywhere;
   }
   .row-label {
+    display: block;
     color: var(--row-hue);
     font-weight: 700;
-    margin-right: 0.4rem;
+    margin-bottom: 0.35rem;
   }
 
   /* ---- resources chips ---- */

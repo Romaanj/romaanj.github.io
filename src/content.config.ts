@@ -41,6 +41,18 @@ const reviews = defineCollection({
     links: z.array(z.string()).default([]),
     /** verified primary sources only (paper / PDF / project / GitHub / dataset / checkpoint) */
     resources: z.array(z.object({ label: z.string(), url: z.string().url() })).default([]),
+    /** key figures pulled from the paper (arXiv HTML), served from /public/figures/<slug>/ —
+     *  always credited; captions bilingual */
+    figures: z
+      .array(
+        z.object({
+          src: z.string(),
+          caption: z.string(),
+          caption_ko: z.string().optional(),
+          credit: z.string(),
+        })
+      )
+      .default([]),
     /** bilingual 13-item structured analysis; en shown by default, ko via toggle */
     analysis: z.object({ ko: analysisBlock, en: analysisBlock }).optional(),
     source: z.enum(['autosweep', 'manual']).default('manual'),
