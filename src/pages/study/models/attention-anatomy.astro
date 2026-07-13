@@ -44,11 +44,29 @@ const wireQ = Array.from({ length: NQ }, (_, i) => ({
           </span>
         </p>
 
-        <div class="jump-row">
-          <a class="tag" href="#wiring">1 · Head wiring</a>
-          <a class="tag" href="#calc">2 · KV-bytes calculator</a>
-          <a class="tag" href="#mla">3 · MLA deep-dive</a>
-          <a class="tag" href="#tradeoff">4 · Trade-offs</a>
+        <nav class="arc-roadmap" aria-label="Page roadmap">
+          <a href="#arc-s1"><span class="arc-n">§1</span><span class="lang-en">Why the cache hurts</span><span class="lang-ko">cache가 왜 문제인가</span></a>
+          <a href="#arc-s2"><span class="arc-n">§2</span><span class="lang-en">What the cache stores</span><span class="lang-ko">cache에 담기는 것</span></a>
+          <a href="#arc-s3"><span class="arc-n">§3</span><span class="lang-en">Head wiring</span><span class="lang-ko">Head 배선</span></a>
+          <a href="#arc-s4"><span class="arc-n">§4</span><span class="lang-en">KV-bytes calculator</span><span class="lang-ko">KV-byte 계산기</span></a>
+          <a href="#arc-s5"><span class="arc-n">§5</span><span class="lang-en">MLA deep-dive</span><span class="lang-ko">MLA 딥다이브</span></a>
+          <a href="#arc-s6"><span class="arc-n">§6</span><span class="lang-en">What the papers claim</span><span class="lang-ko">논문의 실제 주장</span></a>
+          <a href="#arc-s7"><span class="arc-n">§7</span><span class="lang-en">Where this goes</span><span class="lang-ko">어디로 가는가</span></a>
+        </nav>
+
+        <div class="arc-prereq">
+          <span class="lang-en"><strong>Before you start:</strong> you should be comfortable
+            with the basic attention equation — queries, keys, values and
+            softmax(QKᵀ/√d)·V. It also helps to know why GPU decoding is limited by memory
+            bandwidth rather than FLOPs (<a href="/study/gpu/memory-hierarchy/">GPU memory
+            hierarchy</a>) and how RoPE encodes position
+            (<a href="/study/models/rope/">RoPE</a>) — §5 leans on the latter.</span>
+          <span class="lang-ko"><strong>시작하기 전에:</strong> attention의 기본 수식 —
+            query·key·value와 softmax(QKᵀ/√d)·V — 에는 익숙하다고 가정한다. GPU decoding이
+            FLOPs가 아니라 memory bandwidth에 막히는 이유(<a
+            href="/study/gpu/memory-hierarchy/">GPU memory hierarchy</a>)와 RoPE가 position을
+            인코딩하는 방식(<a href="/study/models/rope/">RoPE</a>)을 알면 좋다 — 특히 §5가
+            후자에 기댄다.</span>
         </div>
 
         <div class="config-note">
@@ -66,13 +84,217 @@ const wireQ = Array.from({ length: NQ }, (_, i) => ({
       </div>
     </section>
 
-    <!-- ============ 1 · HEAD WIRING ============ -->
-    <section class="section-tight" id="wiring">
+    <!-- ============ §1 · THE ITCH ============ -->
+    <section class="section-tight" id="arc-s1">
       <div class="container">
-        <h2 class="viz-h">
-          <span class="lang-en">1 · Head wiring — one dial from MHA to MQA</span>
-          <span class="lang-ko">1 · Head 배선 — MHA에서 MQA까지 하나의 다이얼</span>
+        <h2 class="viz-h arc-heading">
+          <span class="arc-num">§1</span>
+          <span class="lang-en">Why the cache hurts — the problem before any mechanism</span>
+          <span class="lang-ko">cache가 왜 문제인가 — 메커니즘 이전의 문제</span>
         </h2>
+        <div class="prose">
+          <p>
+            <span class="lang-en">
+              An autoregressive LLM generates one token at a time, and each new token must
+              attend to every token that came before it. To avoid recomputing the past at
+              every step, the model stores per-token state — the KV cache — and re-reads it
+              on every single generated token. The weights are a fixed cost; the cache grows
+              with context length, and again with every sequence served in parallel.
+            </span>
+            <span class="lang-ko">
+              autoregressive LLM은 token을 하나씩 생성하고, 새 token은 앞선 모든 token을
+              attend해야 한다. 매 step마다 과거를 다시 계산하지 않으려고 모델은 token별
+              상태 — KV cache — 를 저장해 두고, token 하나를 생성할 때마다 전부 다시
+              읽는다. weight는 고정 비용이지만 cache는 context 길이에 비례해 자라고, 동시에
+              서빙하는 sequence 수만큼 다시 배로 자란다.
+            </span>
+          </p>
+          <p>
+            <span class="lang-en">
+              Put numbers on it. Llama-2-7B in FP16 has about 13.5 GB of weights — fixed.
+              Its KV cache costs 512 KB per token, so one 8K-context sequence adds 4 GB.
+              Serve a batch of 16 and the cache alone is 64 GB — nearly five times the
+              weights — and an 80 GB GPU is full before its compute units are ever the
+              bottleneck. That is the itch: the cache, not the weights, caps how many
+              sequences a GPU can serve at long context.
+            </span>
+            <span class="lang-ko">
+              숫자로 보자. FP16의 Llama-2-7B는 weight가 약 13.5 GB — 고정이다. KV cache는
+              token당 512 KB이므로 8K context sequence 하나가 4 GB를 더한다. batch 16을
+              서빙하면 cache만 64 GB — weight의 거의 5배 — 이고, 80 GB GPU는 연산 유닛이
+              병목이 되기도 전에 메모리부터 가득 찬다. 이것이 가려운 지점이다: 긴 context에서
+              GPU가 서빙할 수 있는 sequence 수를 막는 것은 weight가 아니라 cache다.
+            </span>
+          </p>
+        </div>
+
+        <div class="viz-frame">
+          <div class="att-scroll">
+            <svg viewBox="0 0 760 210" role="img"
+              aria-label="Memory budget of Llama-2-7B at 8K context: 13.5 GB of fixed weights versus a KV cache that grows from 4 GB at batch 1 to 64 GB at batch 16"
+              style="width:100%; height:auto; min-width:680px;">
+              <text class="rowlab" x="20" y="22">Llama-2-7B · MHA · FP16 · 8K context — 512 KB of cache per token per sequence</text>
+              <text class="ssub" x="20" y="56" text-anchor="start">weights</text>
+              <rect x="150" y="44" width="114" height="16" rx="3" fill="var(--swatch-slate)"></rect>
+              <text class="smono" x="272" y="57">13.5 GB — fixed</text>
+              <text class="ssub" x="20" y="94" text-anchor="start">KV · batch 1</text>
+              <rect x="150" y="82" width="34" height="16" rx="3" fill="var(--accent)" opacity="0.55"></rect>
+              <text class="smono" x="192" y="95">4 GB</text>
+              <text class="ssub" x="20" y="132" text-anchor="start">KV · batch 8</text>
+              <rect x="150" y="120" width="270" height="16" rx="3" fill="var(--accent)" opacity="0.75"></rect>
+              <text class="smono" x="428" y="133">32 GB</text>
+              <text class="ssub" x="20" y="170" text-anchor="start">KV · batch 16</text>
+              <rect x="150" y="158" width="540" height="16" rx="3" fill="var(--accent)"></rect>
+              <text class="smono" x="150" y="196">64 GB — cache ≈ 5 × weights; with weights, an 80 GB GPU is full</text>
+            </svg>
+          </div>
+        </div>
+
+        <div class="arc-takeaway">
+          <span class="arc-takeaway-label"><span class="lang-en">Takeaway</span><span class="lang-ko">핵심 한 줄</span></span>
+          <span class="lang-en">At long context the KV cache — not the weights — is the
+            memory bill that caps batch size, so shrinking it is worth real architecture
+            changes.</span>
+          <span class="lang-ko">긴 context에서 batch 크기를 막는 메모리 비용은 weight가
+            아니라 KV cache다 — 그래서 이것을 줄이는 일은 아키텍처를 바꿀 만한 가치가
+            있다.</span>
+        </div>
+        <p class="arc-question">
+          <span class="lang-en">Where do those 512 KB per token actually come from — what
+            exactly does the cache store?</span>
+          <span class="lang-ko">token당 512 KB는 정확히 어디서 나오는가 — cache에는 무엇이
+            저장되나?</span>
+        </p>
+      </div>
+    </section>
+
+    <!-- ============ §2 · FOUNDATIONS ============ -->
+    <section class="section-tight" id="arc-s2">
+      <div class="container">
+        <h2 class="viz-h arc-heading">
+          <span class="arc-num">§2</span>
+          <span class="lang-en">What the cache stores — heads, K/V, and one formula</span>
+          <span class="lang-ko">cache에 담기는 것 — head, K/V, 그리고 공식 하나</span>
+        </h2>
+        <div class="prose">
+          <p>
+            <span class="lang-en">
+              Inside every layer, every token is projected into three vectors: a query, a
+              key and a value. Multi-head attention runs this several times in parallel —
+              Llama-2-7B uses 32 heads of dimension 128 — so each head can attend to a
+              different aspect of the context. When token t is generated, its query must be
+              scored against the <em>keys of all previous tokens</em>, and the resulting
+              weights average their <em>values</em>. Those past keys and values never
+              change, so recomputing them every step would be pure waste: the model computes
+              them once and caches them. That is the KV cache — one K and one V vector per
+              head, per layer, for every token seen so far.
+            </span>
+            <span class="lang-ko">
+              모든 layer에서 모든 token은 세 vector로 projection된다: query, key, value.
+              multi-head attention은 이것을 병렬로 여러 번 돌린다 — Llama-2-7B는 dimension
+              128짜리 head 32개 — 각 head가 context의 다른 측면을 보게 하기 위해서다.
+              token t를 생성할 때 그 query는 <em>앞선 모든 token의 key</em>와 score를 내고,
+              그 가중치로 <em>value</em>들을 평균한다. 과거의 key·value는 변하지 않으므로
+              매 step 다시 계산하는 것은 순수한 낭비다: 한 번 계산해서 cache한다. 이것이
+              KV cache다 — 지금까지 본 모든 token에 대해 head당·layer당 K 하나와 V 하나.
+            </span>
+          </p>
+        </div>
+
+        <div class="viz-frame">
+          <div class="att-scroll">
+            <svg viewBox="0 0 760 230" role="img"
+              aria-label="One decode step: the new token produces q, k and v; k and v are appended to the KV cache; q reads every cached key and value"
+              style="width:100%; height:auto; min-width:680px;">
+              <defs>
+                <marker id="arrFnd" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                  <path d="M0,0 L10,5 L0,10 z" fill="#87857c"></path>
+                </marker>
+              </defs>
+              <rect class="sbox" x="20" y="80" width="130" height="46" rx="9"></rect>
+              <text class="stitle sm" x="85" y="100" text-anchor="middle">new token t</text>
+              <text class="smono" x="85" y="118" text-anchor="middle">hidden state h_t</text>
+              <line class="flowline" x1="150" y1="92" x2="216" y2="48" marker-end="url(#arrFnd)"></line>
+              <line class="flowline" x1="150" y1="103" x2="216" y2="103" marker-end="url(#arrFnd)"></line>
+              <line class="flowline" x1="150" y1="114" x2="216" y2="158" marker-end="url(#arrFnd)"></line>
+              <rect class="sbox" x="220" y="24" width="120" height="40" rx="9"></rect>
+              <text class="stitle sm" x="280" y="41" text-anchor="middle">q_t — query</text>
+              <text class="smono" x="280" y="56" text-anchor="middle">used once, not cached</text>
+              <rect class="sbox sbox-accent" x="220" y="84" width="120" height="40" rx="9"></rect>
+              <text class="stitle sm" x="280" y="101" text-anchor="middle">k_t — key</text>
+              <text class="smono" x="280" y="116" text-anchor="middle">appended to cache</text>
+              <rect class="sbox sbox-accent" x="220" y="144" width="120" height="40" rx="9"></rect>
+              <text class="stitle sm" x="280" y="161" text-anchor="middle">v_t — value</text>
+              <text class="smono" x="280" y="176" text-anchor="middle">appended to cache</text>
+              <line class="flowline" x1="340" y1="104" x2="416" y2="118" marker-end="url(#arrFnd)"></line>
+              <line class="flowline" x1="340" y1="164" x2="416" y2="146" marker-end="url(#arrFnd)"></line>
+              <rect class="sbox sbox-cache" x="420" y="96" width="320" height="60" rx="10"></rect>
+              <text class="stitle sm" x="436" y="120">KV cache — grows by one row per token</text>
+              <text class="smono" x="436" y="140">[k_1 v_1] [k_2 v_2] … [k_t v_t] · per head · per layer</text>
+              <path class="flowline" d="M340,44 H580 V92" fill="none" marker-end="url(#arrFnd)"></path>
+              <text class="ssub" x="352" y="38">q_t scores EVERY cached key, then averages the values</text>
+              <text class="smono" x="20" y="216">cache cost per token = 2 × layers × kv_heads × head_dim × bytes/elt   (the 2 is K and V)</text>
+            </svg>
+          </div>
+        </div>
+
+        <div class="prose">
+          <p>
+            <span class="lang-en">
+              That one formula prices everything on this page. Per token, the cache costs
+              2 · layers · kv_heads · head_dim · bytes — and each factor is an attack
+              surface. Bytes-per-element is quantization's territory; sequence length is
+              eviction's and hybrid attention's. This page is about the
+              <em>kv_heads</em> factor: for Llama-2-7B the product is
+              2 · 32 · 32 · 128 · 2 B = 512 KB per token, and 32 of those factors are head
+              count.
+            </span>
+            <span class="lang-ko">
+              이 공식 하나가 이 페이지의 모든 것을 값 매긴다. token당 cache 비용은
+              2 · layers · kv_heads · head_dim · bytes — 그리고 인자 하나하나가 공략
+              지점이다. bytes-per-element는 quantization의 영역, sequence 길이는
+              eviction과 hybrid attention의 영역이다. 이 페이지는 <em>kv_heads</em> 인자를
+              다룬다: Llama-2-7B에서 곱은 2 · 32 · 32 · 128 · 2 B = 512 KB/token이고, 그중
+              32 하나가 head 수다.
+            </span>
+          </p>
+        </div>
+
+        <div class="arc-takeaway">
+          <span class="arc-takeaway-label"><span class="lang-en">Takeaway</span><span class="lang-ko">핵심 한 줄</span></span>
+          <span class="lang-en">The cache is K and V vectors per head, per layer, per token
+            — bytes/token = 2 · layers · kv_heads · head_dim · bytes, and every factor in
+            that product is a lever.</span>
+          <span class="lang-ko">cache는 head당·layer당·token당 K와 V vector이고, 비용은
+            2 · layers · kv_heads · head_dim · bytes다 — 이 곱의 모든 인자가 레버다.</span>
+        </div>
+        <p class="arc-question">
+          <span class="lang-en">32 query heads each carrying a private K/V pair — do they
+            really all need their own?</span>
+          <span class="lang-ko">query head 32개가 각자 전용 K/V pair를 가진다 — 정말 전부
+            자기 것이 필요할까?</span>
+        </p>
+      </div>
+    </section>
+
+    <!-- ============ §3 · HEAD WIRING ============ -->
+    <section class="section-tight" id="arc-s3">
+      <div class="container">
+        <h2 class="viz-h arc-heading">
+          <span class="arc-num">§3</span>
+          <span class="lang-en">Head wiring — one dial from MHA to MQA</span>
+          <span class="lang-ko">Head 배선 — MHA에서 MQA까지 하나의 다이얼</span>
+        </h2>
+        <p class="arc-bridge">
+          <span class="lang-en">We now have the price formula, and kv_heads is its most
+            exposed factor. The insight behind ten years of attention variants is that this
+            factor is a free dial: MHA, GQA and MQA are not three designs but three
+            positions of it. This section makes that dial literal.</span>
+          <span class="lang-ko">이제 가격 공식이 있고, 그중 가장 공략하기 쉬운 인자가
+            kv_heads다. 지난 attention 변형들의 통찰은 이 인자가 자유롭게 돌릴 수 있는
+            다이얼이라는 것이다: MHA·GQA·MQA는 세 가지 설계가 아니라 다이얼의 세 위치다.
+            이 섹션은 그 다이얼을 문자 그대로 보여준다.</span>
+        </p>
         <p class="viz-sub">
           <span class="lang-en">Hover a query head to see exactly which cached K/V it reads.
             Drag the KV-heads dial: 32 is MHA, 1 is MQA, everything between is GQA. MLA
@@ -148,16 +370,64 @@ const wireQ = Array.from({ length: NQ }, (_, i) => ({
             </p>
           </noscript>
         </div>
+
+        <div class="prose">
+          <p>
+            <span class="lang-en">
+              The wiring view makes the family relationship literal: fix 32 query heads and
+              slide the number of K/V heads. At 32 every query head has a private K/V pair
+              (MHA); at 1 a single K/V head serves all of them (MQA); every stop between is
+              GQA with group size 32/kv. Nothing else about attention changes — same scores,
+              same softmax, same output projection. The only thing the dial moves is how many
+              K and V vectors must be written to, stored in, and read back from the KV cache.
+            </span>
+            <span class="lang-ko">
+              배선 뷰는 이 가족 관계를 문자 그대로 보여준다: query head 32개를 고정하고 K/V
+              head 수만 움직여 보자. 32면 head마다 전용 K/V pair(MHA), 1이면 하나의 K/V
+              head가 전부를 담당(MQA), 그 사이 모든 지점이 group 크기 32/kv의 GQA다.
+              attention의 다른 부분은 아무것도 변하지 않는다 — score도, softmax도, output
+              projection도 같다. 다이얼이 움직이는 것은 오직 KV cache에 쓰고, 저장하고,
+              다시 읽어야 하는 K·V vector의 개수뿐이다.
+            </span>
+          </p>
+        </div>
+
+        <div class="arc-takeaway">
+          <span class="arc-takeaway-label"><span class="lang-en">Takeaway</span><span class="lang-ko">핵심 한 줄</span></span>
+          <span class="lang-en">MHA, GQA and MQA are one dial — how many query heads share
+            each cached K/V — and turning it changes only the cache, not the attention
+            math.</span>
+          <span class="lang-ko">MHA·GQA·MQA는 하나의 다이얼 — cache된 K/V 하나를 몇 개의
+            query head가 공유하는가 — 이고, 다이얼을 돌려도 바뀌는 것은 attention 수식이
+            아니라 cache뿐이다.</span>
+        </div>
+        <p class="arc-question">
+          <span class="lang-en">A 4× or 32× smaller cache sounds abstract — what does it buy
+            in gigabytes on real model configs?</span>
+          <span class="lang-ko">cache가 4×, 32× 작아진다는 말은 추상적이다 — 실제 모델
+            config에서 몇 GB를 아끼는 걸까?</span>
+        </p>
       </div>
     </section>
 
-    <!-- ============ 2 · KV-BYTES CALCULATOR ============ -->
-    <section class="section-tight" id="calc">
+    <!-- ============ §4 · KV-BYTES CALCULATOR ============ -->
+    <section class="section-tight" id="arc-s4">
       <div class="container">
-        <h2 class="viz-h">
-          <span class="lang-en">2 · KV-bytes calculator</span>
-          <span class="lang-ko">2 · KV-byte 계산기</span>
+        <h2 class="viz-h arc-heading">
+          <span class="arc-num">§4</span>
+          <span class="lang-en">KV-bytes calculator</span>
+          <span class="lang-ko">KV-byte 계산기</span>
         </h2>
+        <p class="arc-bridge">
+          <span class="lang-en">We have the dial and we have the formula. What is still
+            missing is scale: whether sharing heads saves megabytes or tens of gigabytes
+            depends on the other factors — layers, context, dtype. This calculator puts
+            shipped configs through the formula so you can watch each term move.</span>
+          <span class="lang-ko">다이얼도 공식도 손에 있다. 아직 없는 것은 규모 감각이다:
+            head 공유가 몇 MB를 아끼는지 수십 GB를 아끼는지는 나머지 인자 — layers,
+            context, dtype — 에 달려 있다. 이 계산기는 실제 출시된 config를 공식에 넣어
+            각 항이 움직이는 것을 보여준다.</span>
+        </p>
         <p class="viz-sub">
           <span class="lang-en">Pick a real model or move the sliders; the bars compare what
             the four variants would cache for the same backbone shape.</span>
@@ -263,16 +533,65 @@ MLA row: 32 layers × (d_c 512 + d_R 64) × 2 B = 36,864 B</div>
             </p>
           </noscript>
         </div>
+
+        <div class="prose">
+          <p>
+            <span class="lang-en">
+              Every architecture choice on this page attacks exactly one factor of the
+              formula: MQA/GQA shrink kv_heads (Llama-2-7B's 512 KB/token becomes
+              Llama-3-8B's 128 KB/token), quantization shrinks bytes (the orthogonal axis —
+              see the KIVI review), and MLA replaces the whole 2 · kv_heads · head_dim block
+              with a fixed 576 elements per layer. That is why a 236B-parameter DeepSeek-V2
+              caches 67.5 KB/token while a 7B GQA model caches 128 KB.
+            </span>
+            <span class="lang-ko">
+              이 페이지의 모든 아키텍처 선택은 공식의 인자를 정확히 하나씩 공략한다:
+              MQA/GQA는 kv_heads를 줄이고(Llama-2-7B의 512 KB/token이 Llama-3-8B에서는
+              128 KB/token), quantization은 bytes를 줄이며(직교 축 — KIVI 리뷰 참고), MLA는
+              2 · kv_heads · head_dim 항 전체를 layer당 고정 576개 원소로 바꿔 버린다.
+              236B parameter의 DeepSeek-V2가 7B GQA 모델(128 KB)보다 작은 67.5 KB/token만
+              cache하는 이유가 이것이다.
+            </span>
+          </p>
+        </div>
+
+        <div class="arc-takeaway">
+          <span class="arc-takeaway-label"><span class="lang-en">Takeaway</span><span class="lang-ko">핵심 한 줄</span></span>
+          <span class="lang-en">On real configs the head dial is worth gigabytes — and the
+            strangest bar is MLA's: its cost does not depend on the head count at all.</span>
+          <span class="lang-ko">실제 config에서 head 다이얼은 GB 단위의 절감이다 — 그리고
+            가장 이상한 막대는 MLA다: 그 비용은 head 수와 아예 무관하다.</span>
+        </div>
+        <p class="arc-question">
+          <span class="lang-en">How can 128 heads attend out of just 576 cached numbers per
+            layer — without collapsing into one head?</span>
+          <span class="lang-ko">layer당 cache된 숫자 576개만으로 어떻게 head 128개가 —
+            하나의 head로 뭉개지지 않고 — attention을 할 수 있을까?</span>
+        </p>
       </div>
     </section>
 
-    <!-- ============ 3 · MLA DEEP-DIVE ============ -->
-    <section class="section-tight" id="mla">
+    <!-- ============ §5 · MLA DEEP-DIVE ============ -->
+    <section class="section-tight" id="arc-s5">
       <div class="container">
-        <h2 class="viz-h">
-          <span class="lang-en">3 · MLA deep-dive — the low-rank trick, matrix by matrix</span>
-          <span class="lang-ko">3 · MLA 딥다이브 — low-rank 트릭을 matrix 단위로</span>
+        <h2 class="viz-h arc-heading">
+          <span class="arc-num">§5</span>
+          <span class="lang-en">MLA deep-dive — the low-rank trick, matrix by matrix</span>
+          <span class="lang-ko">MLA 딥다이브 — low-rank 트릭을 matrix 단위로</span>
         </h2>
+        <p class="arc-bridge">
+          <span class="lang-en">This is the hardest section of the page — take it slowly.
+            Everything so far shrank the cache by storing <em>fewer</em> keys and values.
+            MLA stores <em>neither</em>: it caches a compressed latent and rebuilds per-head
+            K/V on the fly, which only pays off because of two tricks — weight absorption
+            and decoupled RoPE — that the stepper below walks through one matrix at a
+            time.</span>
+          <span class="lang-ko">이 페이지에서 가장 어려운 섹션이다 — 천천히 가자. 지금까지는
+            key·value를 <em>더 적게</em> 저장해서 cache를 줄였다. MLA는 <em>둘 다</em>
+            저장하지 않는다: 압축된 latent를 cache해 두고 head별 K/V를 그때그때 복원하는데,
+            이것이 이득이 되는 이유는 두 가지 트릭 — weight absorption과 decoupled RoPE —
+            때문이다. 아래 stepper가 matrix 하나씩 짚어 간다.</span>
+        </p>
         <p class="viz-sub">
           <span class="lang-en">DeepSeek-V2 shapes: hidden 5,120, 128 heads × 128, latent
             d_c = 512, decoupled RoPE key d_R = 64, 60 layers. Step through the pipeline.</span>
@@ -400,16 +719,69 @@ MLA row: 32 layers × (d_c 512 + d_R 64) × 2 B = 36,864 B</div>
             </p>
           </noscript>
         </div>
+
+        <div class="prose">
+          <p>
+            <span class="lang-en">
+              MQA and GQA still cache keys and values — just fewer of them. MLA caches a
+              different object: a 512-dim low-rank latent from which per-head K and V are
+              linearly reconstructed. Because the reconstruction is linear, W<sup>UK</sup>
+              folds into the query path and W<sup>UV</sup> into W<sup>O</sup> offline, so
+              per-head K/V never materialize at decode time. The one obstacle is RoPE: a
+              position-dependent rotation between W<sup>UK</sup> and the latent would make
+              the folded product change every step. DeepSeek's fix is to carry position in a
+              separate 64-dim key, shared across heads, and add the two dot products — the
+              "decoupled RoPE" that costs 64 extra cached elements and saves the whole trick.
+            </span>
+            <span class="lang-ko">
+              MQA와 GQA는 여전히 key·value를 cache한다 — 개수만 줄일 뿐이다. MLA는 cache하는
+              대상 자체가 다르다: head별 K·V를 선형으로 복원할 수 있는 512-dim low-rank
+              latent다. 복원이 선형이기 때문에 W<sup>UK</sup>는 query 경로에,
+              W<sup>UV</sup>는 W<sup>O</sup>에 offline으로 흡수(absorption)되어 decode
+              시점에는 head별 K/V가 아예 실체화되지 않는다. 유일한 걸림돌이 RoPE다:
+              position에 의존하는 회전이 W<sup>UK</sup>와 latent 사이에 끼면 흡수된 곱이
+              step마다 달라진다. DeepSeek의 해법은 position 정보를 모든 head가 공유하는
+              별도의 64-dim key에 실어 두 dot product를 더하는 것 — cache 원소 64개를 더
+              내고 트릭 전체를 살리는 "decoupled RoPE"다.
+            </span>
+          </p>
+        </div>
+
+        <div class="arc-takeaway">
+          <span class="arc-takeaway-label"><span class="lang-en">Takeaway</span><span class="lang-ko">핵심 한 줄</span></span>
+          <span class="lang-en">MLA changes <em>what</em> is cached, not how much of it:
+            a shared low-rank latent plus a 64-dim position key, made viable by linear
+            weight absorption — 576 elements per layer, whatever the head count.</span>
+          <span class="lang-ko">MLA는 '얼마나'가 아니라 <em>무엇을</em> cache하는가를
+            바꾼다: 공유 low-rank latent와 64-dim position key — 선형 weight absorption이
+            이를 가능하게 하고, head 수와 무관하게 layer당 576개 원소면 된다.</span>
+        </div>
+        <p class="arc-question">
+          <span class="lang-en">That is the mechanism. But does all this sharing cost
+            quality — what do the papers actually measure?</span>
+          <span class="lang-ko">메커니즘은 여기까지다. 그런데 이런 공유가 품질을 깎지는
+            않을까 — 논문들은 실제로 무엇을 측정했나?</span>
+        </p>
       </div>
     </section>
 
-    <!-- ============ 4 · TRADE-OFF PANEL ============ -->
-    <section class="section-tight" id="tradeoff">
+    <!-- ============ §6 · TRADE-OFF PANEL ============ -->
+    <section class="section-tight" id="arc-s6">
       <div class="container">
-        <h2 class="viz-h">
-          <span class="lang-en">4 · What the papers actually claim</span>
-          <span class="lang-ko">4 · 논문이 실제로 주장하는 것</span>
+        <h2 class="viz-h arc-heading">
+          <span class="arc-num">§6</span>
+          <span class="lang-en">What the papers actually claim</span>
+          <span class="lang-ko">논문이 실제로 주장하는 것</span>
         </h2>
+        <p class="arc-bridge">
+          <span class="lang-en">The mechanism is settled; the remaining question is
+            evidence. Sharing K/V is only a good trade if quality survives it — here is
+            what each paper claims, in its own words, with the arithmetic behind each
+            headline number.</span>
+          <span class="lang-ko">메커니즘은 정리됐다. 남은 질문은 근거다. K/V 공유는 품질이
+            살아남을 때에만 좋은 거래다 — 각 논문이 자기 표현으로 주장하는 내용과, 헤드라인
+            수치 뒤의 산수를 모았다.</span>
+        </p>
         <p class="viz-sub">
           <span class="lang-en">Published quality-vs-memory evidence only — qualitative where
             numbers aren't independently verified.</span>
@@ -471,95 +843,42 @@ MLA row: 32 layers × (d_c 512 + d_R 64) × 2 B = 36,864 B</div>
             <span class="ev-chip">arXiv 2405.04434 · 576 elts/layer/token</span>
           </div>
         </div>
+
+        <div class="arc-takeaway">
+          <span class="arc-takeaway-label"><span class="lang-en">Takeaway</span><span class="lang-ko">핵심 한 줄</span></span>
+          <span class="lang-en">GQA-8's near-free 4× cut (5% uptraining compute) made it the
+            open-model default; MLA's stronger claims — 93.3% smaller cache, quality above
+            MHA — are author-reported and worth reading as such.</span>
+          <span class="lang-ko">거의 공짜인 GQA-8의 4× 절감(uptraining compute 5%)이 open
+            모델의 기본값을 만들었다. MLA의 더 강한 주장 — 93.3% 작은 cache, MHA 이상의
+            품질 — 은 저자 보고 수치이므로 그렇게 읽어야 한다.</span>
+        </div>
+        <p class="arc-question">
+          <span class="lang-en">If the head factor is this compressible, what is left — and
+            which factor does the field attack next?</span>
+          <span class="lang-ko">head 인자가 이렇게까지 압축된다면 남은 것은 무엇이고, 이제
+            field는 어느 인자를 공략하고 있을까?</span>
+        </p>
       </div>
     </section>
 
-    <!-- ============ PROSE ============ -->
-    <section class="section">
+    <!-- ============ §7 · WHERE THIS GOES ============ -->
+    <section class="section" id="arc-s7">
       <div class="container">
-        <div class="prose">
-          <h2>
-            <span class="lang-en">Reading the diagram</span>
-            <span class="lang-ko">다이어그램 읽기</span>
-          </h2>
-
-          <h3>
-            <span class="lang-en">One dial, not four designs</span>
-            <span class="lang-ko">네 가지 설계가 아니라 하나의 다이얼</span>
-          </h3>
-          <p>
-            <span class="lang-en">
-              The wiring view makes the family relationship literal: fix 32 query heads and
-              slide the number of K/V heads. At 32 every query head has a private K/V pair
-              (MHA); at 1 a single K/V head serves all of them (MQA); every stop between is
-              GQA with group size 32/kv. Nothing else about attention changes — same scores,
-              same softmax, same output projection. The only thing the dial moves is how many
-              K and V vectors must be written to, stored in, and read back from the KV cache.
-            </span>
-            <span class="lang-ko">
-              배선 뷰는 이 가족 관계를 문자 그대로 보여준다: query head 32개를 고정하고 K/V
-              head 수만 움직여 보자. 32면 head마다 전용 K/V pair(MHA), 1이면 하나의 K/V
-              head가 전부를 담당(MQA), 그 사이 모든 지점이 group 크기 32/kv의 GQA다.
-              attention의 다른 부분은 아무것도 변하지 않는다 — score도, softmax도, output
-              projection도 같다. 다이얼이 움직이는 것은 오직 KV cache에 쓰고, 저장하고,
-              다시 읽어야 하는 K·V vector의 개수뿐이다.
-            </span>
-          </p>
-
-          <h3>
-            <span class="lang-en">The formula is the whole story</span>
-            <span class="lang-ko">공식 하나가 전부다</span>
-          </h3>
-          <p>
-            <span class="lang-en">
-              Per token, the cache costs 2 · layers · kv_heads · head_dim · bytes — the 2 is
-              K and V. Every architecture choice on this page attacks exactly one factor:
-              MQA/GQA shrink kv_heads (Llama-2-7B's 512 KB/token becomes Llama-3-8B's
-              128 KB/token), quantization shrinks bytes (the orthogonal axis — see the KIVI
-              review), and MLA replaces the whole 2 · kv_heads · head_dim block with a fixed
-              576 elements per layer. That is why a 236B-parameter DeepSeek-V2 caches
-              67.5 KB/token while a 7B GQA model caches 128 KB.
-            </span>
-            <span class="lang-ko">
-              token당 cache 비용은 2 · layers · kv_heads · head_dim · bytes이고, 여기서 2는
-              K와 V다. 이 페이지의 모든 아키텍처 선택은 정확히 한 인자씩 공략한다:
-              MQA/GQA는 kv_heads를 줄이고(Llama-2-7B의 512 KB/token이 Llama-3-8B에서는
-              128 KB/token), quantization은 bytes를 줄이며(직교 축 — KIVI 리뷰 참고), MLA는
-              2 · kv_heads · head_dim 항 전체를 layer당 고정 576개 원소로 바꿔 버린다.
-              236B parameter의 DeepSeek-V2가 7B GQA 모델(128 KB)보다 작은 67.5 KB/token만
-              cache하는 이유가 이것이다.
-            </span>
-          </p>
-
-          <h3>
-            <span class="lang-en">MLA changes what is cached, not how much of it</span>
-            <span class="lang-ko">MLA는 '얼마나'가 아니라 '무엇을' cache하는가를 바꾼다</span>
-          </h3>
-          <p>
-            <span class="lang-en">
-              MQA and GQA still cache keys and values — just fewer of them. MLA caches a
-              different object: a 512-dim low-rank latent from which per-head K and V are
-              linearly reconstructed. Because the reconstruction is linear, W<sup>UK</sup>
-              folds into the query path and W<sup>UV</sup> into W<sup>O</sup> offline, so
-              per-head K/V never materialize at decode time. The one obstacle is RoPE: a
-              position-dependent rotation between W<sup>UK</sup> and the latent would make
-              the folded product change every step. DeepSeek's fix is to carry position in a
-              separate 64-dim key, shared across heads, and add the two dot products — the
-              "decoupled RoPE" that costs 64 extra cached elements and saves the whole trick.
-            </span>
-            <span class="lang-ko">
-              MQA와 GQA는 여전히 key·value를 cache한다 — 개수만 줄일 뿐이다. MLA는 cache하는
-              대상 자체가 다르다: head별 K·V를 선형으로 복원할 수 있는 512-dim low-rank
-              latent다. 복원이 선형이기 때문에 W<sup>UK</sup>는 query 경로에,
-              W<sup>UV</sup>는 W<sup>O</sup>에 offline으로 흡수(absorption)되어 decode
-              시점에는 head별 K/V가 아예 실체화되지 않는다. 유일한 걸림돌이 RoPE다:
-              position에 의존하는 회전이 W<sup>UK</sup>와 latent 사이에 끼면 흡수된 곱이
-              step마다 달라진다. DeepSeek의 해법은 position 정보를 모든 head가 공유하는
-              별도의 64-dim key에 실어 두 dot product를 더하는 것 — cache 원소 64개를 더
-              내고 트릭 전체를 살리는 "decoupled RoPE"다.
-            </span>
-          </p>
-        </div>
+        <h2 class="viz-h arc-heading">
+          <span class="arc-num">§7</span>
+          <span class="lang-en">Where this goes — the other two levers</span>
+          <span class="lang-ko">어디로 가는가 — 남은 두 개의 레버</span>
+        </h2>
+        <p class="arc-bridge">
+          <span class="lang-en">The head factor is one lever of three, and the field's
+            frontier is less about pushing any single lever further than about composing
+            them — and about porting MLA-style caches beyond the models they were born
+            in.</span>
+          <span class="lang-ko">head 인자는 세 레버 중 하나일 뿐이고, field의 최전선은 어느
+            한 레버를 더 미는 것보다 레버들을 합성하는 쪽 — 그리고 MLA류 cache를 태생 모델
+            바깥으로 이식하는 쪽 — 에 있다.</span>
+        </p>
 
         <div class="eff-note band-dark">
           <h3>
@@ -596,10 +915,44 @@ MLA row: 32 layers × (d_c 512 + d_R 64) × 2 B = 36,864 B</div>
         </div>
 
         <div class="prose">
-          <h2>
+          <p>
+            <span class="lang-en">
+              Each lever is an active research front. On the <em>bytes</em> axis, KV-cache
+              quantization pushes stored precision down to 4 and even 2 bits — see the
+              reviews of <a href="/reviews/kivi/">KIVI</a>,
+              <a href="/reviews/kvquant/">KVQuant</a> and
+              <a href="/reviews/turboquant/">TurboQuant</a>. On the <em>length</em> axis,
+              eviction and hybrid designs keep only the tokens or heads that matter —
+              <a href="/reviews/h2o/">H2O</a>,
+              <a href="/reviews/duo-attention/">DuoAttention</a>, and hybrid stacks like
+              <a href="/reviews/minimax-01/">MiniMax-01</a> or linear-attention lines such as
+              <a href="/reviews/gated-deltanet/">Gated DeltaNet</a>. Questions the papers
+              themselves leave hanging: how the levers behave when composed — a latent is a
+              different object from a key, so per-axis results don't automatically stack —
+              and whether pretrained MHA/GQA models can be converted to MLA-style caches
+              cheaply instead of training from scratch.
+            </span>
+            <span class="lang-ko">
+              레버 하나하나가 살아 있는 연구 전선이다. <em>bytes</em> 축에서는 KV-cache
+              quantization이 저장 정밀도를 4-bit, 심지어 2-bit까지 내린다 —
+              <a href="/reviews/kivi/">KIVI</a>, <a href="/reviews/kvquant/">KVQuant</a>,
+              <a href="/reviews/turboquant/">TurboQuant</a> 리뷰 참고. <em>length</em>
+              축에서는 eviction과 hybrid 설계가 중요한 token·head만 남긴다 —
+              <a href="/reviews/h2o/">H2O</a>,
+              <a href="/reviews/duo-attention/">DuoAttention</a>, 그리고
+              <a href="/reviews/minimax-01/">MiniMax-01</a> 같은 hybrid stack이나
+              <a href="/reviews/gated-deltanet/">Gated DeltaNet</a> 같은 linear-attention
+              계열. 논문들이 스스로 남겨 둔 질문들: 레버들을 합성하면 어떻게 되는가 —
+              latent는 key와 다른 대상이므로 축별 결과가 자동으로 곱해지지 않는다 — 그리고
+              pretrained MHA/GQA 모델을 처음부터 다시 학습하지 않고 MLA류 cache로 싸게
+              변환할 수 있는가.
+            </span>
+          </p>
+
+          <h3>
             <span class="lang-en">Going deeper</span>
             <span class="lang-ko">더 깊이 가기</span>
-          </h2>
+          </h3>
           <ul class="deeper-list">
             <li><a class="arrow-link" href="https://arxiv.org/abs/1911.02150" target="_blank" rel="noopener">Fast Transformer Decoding: One Write-Head is All You Need — MQA (Shazeer, 2019)</a></li>
             <li><a class="arrow-link" href="https://arxiv.org/abs/2305.13245" target="_blank" rel="noopener">GQA: Training Generalized Multi-Query Models from Multi-Head Checkpoints (Ainslie et al., 2023)</a></li>
@@ -631,9 +984,6 @@ MLA row: 32 layers × (d_c 512 + d_R 64) × 2 B = 36,864 B</div>
 <style is:global>
   /* ---- page chrome ---- */
   .att-page .hero-top { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 0.4rem; }
-  .att-page .jump-row { display: flex; gap: 0.6rem; flex-wrap: wrap; margin: 1.6rem 0 0; }
-  .att-page .jump-row .tag { transition: border-color 0.2s, color 0.2s; }
-  .att-page .jump-row .tag:hover { border-color: var(--accent); color: var(--accent-strong); }
   .att-page .config-note {
     margin-top: 1.4rem; display: flex; flex-wrap: wrap; gap: 0.45rem; align-items: center;
     font-size: 0.88rem; color: var(--text-secondary);

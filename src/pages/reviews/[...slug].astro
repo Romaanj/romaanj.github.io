@@ -111,6 +111,20 @@ const analysisRows = analysis
     }))
   : [];
 
+/* ---------- research thread + sparks ---------- */
+
+/** split a multi-paragraph string on blank lines */
+const splitParas = (s: string) =>
+  s
+    .split(/\n\s*\n/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+
+const threadEn = entry.data.thread ? splitParas(entry.data.thread.en) : [];
+const threadKo = entry.data.thread ? splitParas(entry.data.thread.ko) : [];
+const hasThread = threadEn.length > 0 || threadKo.length > 0;
+const sparks = entry.data.sparks ?? [];
+
 const hasNotes = (entry.body ?? '').trim().length > 0;
 const hasKoLede = Boolean(entry.data.summary_ko);
 ---
@@ -214,6 +228,59 @@ const hasKoLede = Boolean(entry.data.summary_ko);
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {hasThread && (
+        <div class="thread-block">
+          <p class="eyebrow">The research thread</p>
+          <h2 class="thread-heading">
+            <span class="lang-en">Where this paper sits</span>
+            <span class="lang-ko">연구의 흐름</span>
+          </h2>
+          <div class="thread-prose">
+            <div class="lang-en">
+              {threadEn.map((p) => (
+                <p class="thread-para" set:html={boldify(p)} />
+              ))}
+            </div>
+            <div class="lang-ko">
+              {threadKo.map((p) => (
+                <p class="thread-para" set:html={boldify(p)} />
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {sparks.length > 0 && (
+        <div class="sparks-panel">
+          <h2 class="sparks-title">
+            <span class="sparks-mark" aria-hidden="true">✦</span>
+            <span class="lang-en">Sparks — where one could take this</span>
+            <span class="lang-ko">아이디어의 씨앗</span>
+          </h2>
+          <ul class="sparks-list">
+            {sparks.map((s) => (
+              <li class="spark-row">
+                <span class="spark-marker" aria-hidden="true">✦</span>
+                <p class="spark-text">
+                  <span class="lang-en" set:html={boldify(s.en)} />
+                  <span class="lang-ko" set:html={boldify(s.ko)} />
+                </p>
+              </li>
+            ))}
+          </ul>
+          <p class="sparks-footnote">
+            <span class="lang-en">
+              Seeds grounded in the paper's own stated limitations and open
+              questions.
+            </span>
+            <span class="lang-ko">
+              논문이 스스로 밝힌 limitations와 open questions에 뿌리를 둔
+              씨앗입니다.
+            </span>
+          </p>
         </div>
       )}
 
@@ -439,6 +506,85 @@ const hasKoLede = Boolean(entry.data.summary_ko);
     color: var(--row-hue);
     font-weight: 700;
     margin-bottom: 0.35rem;
+  }
+
+  /* ---- the research thread: serif narrative prose ---- */
+  .thread-block {
+    margin-top: 3rem;
+    max-width: var(--prose-width);
+  }
+  .thread-heading {
+    margin: 0.5rem 0 0;
+    font-size: clamp(1.35rem, 2.6vw, 1.7rem);
+  }
+  .thread-prose {
+    margin-top: 1.1rem;
+  }
+  .thread-para {
+    font-family: var(--font-serif);
+    font-size: 1.08rem;
+    line-height: 1.85;
+    color: var(--text);
+    margin: 0 0 1.15em;
+  }
+  .thread-para:last-child {
+    margin-bottom: 0;
+  }
+
+  /* ---- sparks: quiet warm panel, not the rainbow ---- */
+  .sparks-panel {
+    margin-top: 2rem;
+    max-width: var(--prose-width);
+    padding: 1.5rem 1.6rem 1.35rem;
+    background: var(--surface-warm);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-m);
+  }
+  .sparks-title {
+    margin: 0;
+    font-size: 1.08rem;
+    display: flex;
+    align-items: baseline;
+    gap: 0.55rem;
+  }
+  .sparks-mark {
+    color: var(--accent);
+    font-size: 0.9em;
+  }
+  .sparks-list {
+    list-style: none;
+    margin: 1.1rem 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+  }
+  .spark-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.7rem;
+  }
+  .spark-marker {
+    flex: none;
+    color: var(--accent);
+    font-size: 0.78rem;
+    line-height: 1.7;
+    margin-top: 0.1em;
+  }
+  .spark-text {
+    margin: 0;
+    font-size: 0.95rem;
+    line-height: 1.7;
+    color: var(--text);
+    overflow-wrap: anywhere;
+  }
+  .sparks-footnote {
+    margin: 1.25rem 0 0;
+    padding-top: 0.9rem;
+    border-top: 1px dashed var(--line);
+    font-size: 0.78rem;
+    line-height: 1.6;
+    color: var(--text-tertiary);
   }
 
   /* ---- resources chips ---- */

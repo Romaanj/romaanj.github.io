@@ -232,6 +232,88 @@ analysis:
       are available on HuggingFace. The paper appendix includes pseudo-code algorithms for
       pretraining, SFT, sampling, and conditional likelihood evaluation, making the
       reproduction path explicit.
+thread:
+  ko: |-
+    LLaDA는 scale을 감당할 자격을 4년에 걸쳐 쌓아 온 계보의 끝에 서 있다. D3PM(Austin et al., 2021)이
+    denoising diffusion을 discrete state space로 처음 옮겼고, SEDD(Lou et al., 2024)가 GPT-2급에서
+    discrete diffusion을 경쟁권으로 끌어올렸으며, MDLM(Sahoo et al., 2024)과 RADD(Ou et al., 2024)는
+    masked(absorbing-state) 변형을 거의 민망할 만큼 단순한 형태 — negative log-likelihood의 upper
+    bound임이 증명된, masked 위치에 대한 1/t-가중 cross-entropy — 로 증류했다. 이 논문과 같은 그룹의
+    Nie et al.(2024)은 바로 그 objective의 scaling law를 10^20 FLOPs까지 측정해 두었다. sampler에도
+    족보가 있다: low-confidence remasking은 image generation의 MaskGIT(Chang et al., 2022)에서 수입한
+    규칙이다. 재료는 전부 있었다. 없던 것은 이 레시피가 표준 LLM 파이프라인과 8B·2.3T token 규모에서
+    부딪혀도 살아남는지 확인할 비용을 치를 사람이었다.
+
+    이 논문의 전환은 발명이 아니라 재귀속(reattribution)이다. LLaDA 이전 field의 질문은 "diffusion
+    LM이 perplexity에서 AR을 따라잡을 수 있나"였다 — autoregression을 결승선으로 놓은 경주. LLaDA는 그
+    결승선 자체가 AR 고유의 것이었냐고 질문을 바꾼다. scalability, in-context learning, instruction
+    following은 generative principle — likelihood에 근거한 objective + Transformer + scale — 의
+    산물이고, left-to-right factorization은 거기 먼저 도달한 레시피였을 뿐이라는 주장이다. reversal
+    curse 결과가 이 논증의 가장 날카로운 날인데, benchmark 승리여서가 아니라 능력의 '형태'가
+    factorization을 따라 바뀐다는 증거이기 때문이다 — 방향 불변성은 데이터로 때운 것이 아니라
+    bidirectionality에서 구조적으로 따라 나온다.
+
+    열리는 전선은 양면이다. capability 쪽에서 논문은 post-training을 눈에 띄게 미완으로 남겼다 —
+    SFT뿐, RL alignment 없음, generation length는 사용자가 고정하는 hyperparameter — 그리고 scaling,
+    multimodal 확장, O1류 post-training을 다음 단계로 직접 지목한다. systems 쪽에서는 존재 증명에
+    청구서가 따라온다: bidirectional attention은 exact KV cache를 허용하지 않아 vanilla decoding이 매
+    step 전체 sequence를 다시 attend한다. 논문 스스로 limitations에 적어 둔 이 비용 구조가 바로
+    Fast-dLLM 계열 후속들이 몇 달 만에 메우기 시작한 틈이다.
+
+    남은 긴장은, 이 증명이 training FLOP당 capability에 대한 것이지 초당 답변 수에 대한 것이 아니라는
+    점이다. AR decoding에는 십 년치 systems 투자가 쌓여 있고, diffusion의 parallel decoding 약속은
+    같은 step에 공개되는 token들이 조건부 독립이라는 사실과 충돌한다. Mercury나 Gemini Diffusion 같은
+    상용 규모 시연은 wall-clock 논쟁이 뒤집힐 수 있음을 시사하며, field의 다음 수도 여기서 갈라진다 —
+    더 적고 더 잘 배치된 step을 쓰는 sampler, block 크기와 품질을 흥정하는 semi-autoregressive
+    hybrid, bounded likelihood에 native한 alignment 레시피. 4분 마일은 이미 달렸다. 남은 경주는
+    그것을 싸게 만드는 일이다.
+  en: |-
+    LLaDA arrives at the end of a lineage that spent four years earning the right to scale.
+    D3PM (Austin et al., 2021) first carried denoising diffusion into discrete state spaces;
+    SEDD (Lou et al., 2024) made discrete diffusion competitive at GPT-2 scale; then MDLM
+    (Sahoo et al., 2024) and RADD (Ou et al., 2024) distilled the masked, absorbing-state
+    variant down to something almost embarrassingly simple — a 1/t-weighted cross-entropy on
+    masked positions, provably an upper bound on negative log-likelihood. Nie et al. (2024),
+    the same group behind this paper, then measured scaling laws for exactly that objective up
+    to 10^20 FLOPs. Even the sampler has ancestry: low-confidence remasking is a rule imported
+    from MaskGIT (Chang et al., 2022) in image generation. Every ingredient existed; nobody had
+    yet paid to see whether the recipe survives contact with the standard LLM pipeline at 8B
+    and 2.3T tokens.
+
+    The shift is a reattribution, not an invention. Before LLaDA, the field's question was
+    "can diffusion LMs catch up to AR on perplexity?" — a race with autoregression as the
+    finish line. LLaDA asks whether the finish line was ever AR-specific: it argues that
+    scalability, in-context learning, and instruction following are products of the generative
+    principle — a likelihood-grounded objective plus Transformers plus scale — and that
+    left-to-right factorization was merely the recipe that got there first. The reversal-curse
+    result is the sharpest edge of the argument, not as a benchmark win but as evidence that
+    the very shape of a capability tracks the factorization — direction-invariance
+    falls out of bidirectionality by construction, rather than being patched in with data.
+
+    What it opens is a two-sided frontier. On the capability side, the paper leaves
+    post-training conspicuously unfinished — SFT only, no RL alignment, generation length as a
+    user-fixed hyperparameter — and itself names scaling, multimodal extension, and O1-style
+    post-training as next steps. On the systems side, the existence proof arrives with a bill
+    attached: bidirectional attention admits no exact KV cache, so vanilla decoding re-attends
+    over the whole sequence at every step. That cost structure, written into the paper's own
+    limitations, is precisely the gap the Fast-dLLM line of follow-ups began filling within
+    months.
+
+    The remaining tension is that the proof concerns capability per training FLOP, not answers
+    per second. AR decoding carries a decade of systems investment, and diffusion's
+    parallel-decoding promise collides with the fact that tokens revealed in the same step are
+    conditionally independent. Commercial-scale demonstrations such as Mercury and Gemini
+    Diffusion suggest the wall-clock argument can be turned around, and the field's next moves
+    fork from here — samplers that spend fewer, better-placed steps, semi-autoregressive
+    hybrids that negotiate block size against quality, and alignment recipes native to a
+    bounded likelihood. The four-minute mile has been run; the open race is making it cheap.
+sparks:
+  - ko: "논문이 한계로 명시한 user-fixed generation length를, denoising 도중 모델이 스스로 response 길이를 예측하거나 늘려 가는 learned quantity로 바꾸는 시도를 해볼 수 있다."
+    en: "One could try making generation length a learned quantity — a model that predicts or expands its own response budget during denoising — instead of the user-fixed hyperparameter the paper flags as a limitation."
+  - ko: "likelihood가 bound로만 주어지는 masked diffusion 위에 RLHF·DPO류 preference alignment를 이식해, bound에서 유도한 가중치가 쓸 만한 reward 신호가 되는지 검증해볼 수 있다."
+    en: "One could try porting preference-based alignment (RLHF- or DPO-style) onto masked diffusion, where only a likelihood bound is available, and test whether bound-derived weights make usable reward signals."
+  - ko: "논문이 10^23 FLOPs에서 멈춘 compute-matched AR 대 diffusion scaling 비교를 — 특히 data repetition 조건에서 — 그 너머로 연장해 두 곡선이 어디서, 혹은 정말로 교차하는지 확인해볼 수 있다."
+    en: "One could try extending the compute-matched AR-versus-diffusion scaling comparison past the paper's 10^23-FLOPs cutoff — especially under data repetition — to locate where, or whether, the two curves cross."
 source: 'manual'
 ---
 

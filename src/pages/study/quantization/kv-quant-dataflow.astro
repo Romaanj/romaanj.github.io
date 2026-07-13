@@ -73,12 +73,239 @@ const packedBytes = [
         <span class="tag">Llama-2-7B-shaped config</span>
         <span class="tag">memory-bound decode</span>
       </div>
+      <nav class="arc-roadmap" aria-label="Sections">
+        <a href="#arc-s1"><span class="arc-n">§1</span><span class="lang-en">The itch</span><span class="lang-ko">문제의식</span></a>
+        <a href="#arc-s2"><span class="arc-n">§2</span><span class="lang-en">Foundations</span><span class="lang-ko">기초</span></a>
+        <a href="#arc-s3"><span class="arc-n">§3</span><span class="lang-en">Step-through</span><span class="lang-ko">단계별 탐색</span></a>
+        <a href="#arc-s4"><span class="arc-n">§4</span><span class="lang-en">The math</span><span class="lang-ko">수식</span></a>
+        <a href="#arc-s5"><span class="arc-n">§5</span><span class="lang-en">Byte count</span><span class="lang-ko">바이트 계산</span></a>
+        <a href="#arc-s6"><span class="arc-n">§6</span><span class="lang-en">Why it&apos;s fast</span><span class="lang-ko">왜 빠른가</span></a>
+        <a href="#arc-s7"><span class="arc-n">§7</span><span class="lang-en">Where it breaks</span><span class="lang-ko">깨지는 곳</span></a>
+        <a href="#arc-s8"><span class="arc-n">§8</span><span class="lang-en">Where this goes</span><span class="lang-ko">다음 갈 곳</span></a>
+      </nav>
+      <p class="arc-prereq">
+        <span class="lang-en">
+          <strong>Before you start:</strong> you should know roughly what a decoder-only transformer
+          does at inference time, and that attention lets each new token consult the keys and values
+          of every earlier token — <a href="/study/models/attention-anatomy/">Attention-head anatomy</a>
+          covers this, plus the MHA/GQA/MLA distinction used below. §6 leans on the HBM → L2 → SM
+          picture from <a href="/study/gpu/memory-hierarchy/">GPU memory hierarchy</a>; a skim is enough.
+        </span><span class="lang-ko">
+          <strong>시작하기 전에:</strong> decoder-only transformer가 inference 시에 대략 무엇을
+          하는지, 그리고 attention이 새 토큰마다 앞선 모든 토큰의 key와 value를 참조하게 한다는
+          것 정도는 알고 있어야 한다 — <a href="/study/models/attention-anatomy/">Attention-head anatomy</a>가
+          이 내용과 아래에서 쓰는 MHA/GQA/MLA 구분을 다룬다. §6은
+          <a href="/study/gpu/memory-hierarchy/">GPU memory hierarchy</a>의 HBM → L2 → SM 그림에
+          기대고 있다 — 훑어보는 것으로 충분하다.
+        </span>
+      </p>
     </div>
   </section>
 
-  <!-- ============ explorer ============ -->
-  <section class="section-tight">
+  <!-- ============ §1 the itch ============ -->
+  <section class="section-tight" id="arc-s1">
     <div class="container">
+      <h2 class="arc-heading"><span class="arc-num">§1</span><span><span class="lang-en">The itch: the cache outgrows the model</span><span class="lang-ko">문제의식: 캐시가 모델보다 커진다</span></span></h2>
+      <p class="kvq-note">
+        <span class="lang-en">
+          A language model generates text one token per step, and every step has to look back at
+          all the tokens before it. The state that makes that look-back affordable — the
+          <strong>KV cache</strong> — is remembered per token, per head, per layer, so it grows with
+          context length and with batch size. For the 7B-class model used throughout this page the
+          bill comes to 512 KiB per token (§3 derives it): a single 4,096-token sequence drags
+          2.0 GiB of cache behind it, and a batch of 8 drags 16 GiB — more than the ~13 GiB the
+          model&apos;s own weights occupy in FP16.
+        </span><span class="lang-ko">
+          Language model은 스텝마다 토큰 하나를 생성하고, 매 스텝은 그 앞의 모든 토큰을 돌아봐야
+          한다. 그 돌아보기를 감당 가능하게 만드는 상태 — <strong>KV cache</strong> — 는 토큰마다,
+          head마다, layer마다 기억되므로 context 길이와 batch 크기에 따라 자란다. 이 페이지에서
+          내내 쓰는 7B급 모델 기준 청구서는 토큰당 512 KiB다 (§3에서 유도한다): 4,096-토큰 시퀀스
+          하나가 2.0 GiB의 캐시를 끌고 다니고, batch 8이면 16 GiB — 모델 자신의 weight가 FP16으로
+          차지하는 ~13 GiB보다 크다.
+        </span>
+      </p>
+      <div class="kvq-scroll">
+        <svg class="kvq-svg" viewBox="0 0 960 150" style="min-width: 720px" role="img"
+             aria-label="A 40 GB GPU memory budget bar: about 13 GiB of weights, then 8 KV-cache blocks of 2 GiB each totalling 16 GiB, then remaining headroom">
+          <text x="60" y="24" class="t-small t-tert">one 40 GB A100 · 7B model, FP16 · 4,096-token sequences</text>
+          <rect x="60" y="38" width="286" height="46" rx="6" fill="var(--surface-dark)"></rect>
+          <text x="203" y="66" text-anchor="middle" class="t-small" fill="var(--text-on-dark)">weights · ~13 GiB</text>
+          <rect x="348" y="38" width="42" height="46" rx="4" fill="var(--accent)"></rect>
+          <rect x="392" y="38" width="42" height="46" rx="4" fill="var(--accent-soft)" stroke="var(--accent)"></rect>
+          <rect x="436" y="38" width="42" height="46" rx="4" fill="var(--accent)"></rect>
+          <rect x="480" y="38" width="42" height="46" rx="4" fill="var(--accent-soft)" stroke="var(--accent)"></rect>
+          <rect x="524" y="38" width="42" height="46" rx="4" fill="var(--accent)"></rect>
+          <rect x="568" y="38" width="42" height="46" rx="4" fill="var(--accent-soft)" stroke="var(--accent)"></rect>
+          <rect x="612" y="38" width="42" height="46" rx="4" fill="var(--accent)"></rect>
+          <rect x="656" y="38" width="42" height="46" rx="4" fill="var(--accent-soft)" stroke="var(--accent)"></rect>
+          <rect x="700" y="38" width="240" height="46" rx="6" fill="var(--surface-warm)" stroke="var(--line-strong)" stroke-dasharray="4 4"></rect>
+          <text x="820" y="66" text-anchor="middle" class="t-small t-tert">activations + headroom</text>
+          <text x="523" y="104" text-anchor="middle" class="t-small t-accent">KV cache · 8 sequences × 2.0 GiB = 16 GiB</text>
+          <line x1="60" y1="118" x2="940" y2="118" stroke="var(--line)"></line>
+          <text x="60" y="136" class="t-tick">0</text>
+          <text x="500" y="136" text-anchor="middle" class="t-tick">20 GiB</text>
+          <text x="940" y="136" text-anchor="end" class="t-tick">40 GiB</text>
+        </svg>
+      </div>
+      <p class="kvq-note">
+        <span class="lang-en">
+          On a 40 GB A100 it is the cache, not the weights, that caps batch size — that is the
+          capacity half of the problem, and the entire motivation in one sentence. The speed half is
+          worse: to produce each new token, the GPU must <em>re-read</em> the whole cache (§2 explains
+          why that read is the clock). Bytes are both rent and toll.
+        </span><span class="lang-ko">
+          40 GB A100에서 batch 크기를 제한하는 것은 weight가 아니라 캐시다 — 이것이 문제의 용량
+          절반이고, 한 문장으로 요약한 동기의 전부다. 속도 절반은 더 나쁘다: 새 토큰 하나를 만들
+          때마다 GPU는 캐시 전체를 <em>다시 읽어야</em> 한다 (§2에서 왜 그 읽기가 시계인지
+          설명한다). 바이트는 임대료이자 통행료다.
+        </span>
+      </p>
+      <div class="arc-takeaway">
+        <span class="arc-takeaway-label"><span class="lang-en">Takeaway</span><span class="lang-ko">핵심 한 줄</span></span>
+        <span class="lang-en">
+          The binding constraint is the cache, not the weights: at 512 KiB per token it reaches
+          16 GiB at batch 8 — more than the model&apos;s ~13 GiB of FP16 weights — and every one of
+          those bytes must be re-read for each new token. Cache bytes are both rent and toll.
+        </span><span class="lang-ko">
+          제약을 거는 것은 weight가 아니라 캐시다: 토큰당 512 KiB는 batch 8에서 16 GiB에 달해 —
+          모델의 FP16 weight ~13 GiB보다 크다 — 그 모든 바이트를 새 토큰마다 다시 읽어야 한다.
+          캐시 바이트는 임대료이자 통행료다.
+        </span>
+      </div>
+      <p class="arc-question">
+        <span class="lang-en">FP16 spends 16 bits per cached value — what actually happens if we spend 4?</span><span class="lang-ko">FP16은 캐시된 값 하나에 16 bit를 쓴다 — 4 bit만 쓰면 실제로 무슨 일이 일어나는가?</span>
+      </p>
+    </div>
+  </section>
+
+  <!-- ============ §2 foundations ============ -->
+  <section class="section-tight" id="arc-s2">
+    <div class="container">
+      <h2 class="arc-heading"><span class="arc-num">§2</span><span><span class="lang-en">Foundations: the cache, the clock, and the grid</span><span class="lang-ko">기초: 캐시, 시계, 그리드</span></span></h2>
+      <p class="kvq-note">
+        <span class="lang-en">
+          <strong>Why a cache exists at all.</strong> Attention at step t scores the new token&apos;s
+          query against the <em>key</em> of every earlier token and takes a weighted average of their
+          <em>values</em>. Those K and V vectors were already computed once, when their tokens were
+          generated; recomputing them every step would cost a full forward pass per token. So we store
+          them and reuse them — FLOPs traded for memory. The KV cache is that stored memory, and this
+          page is about what it costs.
+        </span><span class="lang-ko">
+          <strong>애초에 왜 캐시가 존재하는가.</strong> 스텝 t의 attention은 새 토큰의 query를
+          앞선 모든 토큰의 <em>key</em>와 비교해 점수를 매기고, 그들의 <em>value</em>를 가중
+          평균한다. 그 K와 V 벡터는 각 토큰이 생성될 때 이미 한 번 계산된 것들이다; 매 스텝
+          다시 계산하면 토큰당 full forward pass 비용이 든다. 그래서 저장해 두고 재사용한다 —
+          FLOPs를 memory와 맞바꾸는 것이다. KV cache가 그 저장된 memory이고, 이 페이지는 그
+          비용에 관한 것이다.
+        </span>
+      </p>
+      <p class="kvq-note">
+        <span class="lang-en">
+          <strong>The running configuration</strong> is a Llama-2-7B-shaped decoder: 32 layers,
+          multi-head attention with 32 KV heads of dimension 128, FP16 weights and activations. Every
+          byte count on this page follows from those four numbers. (Grouped-query models divide the
+          cache by the head-count ratio — 4× for Llama-3-8B — but change nothing structural.)
+        </span><span class="lang-ko">
+          <strong>기본 설정</strong>은 Llama-2-7B 모양의 decoder다: 32 layer, dimension 128의 KV
+          head 32개를 가진 multi-head attention, FP16 weight와 activation. 이 페이지의 모든 바이트
+          수는 이 네 숫자에서 따라 나온다. (Grouped-query 모델은 head-count 비율만큼 캐시를
+          나눈다 — Llama-3-8B는 4× — 하지만 구조적으로는 아무것도 바뀌지 않는다.)
+        </span>
+      </p>
+      <p class="kvq-note">
+        <span class="lang-en">
+          <strong>Why bytes are the clock.</strong> An A100 can execute ~312 TFLOP/s of FP16 math but
+          read only ~1.55 TB/s from HBM — the compute units stay busy only if the kernel does roughly
+          200 floating-point operations per byte it reads. Decode attention does about 2 FLOPs per
+          2 bytes of cache. It is not close: the GPU spends essentially the whole step waiting on
+          memory, so a decode step takes bytes ÷ bandwidth, almost independent of arithmetic. Any
+          bytes you remove come straight off the wall clock. (§6 turns this sketch into a receipt.)
+        </span><span class="lang-ko">
+          <strong>왜 바이트가 시계인가.</strong> A100은 FP16 연산을 ~312 TFLOP/s로 수행하지만
+          HBM에서는 ~1.55 TB/s밖에 읽지 못한다 — 읽는 byte당 대략 200번의 부동소수점 연산을 해야
+          compute unit이 놀지 않는다. Decode attention은 캐시 2 byte당 약 2 FLOPs를 한다. 비교가
+          되지 않는다: GPU는 사실상 스텝 전체를 memory를 기다리며 보내므로, decode 한 스텝의
+          시간은 bytes ÷ bandwidth이고 산술량과는 거의 무관하다. 바이트를 줄이면 그대로 벽시계
+          시간이 줄어든다. (§6에서 이 스케치를 영수증으로 만든다.)
+        </span>
+      </p>
+      <p class="kvq-note">
+        <span class="lang-en">
+          <strong>What &ldquo;quantize&rdquo; means here.</strong> Replace each FP16 number by a small
+          integer index into a uniform grid: pick 16 evenly spaced levels (4 bits), record where the
+          grid sits using two shared numbers — a <em>scale</em> (the step width) and a
+          <em>zero-point</em> (which level decodes to 0.0) — and round every value to its nearest
+          level. The data becomes tiny integers plus a tiny shared header; the price is a rounding
+          error of at most half a step per value. Everything in §3 is this one idea, executed
+          carefully on real numbers.
+        </span><span class="lang-ko">
+          <strong>여기서 &ldquo;quantize&rdquo;란 무엇인가.</strong> 각 FP16 숫자를 uniform grid의
+          작은 정수 index로 바꾸는 것이다: 균등 간격의 level 16개(4 bit)를 고르고, grid의 위치를
+          공유 숫자 두 개 — <em>scale</em>(스텝 폭)과 <em>zero-point</em>(0.0으로 decode되는
+          level) — 로 기록한 뒤, 모든 값을 가장 가까운 level로 반올림한다. 데이터는 작은 정수들과
+          작은 공유 header가 되고, 대가는 값당 최대 반 스텝의 rounding error다. §3의 전부가 이
+          아이디어 하나를 실제 숫자 위에서 조심스럽게 실행한 것이다.
+        </span>
+      </p>
+      <div class="kvq-scroll">
+        <svg class="kvq-svg" viewBox="0 0 960 130" style="min-width: 720px" role="img"
+             aria-label="Concept sketch: continuous FP16 values on a top line round down to the nearest of 16 grid levels on a bottom line">
+          <text x="60" y="22" class="t-small t-tert">FP16 values · effectively continuous</text>
+          <line x1="60" y1="40" x2="940" y2="40" stroke="var(--line-strong)"></line>
+          <circle cx="130" cy="40" r="6" fill="var(--accent)"></circle>
+          <circle cx="300" cy="40" r="6" fill="var(--accent)" opacity="0.45"></circle>
+          <circle cx="430" cy="40" r="6" fill="var(--accent)"></circle>
+          <circle cx="585" cy="40" r="6" fill="var(--accent)" opacity="0.45"></circle>
+          <circle cx="760" cy="40" r="6" fill="var(--accent)"></circle>
+          <circle cx="905" cy="40" r="6" fill="var(--accent)" opacity="0.45"></circle>
+          <line x1="130" y1="48" x2="119" y2="86" stroke="var(--accent)" stroke-dasharray="3 3"></line>
+          <line x1="430" y1="48" x2="412" y2="86" stroke="var(--accent)" stroke-dasharray="3 3"></line>
+          <line x1="760" y1="48" x2="764" y2="86" stroke="var(--accent)" stroke-dasharray="3 3"></line>
+          <line x1="60" y1="92" x2="940" y2="92" stroke="var(--line-strong)" stroke-width="2"></line>
+          {levels.map((l) => (
+            <line x1={(60 + l.q * 58.67).toFixed(1)} y1="85" x2={(60 + l.q * 58.67).toFixed(1)} y2="99" stroke="var(--line-strong)"></line>
+          ))}
+          <text x="60" y="118" class="t-small t-tert">16 levels · 4-bit codes · shared scale + zero-point</text>
+          <text x="940" y="118" text-anchor="end" class="t-small t-accent">round to nearest → error ≤ half a step</text>
+        </svg>
+      </div>
+      <div class="arc-takeaway">
+        <span class="arc-takeaway-label"><span class="lang-en">Takeaway</span><span class="lang-ko">핵심 한 줄</span></span>
+        <span class="lang-en">
+          Decode attention is memory-bound — a step takes bytes ÷ bandwidth, so removing bytes
+          removes wall-clock time — and quantization removes them with one idea: round each FP16
+          value to a 16-level grid described by a shared scale and zero-point, at a cost of at most
+          half a step of error per value.
+        </span><span class="lang-ko">
+          Decode attention은 memory-bound다 — 한 스텝은 bytes ÷ bandwidth가 걸리므로, 바이트를
+          줄이면 벽시계 시간이 줄어든다 — 그리고 quantization은 아이디어 하나로 그 바이트를
+          줄인다: 각 FP16 값을 공유 scale과 zero-point로 기술되는 16-level grid로 반올림하고,
+          값당 최대 반 스텝의 오차를 대가로 치른다.
+        </span>
+      </div>
+      <p class="arc-question">
+        <span class="lang-en">A token arrives and becomes 16 KiB of FP16 per layer — what exactly happens to it on the way down to 4 bits?</span><span class="lang-ko">토큰 하나가 도착해 layer당 16 KiB의 FP16이 된다 — 4 bit로 내려가는 길에 정확히 무슨 일이 일어나는가?</span>
+      </p>
+    </div>
+  </section>
+
+  <!-- ============ §3 explorer ============ -->
+  <section class="section-tight" id="arc-s3">
+    <div class="container">
+      <h2 class="arc-heading"><span class="arc-num">§3</span><span><span class="lang-en">The dataflow, step by step</span><span class="lang-ko">Dataflow, 한 단계씩</span></span></h2>
+      <p class="arc-bridge">
+        <span class="lang-en">
+          We now have the problem (§1) and the vocabulary (§2). What follows is the whole pipeline
+          run on real numbers — one token&apos;s key row, eight FP16 values, followed all the way into
+          packed HBM bytes and back out through the read path. Use the pips, the arrow keys, or Play;
+          every number can be checked by hand.
+        </span><span class="lang-ko">
+          이제 문제(§1)와 어휘(§2)가 갖춰졌다. 다음은 파이프라인 전체를 실제 숫자 위에서 돌린
+          것이다 — 한 토큰의 key row, FP16 값 8개를 HBM에 패킹되는 바이트까지, 그리고 read path를
+          따라 다시 나올 때까지 끝까지 따라간다. pip 버튼, 방향키, Play를 써 보라; 모든 숫자는
+          손으로 검산할 수 있다.
+        </span>
+      </p>
       <div class="viz-frame kvq" id="kvq-explorer">
 
         <!-- controls (shown only with JS) -->
@@ -696,46 +923,38 @@ const packedBytes = [
         <!-- shared tooltip -->
         <div class="kvq-tip" id="kvq-tip" hidden></div>
       </div>
+      <div class="arc-takeaway">
+        <span class="arc-takeaway-label"><span class="lang-en">Takeaway</span><span class="lang-ko">핵심 한 줄</span></span>
+        <span class="lang-en">
+          16 bytes of FP16 became 4 bytes of codes plus a small shared header — a learning-free,
+          bounded-error rewrite that cuts cache traffic 3.76× at g = 128, cheap enough to run inline
+          while tokens are generated.
+        </span><span class="lang-ko">
+          FP16 16 byte가 code 4 byte + 작은 공유 header가 되었다 — 학습이 필요 없고 error가
+          유계인 재작성으로, g = 128에서 cache traffic을 3.76× 줄이며, 토큰이 생성되는 동안
+          인라인으로 돌 만큼 싸다.
+        </span>
+      </div>
+      <p class="arc-question">
+        <span class="lang-en">The clicks showed <em>what</em> happens. Written as math, why is the error bounded — and by exactly how much?</span><span class="lang-ko">클릭으로 <em>무엇이</em> 일어나는지는 봤다. 수식으로 쓰면, 왜 오차가 유계이고 정확히 얼마인가?</span>
+      </p>
     </div>
   </section>
 
-  <!-- ============ prose ============ -->
-  <section class="section-tight">
+  <!-- ============ §4 the math ============ -->
+  <section class="section-tight" id="arc-s4">
     <div class="container">
       <div class="prose">
-        <h2><span class="lang-en">Reading the diagram</span><span class="lang-ko">다이어그램 읽는 법</span></h2>
-        <p>
+        <h2 class="arc-heading"><span class="arc-num">§4</span><span><span class="lang-en">The math on paper</span><span class="lang-ko">수식으로 다시 쓰기</span></span></h2>
+        <p class="arc-bridge">
           <span class="lang-en">
-            The running configuration is a Llama-2-7B-shaped decoder: 32 layers, multi-head attention
-            with 32 KV heads of dimension 128, FP16 weights and activations. Every byte count above
-            follows from those four numbers. (Grouped-query models divide the cache by the head-count
-            ratio — 4× for Llama-3-8B — but change nothing structural.)
+            You have clicked through the pipeline; now pin it down. Steps 2–4 of the explorer —
+            group, scale, snap — compress into four lines you can carry away.
           </span><span class="lang-ko">
-            기본 설정은 Llama-2-7B 모양의 decoder다: 32 layer, dimension 128의 KV head 32개를 가진
-            multi-head attention, FP16 weight와 activation. 위의 모든 바이트 수는 이 네 숫자에서
-            따라 나온다. (Grouped-query 모델은 head-count 비율만큼 캐시를 나눈다 — Llama-3-8B는
-            4× — 하지만 구조적으로는 아무것도 바뀌지 않는다.)
+            파이프라인을 클릭으로 통과했으니, 이제 못을 박자. explorer의 Step 2–4 — 그룹, scale,
+            스냅 — 는 들고 다닐 수 있는 네 줄로 압축된다.
           </span>
         </p>
-
-        <h3>1 — <span class="lang-en">Arrival</span><span class="lang-ko">도착</span></h3>
-        <p>
-          <span class="lang-en">
-            Each decode step emits one key row and one value row per head, per layer:
-            2 × 32 × 128 × 2 B = 16 KiB per layer, 512 KiB per token over 32 layers. The cache is
-            append-only and linear in context length: a single 4,096-token sequence holds 2 GiB, and a
-            batch of 8 holds 16 GiB — on a 40 GB A100 the cache, not the weights, is what caps batch
-            size. That is the entire motivation in one sentence.
-          </span><span class="lang-ko">
-            매 decode step은 head당, layer당 key row 하나와 value row 하나를 내놓는다: layer당
-            2 × 32 × 128 × 2 B = 16 KiB, 32개 layer면 토큰당 512 KiB. 캐시는 append-only이고
-            context 길이에 선형이다: 4,096-토큰 시퀀스 하나가 2 GiB, batch 8이면 16 GiB — 40 GB
-            A100에서 batch 크기를 제한하는 것은 weight가 아니라 캐시다. 이것이 한 문장으로 요약한
-            동기의 전부다.
-          </span>
-        </p>
-
-        <h3>2–4 — <span class="lang-en">The quantization math</span><span class="lang-ko">quantization 수식</span></h3>
         <p>
           <span class="lang-en">
             Group-wise asymmetric INT4 stores, per group, 4-bit codes plus one FP16 scale and one
@@ -757,8 +976,37 @@ const packedBytes = [
             reduction 두 번과 rounding 한 번, 토큰이 생성되는 동안 인라인으로 돌 만큼 싸다.
           </span>
         </p>
+        <div class="arc-takeaway">
+          <span class="arc-takeaway-label"><span class="lang-en">Takeaway</span><span class="lang-ko">핵심 한 줄</span></span>
+          <span class="lang-en">
+            Two reduction passes and one rounding: every element&apos;s error is bounded by s/2, the
+            asymmetric grid wastes no codes on a skewed group, and nothing is learned.
+          </span><span class="lang-ko">
+            reduction 두 번과 rounding 한 번: 모든 element의 error는 s/2로 유계이고, asymmetric
+            grid는 치우친 그룹에서도 code를 낭비하지 않으며, 학습되는 것은 없다.
+          </span>
+        </div>
+        <p class="arc-question">
+          <span class="lang-en">Codes are 4 bits, but the scale and zero-point are extra bytes — what does the cache honestly cost now?</span><span class="lang-ko">code는 4 bit지만 scale과 zero-point는 추가 바이트다 — 이제 캐시의 정직한 비용은 얼마인가?</span>
+        </p>
+      </div>
+    </div>
+  </section>
 
-        <h3>5 — <span class="lang-en">Packing</span><span class="lang-ko">패킹</span></h3>
+  <!-- ============ §5 byte count ============ -->
+  <section class="section-tight" id="arc-s5">
+    <div class="container">
+      <div class="prose">
+        <h2 class="arc-heading"><span class="arc-num">§5</span><span><span class="lang-en">Packing and the honest byte count</span><span class="lang-ko">패킹과 정직한 바이트 계산</span></span></h2>
+        <p class="arc-bridge">
+          <span class="lang-en">
+            Integer codes are not yet bytes in HBM. Two bookkeeping details — nibble packing and the
+            per-group header — decide the number you are allowed to quote.
+          </span><span class="lang-ko">
+            정수 code가 곧 HBM의 바이트인 것은 아니다. 부기 항목 두 개 — nibble 패킹과 그룹당
+            header — 가 인용해도 되는 숫자를 결정한다.
+          </span>
+        </p>
         <p>
           <span class="lang-en">
             Two codes per byte (low nibble = even channel), so 128 values pack into 64 B; the header
@@ -776,8 +1024,38 @@ const packedBytes = [
             136 KiB로 줄어든다.
           </span>
         </p>
+        <div class="arc-takeaway">
+          <span class="arc-takeaway-label"><span class="lang-en">Takeaway</span><span class="lang-ko">핵심 한 줄</span></span>
+          <span class="lang-en">
+            The honest number is 4.25 effective bits (3.76×), not 4.0 — headers are real traffic and
+            real capacity, and group size is the dial that trades rounding error against header cost.
+          </span><span class="lang-ko">
+            정직한 숫자는 4.0이 아니라 4.25 effective bits (3.76×)다 — header는 실제 트래픽이자
+            실제 용량이고, group size는 rounding error와 header 비용을 맞바꾸는 다이얼이다.
+          </span>
+        </div>
+        <p class="arc-question">
+          <span class="lang-en">Smaller at rest is nice — but the claim was <em>faster</em>. Where does the speed actually come from?</span><span class="lang-ko">저장이 작아지는 건 좋다 — 하지만 주장은 <em>빨라진다</em>였다. 속도는 실제로 어디서 오는가?</span>
+        </p>
+      </div>
+    </div>
+  </section>
 
-        <h3>6 — <span class="lang-en">Why it&apos;s fast, not just small</span><span class="lang-ko">작아질 뿐 아니라 빨라지는 이유</span></h3>
+  <!-- ============ §6 deep water: the roofline ============ -->
+  <section class="section-tight" id="arc-s6">
+    <div class="container">
+      <div class="prose">
+        <h2 class="arc-heading"><span class="arc-num">§6</span><span><span class="lang-en">Deep water: why fewer bytes means faster</span><span class="lang-ko">깊은 물: 왜 바이트가 줄면 빨라지는가</span></span></h2>
+        <p class="arc-bridge">
+          <span class="lang-en">
+            This is the hardest section of the page — take it slowly. Everything so far was
+            bookkeeping; this is the argument that turns bookkeeping into wall-clock time, and it is
+            the argument the whole field stands on.
+          </span><span class="lang-ko">
+            이 페이지에서 가장 어려운 섹션이다 — 천천히 가자. 지금까지는 전부 부기였다; 여기는 그
+            부기를 벽시계 시간으로 바꾸는 논증이고, 이 분야 전체가 딛고 선 논증이다.
+          </span>
+        </p>
         <p>
           <span class="lang-en">
             Decode attention must read the K and V of every cached token to produce one new token:
@@ -801,8 +1079,41 @@ const packedBytes = [
             roofline이 memory라고 말하는 한, 압축은 용량이라는 의상을 입은 latency 최적화다.
           </span>
         </p>
+        <div class="arc-takeaway">
+          <span class="arc-takeaway-label"><span class="lang-en">Takeaway</span><span class="lang-ko">핵심 한 줄</span></span>
+          <span class="lang-en">
+            Decode attention is memory-bound (≈1 FLOP/B against a ≈200 FLOP/B ridge), so runtime ≈
+            bytes ÷ bandwidth: 3.76× fewer bytes ≈ 3.8× faster cache reads, and the dequant FMA hides
+            under the DRAM time it saves.
+          </span><span class="lang-ko">
+            Decode attention은 memory-bound다 (ridge ≈ 200 FLOP/B 대비 ≈ 1 FLOP/B). 그래서
+            runtime ≈ bytes ÷ bandwidth: 바이트 3.76× 감소 ≈ cache read 3.8× 가속이고, dequant
+            FMA는 자신이 절약해 준 DRAM 시간 아래에 숨는다.
+          </span>
+        </div>
+        <p class="arc-question">
+          <span class="lang-en">If INT4 is this close to free, why isn&apos;t everyone already at 2 bits — what breaks first?</span><span class="lang-ko">INT4가 이렇게 거의 공짜라면, 왜 모두가 이미 2 bit를 쓰지 않는가 — 무엇이 먼저 깨지는가?</span>
+        </p>
+      </div>
+    </div>
+  </section>
 
-        <h3>7 — <span class="lang-en">The caveats that define the field</span><span class="lang-ko">이 분야를 정의하는 주의사항들</span></h3>
+  <!-- ============ §7 where it breaks ============ -->
+  <section class="section-tight" id="arc-s7">
+    <div class="container">
+      <div class="prose">
+        <h2 class="arc-heading"><span class="arc-num">§7</span><span><span class="lang-en">The caveats that define the field</span><span class="lang-ko">이 분야를 정의하는 주의사항들</span></span></h2>
+        <p class="arc-bridge">
+          <span class="lang-en">
+            Because the clean picture assumed the values are tame — and real K tensors are not. Panel
+            7 of the explorer showed four failure modes; here is why they, together, are the map of
+            the field.
+          </span><span class="lang-ko">
+            깔끔한 그림은 값들이 얌전하다고 가정했기 때문이다 — 그리고 실제 K tensor는 그렇지
+            않다. explorer의 panel 7이 네 가지 failure mode를 보여줬다; 그 넷이 합쳐져 왜 이
+            분야의 지도가 되는지가 여기 있다.
+          </span>
+        </p>
         <p>
           <span class="lang-en">
             The textbook recipe survives contact with K&apos;s outlier channels only if the grouping
@@ -818,15 +1129,80 @@ const packedBytes = [
             문헌의 목차다 (KIVI, KVQuant, 그리고 그 후손들).
           </span>
         </p>
+        <div class="arc-takeaway">
+          <span class="arc-takeaway-label"><span class="lang-en">Takeaway</span><span class="lang-ko">핵심 한 줄</span></span>
+          <span class="lang-en">
+            Every working KV-quant system is the textbook recipe plus structure-aware exceptions:
+            an outlier-respecting grouping axis, FP16 windows for sinks and recent tokens, and
+            non-uniform tricks below 4 bits.
+          </span><span class="lang-ko">
+            동작하는 모든 KV-quant 시스템은 교과서 레시피에 구조를 아는 예외를 더한 것이다:
+            outlier를 존중하는 grouping 축, sink와 최근 토큰을 위한 FP16 window, 그리고 4 bit
+            아래의 non-uniform 트릭들.
+          </span>
+        </div>
+        <p class="arc-question">
+          <span class="lang-en">Those exceptions were the 2023–24 papers. What is the field pushing on now?</span><span class="lang-ko">그 예외들이 2023–24년의 논문들이었다. 지금 이 분야는 무엇을 밀고 있는가?</span>
+        </p>
       </div>
     </div>
   </section>
 
-  <!-- ============ going deeper ============ -->
-  <section class="section-tight">
+  <!-- ============ §8 where this goes ============ -->
+  <section class="section-tight" id="arc-s8">
     <div class="container">
-      <p class="eyebrow"><span class="lang-en">Going deeper</span><span class="lang-ko">더 깊이</span></p>
-      <h2><span class="lang-en">Primary sources</span><span class="lang-ko">1차 자료</span></h2>
+      <h2 class="arc-heading"><span class="arc-num">§8</span><span><span class="lang-en">Where this goes</span><span class="lang-ko">여기서 어디로 가는가</span></span></h2>
+      <p class="arc-bridge">
+        <span class="lang-en">
+          You can now read a KV-quantization paper the way its authors do: as a response to one of
+          the caveats in §7, priced by the arithmetic of §5 and §6. Here is where the field is
+          pushing.
+        </span><span class="lang-ko">
+          이제 KV-quantization 논문을 저자들처럼 읽을 수 있다: §7의 주의사항 중 하나에 대한
+          응답으로, §5와 §6의 산술로 가격이 매겨진 것으로. 이 분야가 밀고 있는 방향은 다음과
+          같다.
+        </span>
+      </p>
+      <p class="kvq-note">
+        <span class="lang-en">
+          The live frontier is <strong>below 4 bits</strong>. §7 said uniform grids die at 2 bits;
+          the working answers so far are non-uniform levels plus sparse outlier side-bands
+          (<a href="/reviews/kvquant/">KVQuant</a>), axis-aware grouping with a small FP16 residual
+          window (<a href="/reviews/kivi/">KIVI</a>), and — more recently — rotating the tensor
+          before quantizing so outliers smear into ordinary coordinates (see the
+          <a href="/reviews/turboquant/">TurboQuant</a> and <a href="/reviews/liftquant/">LiftQuant</a>
+          reviews on this site).
+        </span><span class="lang-ko">
+          살아 있는 최전선은 <strong>4 bit 아래</strong>다. §7에서 uniform grid는 2 bit에서
+          죽는다고 했다; 지금까지의 동작하는 답은 non-uniform level과 sparse outlier side-band
+          (<a href="/reviews/kvquant/">KVQuant</a>), 작은 FP16 residual window를 곁들인 축 인식
+          grouping (<a href="/reviews/kivi/">KIVI</a>), 그리고 — 더 최근에는 — quantize 전에
+          tensor를 회전시켜 outlier를 평범한 좌표로 번지게 하는 것이다 (이 사이트의
+          <a href="/reviews/turboquant/">TurboQuant</a>, <a href="/reviews/liftquant/">LiftQuant</a>
+          리뷰 참고).
+        </span>
+      </p>
+      <p class="kvq-note">
+        <span class="lang-en">
+          Quantization is also only one lever on the same byte bill. Eviction keeps <em>fewer</em>
+          tokens rather than cheaper ones (<a href="/reviews/h2o/">H2O</a>); some heads need the full
+          cache while others stream (<a href="/reviews/duo-attention/">DuoAttention</a>); and
+          architectural changes — GQA, MLA — shrink the cache before any compression runs. The open
+          questions are old-fashioned ones: how these levers compose, and how to measure quality
+          honestly, since long-context retrieval and multi-step reasoning degrade well before
+          perplexity notices.
+        </span><span class="lang-ko">
+          Quantization은 같은 바이트 청구서에 대한 여러 레버 중 하나일 뿐이기도 하다. eviction은
+          토큰을 싸게 만드는 대신 <em>더 적게</em> 유지하고 (<a href="/reviews/h2o/">H2O</a>),
+          어떤 head는 full cache가 필요하지만 다른 head는 streaming으로 충분하며
+          (<a href="/reviews/duo-attention/">DuoAttention</a>), 아키텍처 변화 — GQA, MLA — 는
+          압축이 돌기 전에 캐시 자체를 줄인다. 열린 질문들은 고전적인 것들이다: 이 레버들이
+          어떻게 합성되는가, 그리고 품질을 어떻게 정직하게 측정하는가 — long-context retrieval과
+          multi-step reasoning은 perplexity가 눈치채기 한참 전에 무너지기 때문이다.
+        </span>
+      </p>
+      <p class="eyebrow" style="margin-top: 2.4rem"><span class="lang-en">Going deeper</span><span class="lang-ko">더 깊이</span></p>
+      <h3><span class="lang-en">Primary sources</span><span class="lang-ko">1차 자료</span></h3>
       <div class="card-grid" style="margin-top: 1.4rem">
         <a class="card" href="https://arxiv.org/abs/2402.02750" target="_blank" rel="noopener">
           <span class="card-kicker">arXiv 2402.02750</span>

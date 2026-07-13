@@ -245,33 +245,54 @@ const papers = [
             계산하는지만 다룬다.
           </span>
         </p>
-        <div class="jump-row">
-          <a class="tag" href="#promise">a · Promise vs path</a>
-          <a class="tag" href="#walkthrough">b · Inside one warp</a>
-          <a class="tag" href="#metadata">c · The second stream</a>
-          <a class="tag" href="#irregularity">d · Mixed-width breakage</a>
-          <a class="tag" href="#fixes">e · The fix patterns</a>
-          <a class="tag" href="#crossover">f · When it wins</a>
-        </div>
+        <nav class="arc-roadmap" aria-label="Page roadmap">
+          <a href="#arc-s1"><span class="arc-n">§1</span><span class="lang-en">The itch</span><span class="lang-ko">문제의식</span></a>
+          <a href="#arc-s2"><span class="arc-n">§2</span><span class="lang-en">Foundations</span><span class="lang-ko">기초</span></a>
+          <a href="#arc-s3"><span class="arc-n">§3</span><span class="lang-en">Promise vs path</span><span class="lang-ko">약속 vs 경로</span></a>
+          <a href="#arc-s4"><span class="arc-n">§4</span><span class="lang-en">Inside one warp</span><span class="lang-ko">warp 내부</span></a>
+          <a href="#arc-s5"><span class="arc-n">§5</span><span class="lang-en">The second stream</span><span class="lang-ko">두 번째 stream</span></a>
+          <a href="#arc-s6"><span class="arc-n">§6</span><span class="lang-en">Mixed-width breakage</span><span class="lang-ko">혼합 width의 붕괴</span></a>
+          <a href="#arc-s7"><span class="arc-n">§7</span><span class="lang-en">The fix patterns</span><span class="lang-ko">fix 패턴</span></a>
+          <a href="#arc-s8"><span class="arc-n">§8</span><span class="lang-en">When it wins</span><span class="lang-ko">언제 이기는가</span></a>
+          <a href="#arc-s9"><span class="arc-n">§9</span><span class="lang-en">Where this goes</span><span class="lang-ko">다음은 어디로</span></a>
+        </nav>
+        <p class="arc-prereq">
+          <span class="lang-en">
+            <strong>Before you start:</strong> this page assumes you know roughly what the KV cache
+            is and why decode-time inference re-reads it every step — the
+            <a href="/study/quantization/kv-quant-dataflow/">KV-cache quantization walkthrough</a>
+            covers that, including how the low-bit codes are made. It also helps to have seen the
+            <a href="/study/gpu/memory-hierarchy/">GPU memory hierarchy</a> once (HBM, L2, shared
+            memory, registers). §2 rebuilds the minimum of both inline, so you can also just read on.
+          </span><span class="lang-ko">
+            <strong>시작 전에:</strong> 이 페이지는 KV cache가 무엇이고 decode 추론이 왜 매 step
+            그것을 다시 읽는지 정도는 안다고 가정한다 —
+            <a href="/study/quantization/kv-quant-dataflow/">KV-cache quantization 워크스루</a>가
+            low-bit code가 만들어지는 과정까지 다룬다.
+            <a href="/study/gpu/memory-hierarchy/">GPU memory hierarchy</a>(HBM, L2, shared memory,
+            register)를 한 번 본 적이 있으면 더 좋다. §2에서 둘의 최소한을 다시 쌓으니 그냥
+            읽어 내려가도 된다.
+          </span>
+        </p>
       </div>
     </section>
 
-    <!-- ============ (a) the promise vs the path ============ -->
-    <section class="section-tight" id="promise">
+    <!-- ============ §1 the itch ============ -->
+    <section class="section-tight" id="arc-s1">
       <div class="container">
-        <h2 class="viz-h">
-          <span class="lang-en">a · The promise vs the path</span>
-          <span class="lang-ko">a · 약속 vs 경로</span>
-        </h2>
+        <h2 class="arc-heading"><span class="arc-num">§1</span><span class="lang-en">The itch: 8× smaller should mean 8× faster — it often doesn’t</span><span class="lang-ko">문제의식: 8× 작아지면 8× 빨라져야 하는데 — 자주 그렇지 않다</span></h2>
         <p class="viz-sub">
           <span class="lang-en">
-            The storage story is one bar: fewer bits, fewer HBM bytes. The performance story is a
-            pipeline: every byte must traverse the memory hierarchy <em>and then</em> an unpack +
-            dequant instruction sequence before any math happens. Hover each stage.
+            When a language model generates text, most of what the GPU does at each step is not
+            arithmetic — it is <em>re-reading</em> a growing record of everything generated so far
+            (the KV cache). That re-reading is the speed limit, so the obvious fix is to make the
+            record smaller: store each number in 4 or 2 bits instead of 16. The storage claim is a
+            single bar chart, and it looks unbeatable:
           </span><span class="lang-ko">
-            저장의 이야기는 막대 하나다: bit가 줄면 HBM byte가 준다. 성능의 이야기는
-            파이프라인이다: 모든 byte는 memory hierarchy를 지나고 <em>그 다음</em> unpack +
-            dequant instruction 시퀀스를 지나야 비로소 연산이 시작된다. 각 stage에 hover해 보라.
+            언어 모델이 텍스트를 생성할 때 GPU가 매 step 하는 일의 대부분은 연산이 아니다 —
+            지금까지 생성한 모든 것의 기록(KV cache)을 <em>다시 읽는</em> 것이다. 그 재독이
+            속도의 상한이므로, 자연스러운 해법은 기록을 줄이는 것이다: 숫자 하나를 16 bit 대신
+            4 bit나 2 bit로 저장한다. 저장의 주장은 막대 그래프 하나이고, 이길 수 없어 보인다:
           </span>
         </p>
 
@@ -291,8 +312,8 @@ const papers = [
               <span class="pb-label">INT2</span>
               <div class="pb-track">
                 <div class="pb-bar pb-int2" style="width: 12.5%"
-                  data-tip="128 × 2 bits = 32 B of payload — the promise: 8× fewer HBM bytes (before metadata; see section c)"
-                  data-tip-ko="128 × 2 bits = payload 32 B — 약속: HBM byte 8× 감소 (metadata 반영 전; c 섹션 참고)"></div>
+                  data-tip="128 × 2 bits = 32 B of payload — the promise: 8× fewer HBM bytes (before metadata; see §5)"
+                  data-tip-ko="128 × 2 bits = payload 32 B — 약속: HBM byte 8× 감소 (metadata 반영 전; §5 참고)"></div>
               </div>
               <span class="pb-val">32 B / row · <strong>8×</strong></span>
             </div>
@@ -301,7 +322,162 @@ const papers = [
               <span class="lang-ko">약속 — payload byte만 센 것이다. 페이지의 나머지는 그 byte를 쓰는 데 드는 비용 이야기다.</span>
             </p>
           </div>
+        </div>
 
+        <p class="viz-sub">
+          <span class="lang-en">
+            And yet the published record contains this result: on the same A100 GPU, a
+            straightforwardly-written 4-bit KV kernel ran 1.1–1.2× <em>slower</em> than the 8-bit
+            one it was supposed to beat (QServe) — half the bytes, more time. Meanwhile another
+            paper’s 4-bit KV kernels beat full-precision fp16 outright, 1.2–1.7× (KVQuant). Same
+            silicon, same idea, opposite outcomes. Something between “fewer bytes” and “less time”
+            is not free — and this page is about naming that something precisely.
+          </span><span class="lang-ko">
+            그런데 공개된 기록에는 이런 결과가 있다: 같은 A100에서, 평범하게 작성한 4-bit KV
+            kernel이 이겨야 할 8-bit보다 1.1–1.2× <em>느렸다</em> (QServe) — byte는 절반인데
+            시간은 더 걸렸다. 한편 다른 논문의 4-bit KV kernel은 full-precision fp16을 1.2–1.7×로
+            완파했다 (KVQuant). 같은 실리콘, 같은 아이디어, 정반대의 결과. “byte가 준다”와
+            “시간이 준다” 사이의 무언가가 공짜가 아니라는 뜻이고, 이 페이지는 그 무언가를
+            정확히 이름 붙이는 페이지다.
+          </span>
+        </p>
+        <p class="arc-question"><span class="lang-en">What does the GPU actually have to do to use a byte it just saved?</span><span class="lang-ko">GPU는 방금 아낀 byte를 쓰기 위해 실제로 무엇을 해야 하는가?</span></p>
+      </div>
+    </section>
+
+    <!-- ============ §2 foundations ============ -->
+    <section class="section-tight" id="arc-s2">
+      <div class="container">
+        <h2 class="arc-heading"><span class="arc-num">§2</span><span class="lang-en">Foundations: the four facts everything else stands on</span><span class="lang-ko">기초: 이후의 전부가 딛고 서는 네 가지 사실</span></h2>
+        <p class="viz-sub">
+          <span class="lang-en">
+            <strong>1 · Decode is a re-read, and it is memory-bound.</strong> Generating one token
+            multiplies one query against every stored K and V row — a matrix-vector product where
+            each loaded element is used in roughly <em>one</em> multiply-accumulate, no matter the
+            batch size (QServe calls this out explicitly). One operation per element loaded means
+            the math units finish long before the memory system does: the kernel’s time is
+            bytes ÷ bandwidth. This is exactly why shrinking bytes should work — and it is the
+            regime all of §3–§7 lives in.
+          </span><span class="lang-ko">
+            <strong>1 · decode는 재독이고, memory-bound다.</strong> token 하나를 생성하려면 query
+            하나를 저장된 모든 K·V row와 곱한다 — batch 크기와 무관하게 load된 element 하나가
+            대략 multiply-accumulate <em>한 번</em>에 쓰이는 matrix-vector 곱이다 (QServe가
+            명시적으로 짚는 사실). element당 연산 1개라는 것은 연산 유닛이 memory system보다
+            훨씬 먼저 끝난다는 뜻이다: kernel의 시간은 bytes ÷ bandwidth다. byte를 줄이는 것이
+            통해야 하는 이유가 정확히 이것이고, §3–§7 전체가 이 regime 안의 이야기다.
+          </span>
+        </p>
+        <p class="viz-sub">
+          <span class="lang-en">
+            <strong>2 · The machine executes 32 threads in lockstep.</strong> A GPU streaming
+            multiprocessor (SM) issues instructions to <em>warps</em> — groups of 32 threads that
+            all run the same instruction at once. Bytes reach those threads through a hierarchy:
+            HBM (the big, slow-per-request DRAM) → L2 cache → shared memory (a small scratchpad
+            per SM) → registers, where instructions actually operate. Two kinds of execution units
+            sit at the end: tensor cores, which do dense matrix math at enormous rates, and
+            ordinary CUDA cores, which do everything else — shifts, masks, type conversions —
+            about 50× slower per op (QServe’s A100 comparison).
+          </span><span class="lang-ko">
+            <strong>2 · 하드웨어는 thread 32개를 발맞춰 실행한다.</strong> GPU의 streaming
+            multiprocessor(SM)는 <em>warp</em> — 같은 instruction을 동시에 실행하는 thread 32개
+            묶음 — 단위로 instruction을 발행한다. byte는 계층을 지나 thread에 도달한다: HBM(크지만
+            요청당 느린 DRAM) → L2 cache → shared memory(SM마다 있는 작은 scratchpad) → register,
+            여기서 instruction이 실제로 값을 만진다. 끝에는 두 종류의 연산 유닛이 있다: dense
+            행렬 연산을 엄청난 속도로 처리하는 tensor core, 그리고 나머지 전부 — shift, mask,
+            type 변환 — 를 맡는 평범한 CUDA core. 후자는 op당 약 50× 느리다 (QServe의 A100 비교).
+          </span>
+        </p>
+        <p class="viz-sub">
+          <span class="lang-en">
+            <strong>3 · A quantized cache stores codes, not numbers.</strong> Quantization maps
+            each group of values (say 128 of them) onto small integer codes plus two recovery
+            constants — a scale s and zero-point z. To use a code q the kernel must compute
+            x̂ = (q − z) · s. So every low-bit read implies extra work that fp16 never did:
+            extracting packed codes from a 32-bit word (<em>unpack</em>) and applying the recovery
+            arithmetic (<em>dequant</em>) — all of it on the slow CUDA cores, because tensor cores
+            only consume cleanly-typed, cleanly-laid-out operands.
+          </span><span class="lang-ko">
+            <strong>3 · quantized cache는 숫자가 아니라 code를 저장한다.</strong> quantization은
+            값들의 그룹(예: 128개)을 작은 정수 code와 복원 상수 두 개 — scale s, zero-point z —
+            로 사상한다. code q를 쓰려면 kernel이 x̂ = (q − z) · s를 계산해야 한다. 즉 모든
+            low-bit 읽기에는 fp16이 하지 않던 추가 작업이 붙는다: 32-bit word에서 packed code를
+            꺼내는 <em>unpack</em>, 복원 산술을 적용하는 <em>dequant</em> — 전부 느린 CUDA core
+            몫이다. tensor core는 type과 layout이 깔끔한 피연산자만 먹기 때문이다.
+          </span>
+        </p>
+        <p class="viz-sub">
+          <span class="lang-en">
+            <strong>4 · So there is a budget.</strong> While the memory system delivers bytes, the
+            CUDA cores can execute only so many instructions “for free” under that shadow. Divide
+            CUDA-core throughput by DRAM bandwidth and you get a number: on an A100-80GB,
+            ≈ 9.8 ALU ops per byte moved (QServe; ≈ 12.5 on the 40 GB part — estimate). Stay under
+            it and dequant hides entirely under DRAM time; cross it and the kernel stops waiting
+            on memory and starts waiting on its own unpack instructions.
+          </span><span class="lang-ko">
+            <strong>4 · 그래서 예산이 있다.</strong> memory system이 byte를 나르는 동안 CUDA
+            core가 그 그늘 아래에서 “공짜로” 실행할 수 있는 instruction 수에는 한계가 있다.
+            CUDA-core throughput을 DRAM bandwidth로 나누면 숫자가 나온다: A100-80GB에서 이동
+            byte당 ≈ 9.8 ALU ops (QServe; 40 GB 모델은 ≈ 12.5 — 추정). 이 밑에 있으면 dequant는
+            DRAM 시간 밑에 완전히 숨고, 넘는 순간 kernel은 memory가 아니라 자기 unpack
+            instruction을 기다리기 시작한다.
+          </span>
+        </p>
+
+        <div class="viz-frame">
+          <div class="mpk-scroll">
+            <svg class="mpk-svg" viewBox="0 0 700 250" style="min-width: 560px" role="img"
+                 aria-label="Roofline sketch: kernel time is the maximum of DRAM time, which is flat, and instruction-issue time, which rises with ops per byte; they cross at the budget of roughly 9.8 to 12.5 ops per byte on A100">
+              <text x="24" y="28" class="t-label">time per byte moved = max(DRAM time, instruction-issue time) — the budget, sketched</text>
+              <line x1="60" y1="210" x2="660" y2="210" stroke="var(--line-strong)" stroke-width="1.5"></line>
+              <line x1="60" y1="210" x2="60" y2="50" stroke="var(--line-strong)" stroke-width="1.5"></line>
+              <text x="660" y="232" text-anchor="end" class="t-small t-tert">ALU ops issued per byte moved →</text>
+              <text x="52" y="56" text-anchor="end" class="t-small t-tert">time</text>
+              <!-- DRAM floor: flat -->
+              <line x1="60" y1="130" x2="660" y2="130" stroke="var(--swatch-sky)" stroke-width="2.5"></line>
+              <text x="80" y="120" class="t-small" fill="var(--swatch-sky)">DRAM time — flat: the bytes cost what they cost</text>
+              <!-- issue time: rising -->
+              <line x1="60" y1="206" x2="560" y2="66" stroke="var(--accent-strong)" stroke-width="2.5"></line>
+              <text x="340" y="180" class="t-small t-accent">instruction-issue time — rises with every op per byte</text>
+              <!-- crossover -->
+              <line x1="289" y1="210" x2="289" y2="60" stroke="var(--accent-strong)" stroke-width="1.5" stroke-dasharray="4 3"></line>
+              <circle cx="289" cy="130" r="5" fill="var(--surface)" stroke="var(--accent-strong)" stroke-width="2"></circle>
+              <text x="296" y="80" class="t-small t-accent">budget ≈ 9.8–12.5 ops/byte (A100, QServe / est.)</text>
+              <text x="120" y="196" class="t-tiny t-tert">left: memory-bound — byte savings pay</text>
+              <text x="480" y="196" class="t-tiny t-accent">right: ALU-bound — they don’t</text>
+            </svg>
+          </div>
+        </div>
+
+        <div class="arc-takeaway">
+          <span class="arc-takeaway-label"><span class="lang-en">Takeaway</span><span class="lang-ko">핵심 한 줄</span></span>
+          <span class="lang-en">The whole page is one accounting identity: a decode kernel is fast when its time equals bytes ÷ bandwidth — and every instruction spent on unpack, dequant, addressing, or gather is a claim against that identity.</span>
+          <span class="lang-ko">페이지 전체가 하나의 회계 항등식이다: decode kernel은 시간이 bytes ÷ bandwidth와 같을 때 빠르고, unpack·dequant·주소 계산·gather에 쓰는 모든 instruction은 그 항등식에 대한 청구다.</span>
+        </div>
+        <p class="arc-question"><span class="lang-en">Where exactly, along a byte’s journey, does that extra work get inserted?</span><span class="lang-ko">그 추가 작업은 byte의 여정 어디에 정확히 끼어드는가?</span></p>
+      </div>
+    </section>
+
+    <!-- ============ §3 (was a) the promise vs the path ============ -->
+    <section class="section-tight" id="arc-s3">
+      <div class="container">
+        <h2 class="arc-heading"><span class="arc-num">§3</span><span class="lang-en">The promise vs the path</span><span class="lang-ko">약속 vs 경로</span></h2>
+        <p class="arc-bridge">
+          <span class="lang-en">We now have the budget (§2). What §1’s bar chart hid is a pipeline: every saved byte still has to travel the full memory hierarchy — and then through two stages fp16 never needed.</span>
+          <span class="lang-ko">이제 예산(§2)이 손에 있다. §1의 막대가 숨긴 것은 파이프라인이다: 아낀 byte도 여전히 memory hierarchy 전체를 지나야 하고 — 그 다음 fp16에는 없던 두 stage를 지나야 한다.</span>
+        </p>
+        <p class="viz-sub">
+          <span class="lang-en">
+            The performance story, stage by stage: every byte traverses HBM → L2 → shared memory →
+            registers, <em>and then</em> an unpack + dequant instruction sequence, before any math
+            happens. Hover each stage.
+          </span><span class="lang-ko">
+            성능의 이야기를 stage별로: 모든 byte는 HBM → L2 → shared memory → register를 지나고
+            <em>그 다음</em> unpack + dequant instruction 시퀀스를 지나야 비로소 연산이 시작된다.
+            각 stage에 hover해 보라.
+          </span>
+        </p>
+
+        <div class="viz-frame">
           <!-- compute path strip -->
           <div class="mpk-scroll">
             <svg class="mpk-svg" viewBox="0 0 960 210" style="min-width: 780px" role="img"
@@ -353,16 +529,24 @@ const papers = [
             </span>
           </p>
         </div>
+
+        <div class="arc-takeaway">
+          <span class="arc-takeaway-label"><span class="lang-en">Takeaway</span><span class="lang-ko">핵심 한 줄</span></span>
+          <span class="lang-en">Quantization doesn’t remove work — it moves work from the memory system to the CUDA cores: UNPACK and DEQUANT are now first-class stages of the dataflow, running on the pipe with ~1/50th of the tensor-core budget (QServe).</span>
+          <span class="lang-ko">quantization은 일을 없애지 않는다 — memory system의 일을 CUDA core로 옮긴다: UNPACK과 DEQUANT는 이제 dataflow의 일급 stage이고, tensor-core 예산의 ~1/50짜리 pipe에서 돈다 (QServe).</span>
+        </div>
+        <p class="arc-question"><span class="lang-en">How many instructions do those two stages actually cost? Follow one warp and count.</span><span class="lang-ko">그 두 stage는 실제로 instruction 몇 개짜리인가? warp 하나를 따라가며 세어 보자.</span></p>
       </div>
     </section>
 
-    <!-- ============ (b) uniform low-bit walkthrough ============ -->
-    <section class="section-tight" id="walkthrough">
+    <!-- ============ §4 (was b) uniform low-bit walkthrough ============ -->
+    <section class="section-tight" id="arc-s4">
       <div class="container">
-        <h2 class="viz-h">
-          <span class="lang-en">b · Inside one warp: load → unpack → dequant → math</span>
-          <span class="lang-ko">b · warp 하나의 내부: load → unpack → dequant → 연산</span>
-        </h2>
+        <h2 class="arc-heading"><span class="arc-num">§4</span><span class="lang-en">Inside one warp: load → unpack → dequant → math</span><span class="lang-ko">warp 하나의 내부: load → unpack → dequant → 연산</span></h2>
+        <p class="arc-bridge">
+          <span class="lang-en">§3 named the added stages; it did not price them. This section walks one warp through one transaction of packed KV, instruction by instruction, and hands you the bill in step 6.</span>
+          <span class="lang-ko">§3은 추가된 stage의 이름만 붙였지 가격은 매기지 않았다. 이 섹션은 warp 하나가 packed KV transaction 하나를 끌고 가는 과정을 instruction 단위로 따라가고, step 6에서 청구서를 건넨다.</span>
+        </p>
         <p class="viz-sub">
           <span class="lang-en">
             One warp, one transaction of packed uniform low-bit KV, followed to the FMA. The
@@ -580,7 +764,7 @@ const papers = [
                   ))}
 
                   <text x="20" y="200" class="t-small t-tert">MARLIN reorganizes scales like the weights and reloads them per sub-tile so the compiler’s pipelined instruction order survives;</text>
-                  <text x="20" y="218" class="t-small t-tert">QServe stores FP16 scales/zeros inline in each KV-cache page, right after the quantized features. Section c prices this stream.</text>
+                  <text x="20" y="218" class="t-small t-tert">QServe stores FP16 scales/zeros inline in each KV-cache page, right after the quantized features. §5 prices this stream.</text>
                 </svg>
               </div>
             </section>
@@ -705,16 +889,24 @@ const papers = [
             </section>
           </div>
         </div>
+
+        <div class="arc-takeaway">
+          <span class="arc-takeaway-label"><span class="lang-en">Takeaway</span><span class="lang-ko">핵심 한 줄</span></span>
+          <span class="lang-en">Per-element work does not shrink with bit-width: naive INT4 lands at ~10 ops/byte against a 9.8 budget — which is why QServe measured it 1.1–1.2× slower than 8-bit — and INT2 halves the bytes without halving the instructions, the arithmetic reason “2-bit is not 2× faster than 4-bit” without heroic kernels.</span>
+          <span class="lang-ko">element당 작업은 bit-width와 함께 줄지 않는다: naive INT4는 예산 9.8 대비 ~10 ops/byte에 도달하고 — 그래서 QServe가 8-bit보다 1.1–1.2× 느린 것을 실측했다 — INT2는 instruction은 그대로 둔 채 byte만 반으로 줄인다. heroic kernel 없이는 “2-bit가 4-bit보다 2× 빠르지 않은” 산술적 이유다.</span>
+        </div>
+        <p class="arc-question"><span class="lang-en">Step 4 quietly fetched a scale and zero-point from somewhere. How many bytes does that second stream really add?</span><span class="lang-ko">step 4가 어디선가 scale과 zero-point를 조용히 가져왔다. 그 두 번째 stream은 실제로 몇 byte를 더하는가?</span></p>
       </div>
     </section>
 
-    <!-- ============ (c) metadata second stream ============ -->
-    <section class="section-tight" id="metadata">
+    <!-- ============ §5 (was c) metadata second stream ============ -->
+    <section class="section-tight" id="arc-s5">
       <div class="container">
-        <h2 class="viz-h">
-          <span class="lang-en">c · The second stream: what “2-bit” actually stores</span>
-          <span class="lang-ko">c · 두 번째 stream: “2-bit”가 실제로 저장하는 것</span>
-        </h2>
+        <h2 class="arc-heading"><span class="arc-num">§5</span><span class="lang-en">The second stream: what “2-bit” actually stores</span><span class="lang-ko">두 번째 stream: “2-bit”가 실제로 저장하는 것</span></h2>
+        <p class="arc-bridge">
+          <span class="lang-en">The walkthrough priced the instructions. But §2’s fact 3 said a quantized cache stores codes <em>plus recovery constants</em> — and those constants are traffic too, uncounted so far.</span>
+          <span class="lang-ko">walkthrough는 instruction의 가격을 매겼다. 그런데 §2의 사실 3은 quantized cache가 code에 <em>더해 복원 상수</em>를 저장한다고 했다 — 그 상수들도 트래픽이고, 아직 세지 않았다.</span>
+        </p>
         <p class="viz-sub">
           <span class="lang-en">
             Every group carries an FP16 scale (and usually a zero-point) — a second memory stream
@@ -764,7 +956,7 @@ const papers = [
 
               <text x="20" y="122" class="t-label t-accent">mixed precision adds a third: tags + offsets</text>
               <rect x="20" y="134" width="700" height="34" rx="7" fill="var(--accent-soft)" stroke="var(--accent)"></rect>
-              <text x="370" y="156" text-anchor="middle" class="t-mono t-small">variable-length records (section d)</text>
+              <text x="370" y="156" text-anchor="middle" class="t-mono t-small">variable-length records (§6)</text>
               <rect x="740" y="134" width="88" height="34" rx="7" fill="#e6e9df" stroke="var(--swatch-olive)"></rect>
               <text x="784" y="156" text-anchor="middle" class="t-mono t-tiny">s·z</text>
               <rect x="20" y="180" width="330" height="30" rx="7" fill="#eaf1f8" stroke="var(--swatch-sky)"
@@ -781,16 +973,24 @@ const papers = [
             </svg>
           </div>
         </div>
+
+        <div class="arc-takeaway">
+          <span class="arc-takeaway-label"><span class="lang-en">Takeaway</span><span class="lang-ko">핵심 한 줄</span></span>
+          <span class="lang-en">Scales and zeros are real traffic: at KIVI’s group size 32 a “2-bit” cache stores 3 effective bits — metadata alone is half the payload — and the FP16 residual window (R=128) lifts a 512-token context to ≥ 6.25 bits/element (estimates from verified settings).</span>
+          <span class="lang-ko">scale과 zero는 실제 트래픽이다: KIVI의 group size 32에서 “2-bit” cache는 3 effective bits를 저장하고 — metadata만으로 payload의 절반 — FP16 residual window(R=128)는 512-token context를 ≥ 6.25 bits/element로 끌어올린다 (검증된 설정 위의 추정).</span>
+        </div>
+        <p class="arc-question"><span class="lang-en">Uniform low-bit adds a second stream and survives. What if the width itself varies token by token?</span><span class="lang-ko">uniform low-bit는 두 번째 stream을 달고도 살아남는다. 그런데 width 자체가 token마다 달라지면?</span></p>
       </div>
     </section>
 
-    <!-- ============ (d) mixed-precision irregularity ============ -->
-    <section class="section-tight" id="irregularity">
+    <!-- ============ §6 (was d) mixed-precision irregularity ============ -->
+    <section class="section-tight" id="arc-s6">
       <div class="container">
-        <h2 class="viz-h">
-          <span class="lang-en">d · Where mixed widths break the machine’s assumptions</span>
-          <span class="lang-ko">d · 혼합 width가 하드웨어의 가정을 깨는 곳</span>
-        </h2>
+        <h2 class="arc-heading"><span class="arc-num">§6</span><span class="lang-en">Deep water: where mixed widths break the machine’s assumptions</span><span class="lang-ko">깊은 물: 혼합 width가 하드웨어의 가정을 깨는 곳</span></h2>
+        <p class="arc-bridge">
+          <span class="lang-en">This is the hardest section of the page — take it slowly. Everything so far assumed one width for every token; §2’s machine facts (lockstep warps, whole 32-byte sectors, affine addresses) were all quietly load-bearing. Mixed precision removes the uniformity they stand on, and four things break at once.</span>
+          <span class="lang-ko">여기가 이 페이지에서 가장 어려운 섹션이다 — 천천히 가자. 지금까지는 모든 token이 같은 width라고 가정했고, §2의 하드웨어 사실들(lockstep warp, 통째로 소비되는 32-byte sector, affine 주소)이 전부 조용히 하중을 받치고 있었다. mixed precision은 그들이 딛고 선 균일성을 치우고, 네 가지가 동시에 부러진다.</span>
+        </p>
         <p class="viz-sub">
           <span class="lang-en">
             Take a generic example alphabet {'{0, 2, 4, 8, 16}'} bits — some tokens evicted, some
@@ -965,16 +1165,24 @@ const papers = [
             </svg>
           </div>
         </div>
+
+        <div class="arc-takeaway">
+          <span class="arc-takeaway-label"><span class="lang-en">Takeaway</span><span class="lang-ko">핵심 한 줄</span></span>
+          <span class="lang-en">The four failures are one fact in different units: the GPU’s cheap paths — affine addresses, one instruction per warp, whole 32-byte sectors — assume uniformity. Data-dependent widths buy pointer chases, serialized lanes, wasted sectors, and gathers; SqueezeLLM’s 0.45%-sparse ⇒ ~10%-latency measurement is the cleanest published price tag for that bookkeeping.</span>
+          <span class="lang-ko">네 failure는 같은 사실을 다른 단위로 본 것이다: GPU의 싼 경로 — affine 주소, warp당 한 instruction, 통째로 소비되는 32-byte sector — 는 균일성을 가정한다. 데이터 의존적 width는 pointer chase, lane 직렬화, sector 낭비, gather를 사들인다; SqueezeLLM의 0.45% sparse ⇒ latency ~10% 실측이 그 장부 관리의 가장 깔끔한 공개 가격표다.</span>
+        </div>
+        <p class="arc-question"><span class="lang-en">Every one of these breakages appears in published systems — so how do shipped kernels put the uniformity back?</span><span class="lang-ko">이 붕괴들은 전부 공개된 시스템에 등장한다 — 그렇다면 실제로 배포된 kernel들은 균일성을 어떻게 되찾는가?</span></p>
       </div>
     </section>
 
-    <!-- ============ (e) fix patterns ============ -->
-    <section class="section-tight" id="fixes">
+    <!-- ============ §7 (was e) fix patterns ============ -->
+    <section class="section-tight" id="arc-s7">
       <div class="container">
-        <h2 class="viz-h">
-          <span class="lang-en">e · The published fix patterns</span>
-          <span class="lang-ko">e · 공개된 fix 패턴들</span>
-        </h2>
+        <h2 class="arc-heading"><span class="arc-num">§7</span><span class="lang-en">The published fix patterns</span><span class="lang-ko">공개된 fix 패턴들</span></h2>
+        <p class="arc-bridge">
+          <span class="lang-en">§6 ended in wreckage on purpose. The literature’s answer is not one trick but a repertoire — and every entry works the same way: restore, somewhere, the uniformity the hardware was promised.</span>
+          <span class="lang-ko">§6은 일부러 잔해로 끝냈다. 문헌의 답은 한 가지 트릭이 아니라 레퍼토리다 — 그리고 모든 항목이 같은 방식으로 작동한다: 하드웨어가 약속받았던 균일성을 어딘가에서 복원하는 것.</span>
+        </p>
         <p class="viz-sub">
           <span class="lang-en">
             Each failure above has a published answer. Flip each card between the broken layout and
@@ -1009,7 +1217,7 @@ const papers = [
                     </g>
                   );
                 })}
-                <text x="20" y="80" class="t-tiny t-tert">interleaved widths: every warp hits every failure in section d</text>
+                <text x="20" y="80" class="t-tiny t-tert">interleaved widths: every warp hits every failure in §6</text>
               </svg>
               <figcaption><span class="lang-en">before — one stream, mixed records</span><span class="lang-ko">before — 한 stream에 혼합 record</span></figcaption>
             </figure>
@@ -1244,16 +1452,24 @@ const papers = [
             </p>
           </article>
         </div>
+
+        <div class="arc-takeaway">
+          <span class="arc-takeaway-label"><span class="lang-en">Takeaway</span><span class="lang-ko">핵심 한 줄</span></span>
+          <span class="lang-en">Every fix restores a uniformity the hardware wants: pools make each warp’s tile single-width (Atom → DiffKV), bitplanes turn width into a read-count instead of a branch (Any-Precision), offline permutation moves shuffles to pack time (MARLIN, QServe, FLUTE), LUT replication de-serializes shared memory (FLUTE), and pipelining hides the rest under DRAM time — until registers run out.</span>
+          <span class="lang-ko">모든 fix는 하드웨어가 원하는 균일성을 복원한다: pool은 warp의 tile을 단일 width로 만들고 (Atom → DiffKV), bitplane은 width를 분기가 아닌 읽기 횟수로 바꾸고 (Any-Precision), offline permutation은 shuffle을 pack 시점으로 옮기고 (MARLIN, QServe, FLUTE), LUT 복제는 shared memory의 직렬화를 풀고 (FLUTE), pipelining은 나머지를 DRAM 시간 밑에 숨긴다 — register가 바닥나기 전까지.</span>
+        </div>
+        <p class="arc-question"><span class="lang-en">With the full repertoire applied, does low-bit KV always win — or only in a regime?</span><span class="lang-ko">레퍼토리를 전부 적용하면 low-bit KV는 항상 이기는가 — 아니면 특정 regime에서만인가?</span></p>
       </div>
     </section>
 
-    <!-- ============ (f) when does it win ============ -->
-    <section class="section-tight" id="crossover">
+    <!-- ============ §8 (was f) when does it win ============ -->
+    <section class="section-tight" id="arc-s8">
       <div class="container">
-        <h2 class="viz-h">
-          <span class="lang-en">f · When does it actually win?</span>
-          <span class="lang-ko">f · 그래서 언제 실제로 이기는가?</span>
-        </h2>
+        <h2 class="arc-heading"><span class="arc-num">§8</span><span class="lang-en">When does it actually win?</span><span class="lang-ko">그래서 언제 실제로 이기는가?</span></h2>
+        <p class="arc-bridge">
+          <span class="lang-en">The fixes buy back the instructions; they do not repeal §2’s roofline. Whether byte savings convert to time still depends on which side of the budget the kernel sits — and on whether the kernel is memory-bound at all.</span>
+          <span class="lang-ko">fix들은 instruction을 되사 오지만 §2의 roofline을 폐지하진 못한다. byte 절약이 시간으로 환전되는지는 여전히 kernel이 예산의 어느 쪽에 앉아 있는지 — 그리고 애초에 memory-bound인지 — 에 달려 있다.</span>
+        </p>
         <p class="viz-sub">
           <span class="lang-en">
             Two dials decide the regime: how many instructions each byte costs (bit-width × kernel
@@ -1358,140 +1574,16 @@ const papers = [
             2.8× → 128에서 ~1.2×). byte당 op가 하나 늘 때마다 그 crossover는 앞당겨진다.
           </span>
         </p>
-      </div>
-    </section>
 
-    <!-- ============ prose ============ -->
-    <section class="section-tight">
-      <div class="container">
-        <div class="prose">
-          <h2><span class="lang-en">Reading the diagram</span><span class="lang-ko">다이어그램 읽는 법</span></h2>
-          <p>
-            <span class="lang-en">
-              The through-line of this page is a single accounting identity: a decode-attention
-              kernel is fast when its time equals bytes ÷ bandwidth, and every instruction spent
-              on unpack, dequant, addressing, or gather is a claim against that identity. All
-              hardware numbers are the A100’s (GA100 whitepaper, CUDA docs); all kernel numbers
-              are the cited papers’; derived arithmetic is labeled as an estimate.
-            </span><span class="lang-ko">
-              이 페이지의 관통선은 하나의 회계 항등식이다: decode-attention kernel은 시간이
-              bytes ÷ bandwidth와 같을 때 빠르고, unpack·dequant·주소 계산·gather에 쓰는 모든
-              instruction은 그 항등식에 대한 청구다. 하드웨어 숫자는 전부 A100의 것(GA100
-              whitepaper, CUDA docs)이고, kernel 숫자는 인용된 논문의 것이며, 유도된 산술은
-              추정으로 표시했다.
-            </span>
-          </p>
-
-          <h3>a — <span class="lang-en">Promise vs path</span><span class="lang-ko">약속 vs 경로</span></h3>
-          <p>
-            <span class="lang-en">
-              KV reads at decode time have arithmetic intensity ~1 MAC/element regardless of batch
-              (QServe), so they are DRAM-bound and byte savings <em>should</em> convert to time —
-              KVQuant states this as the motivation for accepting “a more complex dequantization
-              process.” The catch is that the added complexity executes on CUDA cores, whose
-              roofline is ≈ 9.8 ops per byte on A100-80GB (QServe; ≈ 12.5 on the 40 GB part,
-              estimate) — about 1/50th of the tensor-core budget per QServe’s comparison. The path
-              diagram exists to make the two added stages — UNPACK and DEQUANT — visible as
-              first-class citizens of the dataflow.
-            </span><span class="lang-ko">
-              decode 시점의 KV 읽기는 batch와 무관하게 element당 ~1 MAC의 arithmetic
-              intensity라서 (QServe) DRAM-bound이고, byte 절약은 시간으로 환전<em>되어야</em>
-              한다 — KVQuant는 이것을 “더 복잡한 dequantization”을 감수하는 동기로 명시한다.
-              함정은 그 추가 복잡성이 CUDA core에서 실행된다는 것이고, 그 roofline은 A100-80GB
-              기준 byte당 ≈ 9.8 ops다 (QServe; 40 GB 모델은 ≈ 12.5, 추정) — QServe의 비교로는
-              tensor-core 예산의 약 1/50. path 다이어그램은 추가된 두 stage — UNPACK과 DEQUANT
-              — 를 dataflow의 일급 시민으로 보이게 하려고 있다.
-            </span>
-          </p>
-
-          <h3>b — <span class="lang-en">The walkthrough and the meter</span><span class="lang-ko">walkthrough와 meter</span></h3>
-          <p>
-            <span class="lang-en">
-              The per-8-element instruction counts are estimates anchored at both ends to QServe’s
-              published figures: 5 ALU ops per element for naive dequant (≈ 32–40 per 8) and ~2
-              per element optimized (≈ 10–12 per 8, matching the lop3/prmt sequence MARLIN
-              documents). Divide by bytes moved and you get the meter: naive INT4 lands at ~10
-              ops/byte — level with the 9.8 budget, which is why QServe measured naive 4-bit KV
-              running 1.1–1.2× <em>slower</em> than 8-bit on A100. INT2 halves the bytes without
-              shrinking the per-element work, doubling ops/byte: the arithmetic reason 2-bit is
-              not 2× faster than 4-bit without heroic kernels.
-            </span><span class="lang-ko">
-              8 element당 instruction 수는 양 끝을 QServe의 공개 수치에 앵커한 추정이다: naive
-              dequant는 element당 5 ALU ops (8개당 ≈ 32–40), 최적화하면 ~2 (8개당 ≈ 10–12,
-              MARLIN이 기록한 lop3/prmt 시퀀스와 일치). 이동한 byte로 나누면 meter가 된다:
-              naive INT4는 ~10 ops/byte — 예산 9.8과 같은 높이이고, 그래서 QServe는 A100에서
-              naive 4-bit KV가 8-bit보다 1.1–1.2× <em>느린</em> 것을 실측했다. INT2는
-              element당 작업을 줄이지 못한 채 byte만 반으로 줄여 ops/byte를 2배로 만든다:
-              heroic kernel 없이는 2-bit가 4-bit보다 2× 빠르지 않은 산술적 이유다.
-            </span>
-          </p>
-
-          <h3>c — <span class="lang-en">The second stream</span><span class="lang-ko">두 번째 stream</span></h3>
-          <p>
-            <span class="lang-en">
-              Scales and zeros are real traffic: at KIVI’s group size 32, a “2-bit” cache stores 3
-              effective bits — metadata is half the payload — and the FP16 residual window (R=128
-              newest tokens) lifts a 512-token context to ≥ 6.25 bits/element (estimates from
-              verified settings). Mixed precision adds a third stream: width tags are cheap in
-              bytes but must be branched on, and variable-length records force either runtime
-              prefix sums or stored offsets — a dependent load in front of every payload load.
-            </span><span class="lang-ko">
-              scale과 zero는 실제 트래픽이다: KIVI의 group size 32에서 “2-bit” cache는 3
-              effective bits를 저장하고 — metadata가 payload의 절반 — FP16 residual window(최신
-              R=128 token)는 512-token context를 ≥ 6.25 bits/element로 끌어올린다 (검증된 설정
-              위의 추정). mixed precision은 세 번째 stream을 더한다: width tag는 byte로는 싸지만
-              분기 대상이고, 가변 길이 record는 runtime prefix sum 아니면 저장된 offset을
-              강제한다 — 모든 payload load 앞의 dependent load다.
-            </span>
-          </p>
-
-          <h3>d — <span class="lang-en">Why irregularity, specifically, is expensive</span><span class="lang-ko">왜 하필 불규칙성이 비싼가</span></h3>
-          <p>
-            <span class="lang-en">
-              The three failures are all the same fact seen from different units: the GPU’s cheap
-              paths — affine addresses, one instruction per warp, 32-byte sectors consumed whole —
-              assume uniformity. Data-dependent widths spend CUDA-core cycles on pointer
-              arithmetic (QServe: 32× below tensor-core throughput), serialize divergent lanes
-              (the SIMT rule: each branch path executes with other lanes disabled), and waste
-              fetched sectors. The 0-bit class turns reads into gathers — and SqueezeLLM’s
-              measurement (0.45% sparse ⇒ ~10% latency) is the cleanest published price tag for
-              that bookkeeping.
-            </span><span class="lang-ko">
-              세 failure는 같은 사실을 다른 단위에서 본 것이다: GPU의 싼 경로 — affine 주소,
-              warp당 한 instruction, 통째로 소비되는 32-byte sector — 는 균일성을 가정한다.
-              데이터 의존적 width는 CUDA-core cycle을 pointer 산술에 쓰게 하고 (QServe:
-              tensor-core throughput의 1/32), divergent lane을 직렬화하며 (SIMT 규칙: 각 branch
-              경로가 나머지 lane을 끈 채 실행된다), fetch한 sector를 낭비한다. 0-bit class는
-              읽기를 gather로 바꾼다 — SqueezeLLM의 실측(0.45% sparse ⇒ latency ~10%)이 그
-              장부 관리의 가장 깔끔한 공개 가격표다.
-            </span>
-          </p>
-
-          <h3>e·f — <span class="lang-en">The fixes, and the regime they buy</span><span class="lang-ko">fix들, 그리고 그것이 사는 regime</span></h3>
-          <p>
-            <span class="lang-en">
-              Every fix restores a uniformity the hardware wants: pools make each warp’s tile
-              single-width (Atom → DiffKV), bitplanes make width a read-count instead of a branch
-              (Any-Precision), offline permutation moves shuffles to pack time (MARLIN, QServe,
-              FLUTE), LUT replication de-serializes shared memory (FLUTE), and pipelining hides
-              the remaining instructions under DRAM time — until registers run out. What none of
-              them change is the regime boundary: MARLIN’s own curve decays from ~3.9× to ~1.5×
-              by batch 128, because past the roofline crossover the baseline is no longer waiting
-              on the bytes you saved.
-            </span><span class="lang-ko">
-              모든 fix는 하드웨어가 원하는 균일성을 복원한다: pool은 warp의 tile을 단일 width로
-              만들고 (Atom → DiffKV), bitplane은 width를 분기가 아닌 읽기 횟수로 바꾸고
-              (Any-Precision), offline permutation은 shuffle을 pack 시점으로 옮기고 (MARLIN,
-              QServe, FLUTE), LUT 복제는 shared memory의 직렬화를 풀고 (FLUTE), pipelining은
-              남은 instruction을 DRAM 시간 밑에 숨긴다 — register가 바닥나기 전까지. 어느 것도
-              바꾸지 못하는 것은 regime의 경계다: MARLIN 자신의 곡선도 batch 128에서 ~3.9× →
-              ~1.5×로 감쇠한다. roofline crossover를 지나면 baseline은 더 이상 당신이 아낀
-              byte를 기다리고 있지 않기 때문이다.
-            </span>
-          </p>
+        <div class="arc-takeaway">
+          <span class="arc-takeaway-label"><span class="lang-en">Takeaway</span><span class="lang-ko">핵심 한 줄</span></span>
+          <span class="lang-en">No kernel trick moves the regime boundary itself: past the roofline crossover the baseline is no longer waiting on the bytes you saved — even MARLIN’s fully-engineered kernel decays from ~3.9× to ~1.5× by batch 128.</span>
+          <span class="lang-ko">어떤 kernel 트릭도 regime의 경계 자체는 옮기지 못한다: roofline crossover를 지나면 baseline은 더 이상 당신이 아낀 byte를 기다리지 않는다 — 완전히 엔지니어링된 MARLIN kernel조차 batch 128에서 ~3.9× → ~1.5×로 감쇠한다.</span>
         </div>
+        <p class="arc-question"><span class="lang-en">If the mechanics are this well mapped, what is the field still fighting over?</span><span class="lang-ko">메커니즘이 이렇게까지 정리돼 있다면, 이 분야는 아직 무엇을 두고 싸우고 있는가?</span></p>
       </div>
     </section>
+
 
     <!-- ============ why it matters ============ -->
     <section class="section-tight">
@@ -1529,10 +1621,48 @@ const papers = [
       </div>
     </section>
 
-    <!-- ============ going deeper ============ -->
-    <section class="section-tight">
+    <!-- ============ §9 where this goes ============ -->
+    <section class="section-tight" id="arc-s9">
       <div class="container">
-        <p class="eyebrow"><span class="lang-en">Going deeper</span><span class="lang-ko">더 깊이</span></p>
+        <h2 class="arc-heading"><span class="arc-num">§9</span><span class="lang-en">Where this goes</span><span class="lang-ko">다음은 어디로 가는가</span></h2>
+        <p class="arc-bridge">
+          <span class="lang-en">The mechanics above are settled science by systems standards; the open questions are about what to do with them. Three directions are visibly active in the literature.</span>
+          <span class="lang-ko">위의 메커니즘은 시스템 기준으로는 정리된 과학이다; 열린 질문은 그것으로 무엇을 하느냐다. 문헌에서 눈에 띄게 활발한 방향이 셋 있다.</span>
+        </p>
+        <p class="viz-sub">
+          <span class="lang-en">
+            <strong>Below 4 bits with better codes.</strong> Uniform integer grids waste precision
+            on well-behaved distributions, so newer quantizers spend math to earn bits — non-uniform
+            LUTs (<a href="/reviews/kvquant/">KVQuant</a>), rotations that spread outliers before
+            coding (<a href="/reviews/turboquant/">TurboQuant</a>,
+            <a href="/reviews/liftquant/">LiftQuant</a>). Every new code re-opens this page’s
+            question: what does <em>its</em> decode cost per byte, and on which pipe?
+            <strong>Choosing the widths.</strong> This page took the assignment as given; deciding
+            it — which tokens, heads, or layers deserve bits — is its own literature, from eviction
+            scores (<a href="/reviews/h2o/">H2O</a>) to head-level retrieval-vs-streaming splits
+            (<a href="/reviews/duo-attention/">DuoAttention</a>), and each policy’s output lands on
+            §6’s systems bill. <strong>The budget itself moves.</strong> Every ops-per-byte number
+            here is A100-specific; new accelerator generations shift the CUDA-core-to-bandwidth
+            ratio and add native low-bit datapaths, so the crossover lines in §8 must be re-derived
+            per part — the analysis pattern transfers, the constants do not.
+          </span><span class="lang-ko">
+            <strong>더 좋은 code로 4 bit 아래로.</strong> uniform 정수 grid는 얌전한 분포에서
+            정밀도를 낭비하므로, 최신 quantizer들은 연산을 써서 bit를 번다 — non-uniform LUT
+            (<a href="/reviews/kvquant/">KVQuant</a>), coding 전에 outlier를 퍼뜨리는 rotation
+            (<a href="/reviews/turboquant/">TurboQuant</a>,
+            <a href="/reviews/liftquant/">LiftQuant</a>). 새 code가 나올 때마다 이 페이지의 질문이
+            다시 열린다: <em>그</em> decode는 byte당 얼마이고, 어느 pipe에서 도는가?
+            <strong>width를 정하는 문제.</strong> 이 페이지는 부여를 주어진 것으로 놓았지만,
+            그것을 정하는 일 — 어떤 token·head·layer가 bit를 받을 자격이 있는가 — 은 그 자체로
+            하나의 문헌이다. eviction score(<a href="/reviews/h2o/">H2O</a>)부터 head 단위
+            retrieval-vs-streaming 분할(<a href="/reviews/duo-attention/">DuoAttention</a>)까지
+            있고, 모든 정책의 출력은 §6의 시스템 청구서 위에 떨어진다. <strong>예산 자체가
+            움직인다.</strong> 여기의 모든 ops-per-byte 숫자는 A100 전용이다; 새 가속기 세대는
+            CUDA-core 대 bandwidth 비율을 바꾸고 native low-bit datapath를 더하므로, §8의
+            crossover 선은 part마다 다시 유도해야 한다 — 분석 패턴은 이식되지만 상수는 아니다.
+          </span>
+        </p>
+        <p class="eyebrow" style="margin-top: 2.4rem"><span class="lang-en">Going deeper</span><span class="lang-ko">더 깊이</span></p>
         <h2><span class="lang-en">Primary sources</span><span class="lang-ko">1차 자료</span></h2>
         <div class="card-grid" style="margin-top: 1.4rem">
           {papers.map((p) => (
@@ -1580,11 +1710,7 @@ const papers = [
     line-height: 1.65;
   }
 
-  .jump-row { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1.4rem; }
-  .jump-row .tag { text-decoration: none; }
-  .jump-row .tag:hover { border-color: var(--accent); color: var(--accent-strong); }
-
-  .viz-h { font-size: 1.45rem; margin-bottom: 0.6rem; }
+  .arc-heading { margin-bottom: 0.6rem; }
   .viz-sub { max-width: 62em; color: var(--text-secondary); font-size: 0.97rem; margin: 0 0 1.2rem; line-height: 1.7; }
 
   .mpk-scroll { overflow-x: auto; }
@@ -2013,8 +2139,8 @@ const papers = [
       ko: 'packed word를 개별 값으로 풀어야 한다. naive: element마다 shift → mask → convert — QServe 기준 각 ~5 ALU ops, 8개당 ≈ 32–40. engineered: register 통째로 — lop3 하나가 nibble mask와 FP16 exponent 패턴 주입을 동시에 하고 (MARLIN: naive INT4→FP16 type-cast는 느리다), prmt가 byte를 배치하고, 적절한 offline interleave가 있으면 QServe는 register 하나 분량의 INT4를 3 logic ops에 푼다. 일어나지 않은 일에 주목: INT2로 내려가도 이 작업은 줄지 않는다.',
     },
     {
-      en: 'Dequant needs each group’s scale and zero-point — a second memory stream. At g=128 that is 4 B of FP16 metadata per group riding alongside the payload. MARLIN reorganizes scales like the weights and reloads them per sub-tile so the compiler’s pipelined instruction order survives; QServe stores them inline in each KV-cache page, right after the quantized features. Section c prices this stream in effective bits.',
-      ko: 'dequant에는 각 그룹의 scale과 zero-point가 필요하다 — 두 번째 memory stream이다. g=128이면 그룹당 FP16 metadata 4 B가 payload 옆을 따라간다. MARLIN은 scale을 weight처럼 재배열해 sub-tile마다 다시 load함으로써 컴파일러의 pipeline된 instruction 순서를 지키고, QServe는 각 KV-cache page 안에 quantized feature 바로 뒤 inline으로 저장한다. c 섹션이 이 stream을 effective bits로 계산한다.',
+      en: 'Dequant needs each group’s scale and zero-point — a second memory stream. At g=128 that is 4 B of FP16 metadata per group riding alongside the payload. MARLIN reorganizes scales like the weights and reloads them per sub-tile so the compiler’s pipelined instruction order survives; QServe stores them inline in each KV-cache page, right after the quantized features. §5 prices this stream in effective bits.',
+      ko: 'dequant에는 각 그룹의 scale과 zero-point가 필요하다 — 두 번째 memory stream이다. g=128이면 그룹당 FP16 metadata 4 B가 payload 옆을 따라간다. MARLIN은 scale을 weight처럼 재배열해 sub-tile마다 다시 load함으로써 컴파일러의 pipeline된 instruction 순서를 지키고, QServe는 각 KV-cache page 안에 quantized feature 바로 뒤 inline으로 저장한다. §5가 이 stream을 effective bits로 계산한다.',
     },
     {
       en: 'x̂ = (q − z) · s, two elements per HSUB2/HFMA2 on packed 16-bit halves; QServe even moves the zero-point subtraction into the epilogue algebraically. Then the actual math: decode attention is a batched GEMV at ~1 MAC per element regardless of batch (QServe) — one FMA. Everything before it was overhead. (Tensor-core mma needs ldmatrix, which does not work when storage and compute types differ — QServe.)',
@@ -2145,8 +2271,8 @@ const papers = [
     },
     '2-fused': {
       bytes: 2, bytesTxt: '2 B', instr: 14, instrTxt: '≈ 12–16',
-      en: 'INT2, fused: 8× fewer payload bytes, but ≈ 6–8 ops/byte — approaching the CUDA-core roofline. And metadata drags “2-bit” to ~3 effective bits at g=32 (section c).',
-      ko: 'INT2, fused: payload byte는 8× 감소지만 ≈ 6–8 ops/byte — CUDA-core roofline에 접근한다. 게다가 metadata가 g=32에서 “2-bit”를 ~3 effective bits로 끌어올린다 (c 섹션).',
+      en: 'INT2, fused: 8× fewer payload bytes, but ≈ 6–8 ops/byte — approaching the CUDA-core roofline. And metadata drags “2-bit” to ~3 effective bits at g=32 (§5).',
+      ko: 'INT2, fused: payload byte는 8× 감소지만 ≈ 6–8 ops/byte — CUDA-core roofline에 접근한다. 게다가 metadata가 g=32에서 “2-bit”를 ~3 effective bits로 끌어올린다 (§5).',
     },
     '2-naive': {
       bytes: 2, bytesTxt: '2 B', instr: 36, instrTxt: '≈ 32–40',

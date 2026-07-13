@@ -53,6 +53,8 @@ without extension (`src/content/reviews/my-paper.md` → `/reviews/my-paper/`).
 | `resources`  | `{label, url}[]` (default `[]`)   | **verified** primary links only (arXiv / PDF / project / GitHub / dataset / checkpoint) |
 | `figures`    | `{src, caption, caption_ko?, credit}[]` (default `[]`) | 1–2 key figures pulled from the paper's arXiv HTML, served from `public/figures/<slug>/`; always credited (`Figure N from arXiv:<id> — authors' figure`), ≤ 2 MB each |
 | `analysis`   | `{ ko: {...}, en: {...} }`?       | bilingual 13-key structured analysis (below)                 |
+| `thread`     | `{ko, en}`?                       | narrative research-thread section: `\|-` block scalars, 3–4 blank-line-separated paragraphs (lineage → conceptual shift → what it opens), same content in both languages |
+| `sparks`     | `{ko, en}[]` (default `[]`)       | 2–3 bilingual idea seeds, strictly grounded in the paper's stated limitations/future work |
 | `source`     | `autosweep` \| `manual`           | default `manual`                                             |
 | `rating`     | number? (1–5)                     |                                                               |
 
@@ -187,9 +189,9 @@ python3 scripts/publish_review.py <lit-note.md> --slug <slug> [--date YYYY-MM-DD
 It writes `src/content/reviews/<slug>.md` with `source: autosweep` and the full new-schema
 frontmatter as TODO stubs: `topic`, `summary` / `summary_ko`, `links: []`, `resources: []`
 (verified links only), `figures: []` (1–2 credited key figures from the paper's arXiv HTML,
-saved to `public/figures/<slug>/`), and a complete bilingual `analysis:` block (`ko:` +
-`en:`, each with all 13 keys in fixed order, every value `'TODO'`), plus a minimal
-`## Notes` body. It refuses (exit 1) if the slug already exists. The daily lit autosweep
+saved to `public/figures/<slug>/`), a complete bilingual `analysis:` block (`ko:` +
+`en:`, each with all 13 keys in fixed order, every value `'TODO'`), bilingual `thread:`
+block-scalar TODOs, and `sparks: []`, plus a minimal `## Notes` body. It refuses (exit 1) if the slug already exists. The daily lit autosweep
 calls this for each public-worthy paper, then the 13-item analysis is filled in both
 languages from the paper itself in the enriched format (2–4 sentences per key, first
 sentence = the crisp claim) in a public-facing tone, figures are downloaded and credited,

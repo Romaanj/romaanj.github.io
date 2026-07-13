@@ -151,7 +151,10 @@ const accGroups = [
   <div class="loop-page">
     <section class="section">
       <div class="container">
-        <p class="eyebrow">Study · Model anatomy</p>
+        <div class="hero-top">
+          <p class="eyebrow">Study · Model anatomy</p>
+          <LangToggle />
+        </div>
         <h1>
           <span class="lang-en">Looped transformers: depth as a runtime knob</span>
           <span class="lang-ko">Looped Transformer: 런타임 노브가 된 깊이</span>
@@ -173,15 +176,32 @@ const accGroups = [
           </span>
         </p>
 
-        <div class="toggle-row"><LangToggle /></div>
+        <nav class="arc-roadmap" aria-label="Section roadmap">
+          <a href="#arc-s1"><span class="arc-n">§1</span><span class="lang-en">The itch</span><span class="lang-ko">문제의식</span></a>
+          <a href="#arc-s2"><span class="arc-n">§2</span><span class="lang-en">Foundations</span><span class="lang-ko">기초</span></a>
+          <a href="#arc-s3"><span class="arc-n">§3</span><span class="lang-en">The shape</span><span class="lang-ko">형태</span></a>
+          <a href="#arc-s4"><span class="arc-n">§4</span><span class="lang-en">Feeding the loop</span><span class="lang-ko">입력 주입</span></a>
+          <a href="#arc-s5"><span class="arc-n">§5</span><span class="lang-en">Stability</span><span class="lang-ko">안정성</span></a>
+          <a href="#arc-s6"><span class="arc-n">§6</span><span class="lang-en">Training</span><span class="lang-ko">학습</span></a>
+          <a href="#arc-s7"><span class="arc-n">§7</span><span class="lang-en">Test-time depth</span><span class="lang-ko">Test-time 깊이</span></a>
+          <a href="#arc-s8"><span class="arc-n">§8</span><span class="lang-en">The accounting</span><span class="lang-ko">장부 정리</span></a>
+          <a href="#arc-s9"><span class="arc-n">§9</span><span class="lang-en">Where this goes</span><span class="lang-ko">앞으로의 방향</span></a>
+        </nav>
 
-        <div class="jump-row">
-          <a class="tag" href="#shape-view">1 · The shape</a>
-          <a class="tag" href="#feed-view">2 · Feeding the loop</a>
-          <a class="tag" href="#stab-view">3 · Stability</a>
-          <a class="tag" href="#train-view">4 · Training</a>
-          <a class="tag" href="#scale-view">5 · Test-time depth</a>
-          <a class="tag" href="#eff-view">6 · The accounting</a>
+        <div class="arc-prereq">
+          <span class="lang-en"><strong>Before you start.</strong> This page assumes you know what
+            a transformer layer is — attention plus an MLP, each with its own weights — and why a
+            decoder keeps a KV cache; <a href="/study/models/attention-anatomy/">attention
+            anatomy</a> covers both. §8 also leans on the fact that batch-1 decode is
+            memory-bandwidth-bound (weights re-read from HBM for every token) — see
+            <a href="/study/gpu/memory-hierarchy/">the GPU memory hierarchy</a>.</span>
+          <span class="lang-ko"><strong>시작하기 전에.</strong> 이 페이지는 transformer layer가
+            무엇인지 — attention + MLP, 각자 자기 weight를 가진 — 그리고 decoder가 왜 KV cache를
+            유지하는지 알고 있다고 가정한다. 둘 다
+            <a href="/study/models/attention-anatomy/">attention anatomy</a>에서 다룬다. §8은
+            batch-1 decode가 memory-bandwidth-bound라는 사실(모든 token마다 weight를 HBM에서 다시
+            읽는다)에도 기대는데, 이는
+            <a href="/study/gpu/memory-hierarchy/">GPU memory hierarchy</a>를 보라.</span>
         </div>
 
         <div class="config-note">
@@ -199,13 +219,172 @@ const accGroups = [
       </div>
     </section>
 
-    <!-- ============ 1 · THE SHAPE ============ -->
-    <section class="section-tight" id="shape-view">
+    <!-- ============ §1 · THE ITCH ============ -->
+    <section class="section-tight" id="arc-s1">
       <div class="container">
-        <h2 class="viz-h">
-          <span class="lang-en">1 · The shape: two ways to be 32 layers deep</span>
-          <span class="lang-ko">1 · 형태: 32 layer 깊이가 되는 두 가지 방법</span>
+        <h2 class="arc-heading"><span class="arc-num">§1</span>
+          <span class="lang-en">The itch: depth is welded to parameters</span>
+          <span class="lang-ko">문제의식: 깊이가 파라미터에 용접되어 있다</span>
         </h2>
+        <div class="prose">
+          <p>
+            <span class="lang-en">In a standard transformer, the only way to be deeper is to buy
+              more layers. Every layer carries its own weight matrices, so a 32-layer model stores —
+              and, at batch-1 decode, re-reads from HBM for every generated token — 32 layers’ worth
+              of bytes. Depth is decided once, at training time, and then billed forever: bytes
+              stored, bytes shipped to every serving replica, bytes read per token.</span>
+            <span class="lang-ko">Standard transformer에서 더 깊어지는 유일한 방법은 layer를 더
+              사는 것이다. 모든 layer가 자기만의 weight 행렬을 가지므로, 32-layer 모델은 32개
+              layer 분량의 byte를 저장하고 — batch-1 decode에선 생성되는 token마다 HBM에서 다시
+              읽는다. 깊이는 학습 시점에 한 번 결정되고, 그 값은 영원히 청구된다: 저장하는 byte,
+              모든 serving replica로 전송하는 byte, token마다 읽는 byte.</span>
+          </p>
+          <p>
+            <span class="lang-en">There is a second, quieter problem: that frozen depth is spent
+              identically on every token. Completing “2 + 2 =” and carrying out a hard reasoning
+              step receive exactly the same 32 layers of computation. What we would actually like
+              is a model whose depth is a <em>runtime knob</em> — a few passes for easy tokens,
+              many for hard ones — without the parameter bill growing with the knob. That is the
+              promise of looped transformers; the rest of this page is what it takes to make the
+              promise real, and what it honestly costs.</span>
+            <span class="lang-ko">더 조용한 두 번째 문제도 있다: 그 얼어붙은 깊이가 모든 token에
+              똑같이 지출된다. “2 + 2 =”를 완성하는 것과 어려운 reasoning 스텝을 수행하는 것이
+              정확히 같은 32 layer의 연산을 받는다. 우리가 실제로 원하는 것은 깊이가 <em>런타임
+              노브</em>인 모델이다 — 쉬운 token엔 몇 pass, 어려운 token엔 많이 — 노브를 돌려도
+              파라미터 청구서는 늘지 않으면서. 그것이 looped transformer의 약속이고, 이 페이지의
+              나머지는 그 약속을 실현하는 데 무엇이 필요한지, 그리고 정직하게 무엇을 지불하는지다.</span>
+          </p>
+        </div>
+        <div class="viz-frame">
+          <div class="loop-scroll">
+          <svg viewBox="0 0 760 300" role="img" aria-label="Left: three standard transformer stacks whose parameter counts grow in lockstep with depth; right: a single small weight-tied core whose depth is chosen at runtime while stored parameters stay fixed" style="width:100%; height:auto; min-width:700px;">
+            <defs>
+              <marker id="arrItch" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+                <path d="M0,0 L10,5 L0,10 z" fill="#c15f3c"></path>
+              </marker>
+            </defs>
+            <text class="stitle" x="195" y="26" text-anchor="middle">standard: deeper ⇒ more parameters</text>
+            <g data-tip="8 unique layers → 8 p parameters. Depth and parameter count move in lockstep — this is the weld." data-tip-ko="Unique layer 8개 → 8 p 파라미터. 깊이와 파라미터 수가 같이 움직인다 — 이것이 용접이다.">
+              <rect class="std-cell" x="60" y="202" width="70" height="48" rx="4"></rect>
+              <text class="smono" x="95" y="268" text-anchor="middle">8 L → 8 p</text>
+            </g>
+            <g data-tip="16 unique layers → 16 p parameters. Twice the depth, twice the bytes." data-tip-ko="Unique layer 16개 → 16 p 파라미터. 깊이 2배, byte도 2배.">
+              <rect class="std-cell" x="160" y="154" width="70" height="96" rx="4"></rect>
+              <text class="smono" x="195" y="268" text-anchor="middle">16 L → 16 p</text>
+            </g>
+            <g data-tip="32 unique layers → 32 p parameters — stored, shipped, and re-read from HBM for every decoded token." data-tip-ko="Unique layer 32개 → 32 p 파라미터 — 저장하고, 전송하고, decode되는 token마다 HBM에서 다시 읽는다.">
+              <rect class="std-cell" x="260" y="58" width="70" height="192" rx="4"></rect>
+              <text class="smono" x="295" y="268" text-anchor="middle">32 L → 32 p</text>
+            </g>
+            <text class="mlabel" x="195" y="288" text-anchor="middle">depth chosen at training time — paid in bytes forever</text>
+
+            <line x1="395" y1="40" x2="395" y2="270" stroke="#d1cfc5" stroke-width="1.5" stroke-dasharray="2 6"></line>
+
+            <text class="stitle taccent" x="577" y="26" text-anchor="middle">wanted: depth as a runtime knob</text>
+            <g data-tip="One small set of layers, stored once. Apply it r times: effective depth grows with r, the parameter count does not." data-tip-ko="작은 layer 묶음 하나를 한 번만 저장한다. r번 적용하면 유효 깊이는 r을 따라 커지지만 파라미터 수는 그대로다.">
+              <rect class="core-frame" x="470" y="120" width="180" height="76" rx="10"></rect>
+              <text class="stitle sm taccent" x="560" y="148" text-anchor="middle">small core — p′ params</text>
+              <text class="smono" x="560" y="170" text-anchor="middle">stored once</text>
+            </g>
+            <path class="loopline" d="M650,180 H700 V136 H654" fill="none" marker-end="url(#arrItch)"></path>
+            <text class="smono taccent" x="702" y="210" text-anchor="middle">× r — choose</text>
+            <text class="smono taccent" x="702" y="226" text-anchor="middle">at inference</text>
+            <text class="mlabel" x="560" y="252" text-anchor="middle">r = 4, 8, 32, 64… — same stored bytes every time</text>
+            <text class="mlabel" x="560" y="270" text-anchor="middle">hard token → more passes · easy token → fewer</text>
+          </svg>
+          </div>
+        </div>
+        <p class="arc-question">
+          <span class="lang-en">Can effective depth be decoupled from stored parameters at all?</span>
+          <span class="lang-ko">유효 깊이를 저장 파라미터에서 떼어내는 것이 애초에 가능한가?</span>
+        </p>
+      </div>
+    </section>
+
+    <!-- ============ §2 · FOUNDATIONS ============ -->
+    <section class="section-tight" id="arc-s2">
+      <div class="container">
+        <h2 class="arc-heading"><span class="arc-num">§2</span>
+          <span class="lang-en">Foundations: weight tying and fixed-point iteration</span>
+          <span class="lang-ko">기초: weight tying과 fixed-point iteration</span>
+        </h2>
+        <div class="prose">
+          <p>
+            <span class="lang-en">The escape hatch is old: <b>weight tying</b>. If two layers share
+              one set of weights, the parameter count halves while the computation does not. Push
+              it to the limit — one block applied r times — and depth becomes function composition,
+              f(f(…f(x))): a recurrence, not through time like an RNN, but <em>through depth</em>.
+              ALBERT (arXiv 1909.11942) used cross-layer sharing to shrink pretraining; the
+              Universal Transformer (arXiv 1807.03819) made the loop explicit, applying one shared
+              block under a dynamic halting rule, and is Turing-complete under certain
+              assumptions.</span>
+            <span class="lang-ko">탈출구는 오래된 것이다: <b>weight tying</b>. 두 layer가 weight
+              한 벌을 공유하면 파라미터 수는 절반이 되지만 연산은 그대로다. 극한까지 밀면 — block
+              하나를 r번 적용 — 깊이는 함수 합성 f(f(…f(x)))가 된다: RNN처럼 시간 방향이 아니라
+              <em>깊이 방향</em>의 recurrence다. ALBERT(arXiv 1909.11942)는 cross-layer 공유로
+              pretraining을 줄였고, Universal Transformer(arXiv 1807.03819)는 loop를 명시적으로
+              만들어 공유 block 하나를 dynamic halting 규칙 아래 반복 적용했다 — 특정 가정 하에
+              Turing-complete.</span>
+          </p>
+          <p>
+            <span class="lang-en">Iterating one map is a well-studied object: <b>fixed-point
+              iteration</b>. Apply f again and again and one of two things happens. If f contracts
+              (spectral radius of its transition below 1), the iterates converge to a fixed point
+              x* with f(x*) = x*; if it expands, they blow up. This one dichotomy organizes most of
+              the page: it is what gives “more loops” a meaning — each pass refines the state
+              toward an input-conditioned answer — and it names the failure mode training must
+              avoid. Both halves return, quantitatively, in §5.</span>
+            <span class="lang-ko">한 map을 반복 적용하는 것은 잘 연구된 대상이다: <b>fixed-point
+              iteration</b>. f를 계속 적용하면 둘 중 하나가 일어난다. f가 수축하면(transition의
+              spectral radius가 1 미만) iterate들은 f(x*) = x*인 fixed point x*로 수렴하고,
+              팽창하면 폭발한다. 이 이분법 하나가 페이지 대부분을 조직한다: “loop를 더 돈다”에
+              의미를 주는 것 — 매 pass가 state를 입력-조건부 답으로 다듬는다 — 이자, 학습이 피해야
+              할 실패 모드의 이름이기도 하다. 두 측면 모두 §5에서 정량적으로 돌아온다.</span>
+          </p>
+          <p>
+            <span class="lang-en">So why did looped models take until recently to become
+              competitive language models? Because naive looping — feed the block its own output
+              and nothing else — turns out to be the wrong recurrence. Making the loop stable,
+              trainable, and worth its FLOPs took a handful of specific engineering decisions, and
+              those are the next sections.</span>
+            <span class="lang-ko">그렇다면 looped 모델이 경쟁력 있는 언어 모델이 되기까지 왜
+              최근까지 걸렸는가? block에 자기 출력만 되먹이는 naive looping이 잘못된 recurrence로
+              판명났기 때문이다. loop를 안정적이고, 학습 가능하고, FLOPs 값을 하게 만드는 데는
+              구체적인 엔지니어링 결정 몇 가지가 필요했고, 그것이 다음 섹션들이다.</span>
+          </p>
+        </div>
+        <div class="arc-takeaway">
+          <span class="arc-takeaway-label"><span class="lang-en">Takeaway</span><span class="lang-ko">핵심 한 줄</span></span>
+          <span class="lang-en">Weight tying turns depth into iteration of one map, and fixed-point
+            theory says iteration converges exactly when the map contracts — everything that
+            follows is engineering that keeps a transformer core in the contracting regime while it
+            does useful work.</span>
+          <span class="lang-ko">weight tying은 깊이를 한 map의 반복으로 바꾸고, fixed-point 이론은
+            그 반복이 map이 수축할 때 정확히 수렴한다고 말한다 — 이후의 모든 것은 transformer
+            core가 유용한 일을 하면서도 수축 영역에 머물게 하는 엔지니어링이다.</span>
+        </div>
+        <p class="arc-question">
+          <span class="lang-en">What does a competitive looped LM actually look like, next to the standard stack it replaces?</span>
+          <span class="lang-ko">경쟁력 있는 looped LM은 그것이 대체하는 standard stack 옆에서 실제로 어떤 모습인가?</span>
+        </p>
+      </div>
+    </section>
+
+    <!-- ============ §3 · THE SHAPE ============ -->
+    <section class="section-tight" id="arc-s3">
+      <div class="container">
+        <h2 class="arc-heading"><span class="arc-num">§3</span>
+          <span class="lang-en">The shape: two ways to be 32 layers deep</span>
+          <span class="lang-ko">형태: 32 layer 깊이가 되는 두 가지 방법</span>
+        </h2>
+        <p class="arc-bridge">
+          <span class="lang-en">We want depth without buying parameters, and §2 handed us the tool
+            — one block, applied r times. Here is the finished object: the prelude–core–coda
+            sandwich, standing next to the standard stack it competes with.</span>
+          <span class="lang-ko">파라미터를 사지 않고 깊이를 얻고 싶고, 도구는 §2가 건네주었다 —
+            block 하나를 r번 적용하는 것. 여기 완성된 물건이 있다: prelude–core–coda 샌드위치가,
+            경쟁 상대인 standard stack 옆에 서 있다.</span>
+        </p>
         <p class="viz-sub">
           <span class="lang-en">Left: a standard net, 32 unique layers. Right: the sandwich —
             prelude → weight-tied core × 8 → coda. Both apply 32 layer-transformations per token;
@@ -300,16 +479,40 @@ const accGroups = [
           </svg>
           </div>
         </div>
+        <div class="arc-takeaway">
+          <span class="arc-takeaway-label"><span class="lang-en">Takeaway</span><span class="lang-ko">핵심 한 줄</span></span>
+          <span class="lang-en">Both nets apply 32 layer-transformations per token, but only the
+            standard one stores 32 layers of weights: looping decouples stored parameters from
+            effective depth (~8× fewer unique bytes in this worked example) while compute per token
+            stays identical.</span>
+          <span class="lang-ko">두 네트워크 모두 token마다 32번의 layer 변환을 적용하지만, 32개
+            layer 분량의 weight를 저장하는 쪽은 standard뿐이다: looping은 저장 파라미터와 유효
+            깊이를 분리하고(이 계산 예시에선 unique byte ~8× 감소), token당 연산량은 동일하게
+            유지된다.</span>
+        </div>
+        <p class="arc-question">
+          <span class="lang-en">If the core just eats its own output eight times, what stops the input from washing out of the state?</span>
+          <span class="lang-ko">core가 자기 출력을 여덟 번 되먹기만 한다면, 입력이 state에서 씻겨 나가는 것은 무엇이 막는가?</span>
+        </p>
       </div>
     </section>
 
-    <!-- ============ 2 · FEEDING THE LOOP ============ -->
-    <section class="section-tight" id="feed-view">
+    <!-- ============ §4 · FEEDING THE LOOP ============ -->
+    <section class="section-tight" id="arc-s4">
       <div class="container">
-        <h2 class="viz-h">
-          <span class="lang-en">2 · Feeding the loop: how one token’s state cycles</span>
-          <span class="lang-ko">2 · Loop에 입력 먹이기: token 하나의 state 순환</span>
+        <h2 class="arc-heading"><span class="arc-num">§4</span>
+          <span class="lang-en">Feeding the loop: how one token’s state cycles</span>
+          <span class="lang-ko">Loop에 입력 먹이기: token 하나의 state 순환</span>
         </h2>
+        <p class="arc-bridge">
+          <span class="lang-en">We now have the sandwich. But the coral loop arrow in §3 hides the
+            load-bearing decision: what exactly re-enters the core at each pass? Getting this wrong
+            is the difference between the Universal Transformer of 2018 and the looped LMs that
+            work today.</span>
+          <span class="lang-ko">이제 샌드위치는 손에 있다. 그러나 §3의 loop 화살표는 하중을 받치는
+            결정 하나를 숨기고 있다: 매 pass마다 core로 정확히 무엇이 재진입하는가? 이것을 틀리는
+            것이 2018년 Universal Transformer와 오늘날 작동하는 looped LM들의 차이다.</span>
+        </p>
         <p class="viz-sub">
           <span class="lang-en">The load-bearing detail. Every serious looped LM re-injects the
             input <em>at every iteration</em> — the recurrence is s<sub>i</sub> = R(e, s<sub>i−1</sub>),
@@ -467,16 +670,53 @@ const accGroups = [
             </p>
           </noscript>
         </div>
+        <p class="viz-sub">
+          <span class="lang-en">The three verified injection mechanisms — concat + adapter
+            (Huginn), decay-SSM (Parcae), additive E + h (LOTUS) — are three answers to the same
+            question, and the public Parcae repo ships all three as selectable modules
+            (<code>LinearInjection</code>, <code>DiagonalInjection</code>,
+            <code>AdditiveInjection</code> in <code>parcae_lm/modules/injection.py</code>). Even
+            the initial state is deliberate: noise, so the model learns to converge from
+            anywhere.</span>
+          <span class="lang-ko">검증된 세 가지 주입 메커니즘 — concat + adapter(Huginn),
+            decay-SSM(Parcae), additive E + h(LOTUS) — 은 같은 질문에 대한 세 가지 답이고, 공개
+            Parcae repo는 셋 다 선택 가능한 모듈로 제공한다
+            (<code>parcae_lm/modules/injection.py</code>의 <code>LinearInjection</code>,
+            <code>DiagonalInjection</code>, <code>AdditiveInjection</code>). 초기 state까지도
+            의도적이다: noise에서 시작해, 어디서 출발하든 수렴하도록 학습시킨다.</span>
+        </p>
+        <div class="arc-takeaway">
+          <span class="arc-takeaway-label"><span class="lang-en">Takeaway</span><span class="lang-ko">핵심 한 줄</span></span>
+          <span class="lang-en">A working looped LM computes sᵢ = R(e, sᵢ₋₁), not hᵢ = f(hᵢ₋₁):
+            the input is re-injected at every iteration and the state starts from noise — with e
+            only at the start, “the iterative process would not be stable” (Huginn §3.1).</span>
+          <span class="lang-ko">작동하는 looped LM은 hᵢ = f(hᵢ₋₁)이 아니라 sᵢ = R(e, sᵢ₋₁)을
+            계산한다: 입력이 매 iteration 재주입되고 state는 noise에서 출발한다 — e가 시작에만
+            주어지면 “iterative process는 불안정하다” (Huginn §3.1).</span>
+        </div>
+        <p class="arc-question">
+          <span class="lang-en">Re-injection feeds the loop — but what guarantees that 32 passes of the same block contract instead of exploding?</span>
+          <span class="lang-ko">재주입이 loop를 먹여 살린다 — 그런데 같은 block을 32번 통과시켜도 폭발하지 않고 수축한다는 보장은 어디서 오는가?</span>
+        </p>
       </div>
     </section>
 
-    <!-- ============ 3 · STABILITY ============ -->
-    <section class="section-tight" id="stab-view">
+    <!-- ============ §5 · STABILITY ============ -->
+    <section class="section-tight" id="arc-s5">
       <div class="container">
-        <h2 class="viz-h">
-          <span class="lang-en">3 · Keeping the loop stable: ρ(Ā) decides</span>
-          <span class="lang-ko">3 · Loop 안정화: ρ(Ā)가 결정한다</span>
+        <h2 class="arc-heading"><span class="arc-num">§5</span>
+          <span class="lang-en">Keeping the loop stable: ρ(Ā) decides</span>
+          <span class="lang-ko">Loop 안정화: ρ(Ā)가 결정한다</span>
         </h2>
+        <p class="arc-bridge">
+          <span class="lang-en">Here §2’s fixed-point dichotomy becomes measurable. Iterate a map,
+            and the spectral radius of its transition decides everything: below 1, contraction to a
+            fixed point; at or above 1, explosion. Parcae located exactly this quantity inside
+            trained looped LMs.</span>
+          <span class="lang-ko">§2의 fixed-point 이분법이 여기서 측정 가능한 것이 된다. map을
+            반복하면 transition의 spectral radius가 모든 것을 결정한다: 1 미만이면 fixed point로
+            수축, 1 이상이면 폭발. Parcae는 바로 이 양을 학습된 looped LM 안에서 찾아냈다.</span>
+        </p>
         <p class="viz-sub">
           <span class="lang-en">Parcae’s diagnosis of why looped-LM training blows up: divergent
             runs learn a spectral radius ρ(Ā) ≥ 1 in the injection parameters; convergent runs keep
@@ -562,16 +802,39 @@ const accGroups = [
             <span class="eq-chip" data-tip="Huginn maintains path independence in the sense of Anil et al. (2022): the state converges toward input-conditioned fixed points regardless of initialization — verified on the trained model." data-tip-ko="Huginn은 Anil et al. (2022) 의미의 path independence를 유지한다: state가 초기화와 무관하게 입력-조건부 fixed point로 수렴 — 학습된 모델에서 검증됨.">+ noise init → path independence (Huginn)</span>
           </div>
         </div>
+        <div class="arc-takeaway">
+          <span class="arc-takeaway-label"><span class="lang-en">Takeaway</span><span class="lang-ko">핵심 한 줄</span></span>
+          <span class="lang-en">Divergent training runs are the ones that learned ρ(Ā) ≥ 1 in the
+            injection parameters; Parcae’s diagonal decay Ā = exp(ΔA) keeps every entry in (0, 1)
+            by construction, so the injection transition cannot leave the contracting regime —
+            stability becomes structural, not lucky.</span>
+          <span class="lang-ko">발산한 학습 run들은 injection 파라미터에서 ρ(Ā) ≥ 1을 학습해 버린
+            run들이다; Parcae의 대각 decay Ā = exp(ΔA)는 구조적으로 모든 성분을 (0, 1)에 가두므로,
+            injection transition은 수축 영역을 벗어날 수 없다 — 안정성이 운이 아니라 구조가 된다.</span>
+        </div>
+        <p class="arc-question">
+          <span class="lang-en">A stable loop still has to be trained at some depth. Which r do you unroll — and can you afford backprop through all of it?</span>
+          <span class="lang-ko">안정적인 loop라도 결국 어떤 깊이에서 학습되어야 한다. 어떤 r로 펼칠 것인가 — 그리고 그 전부를 backprop할 여력은 있는가?</span>
+        </p>
       </div>
     </section>
 
-    <!-- ============ 4 · TRAINING ============ -->
-    <section class="section-tight" id="train-view">
+    <!-- ============ §6 · TRAINING ============ -->
+    <section class="section-tight" id="arc-s6">
       <div class="container">
-        <h2 class="viz-h">
-          <span class="lang-en">4 · Training the loop: random depth, truncated gradients</span>
-          <span class="lang-ko">4 · Loop 학습: random depth와 truncated gradient</span>
+        <h2 class="arc-heading"><span class="arc-num">§6</span>
+          <span class="lang-en">Training the loop: random depth, truncated gradients</span>
+          <span class="lang-ko">Loop 학습: random depth와 truncated gradient</span>
         </h2>
+        <p class="arc-bridge">
+          <span class="lang-en">Stability makes deep unrolling possible; training decides which
+            depths the model will ever be good at. Bake in one r and depth stops being a knob — so
+            the working recipe makes r itself a random variable, and keeps the backprop bill
+            bounded.</span>
+          <span class="lang-ko">안정성은 깊은 unrolling을 가능하게 하고, 학습은 모델이 어떤
+            깊이에서 잘할지를 결정한다. r 하나를 구워 넣으면 깊이는 더 이상 노브가 아니다 — 그래서
+            작동하는 레시피는 r 자체를 확률변수로 만들고, backprop 청구서는 유한하게 묶는다.</span>
+        </p>
         <p class="viz-sub">
           <span class="lang-en">Three verified schemes. Depth is sampled per step so the model
             never overfits one loop count; gradients flow through only a suffix of the loop;
@@ -583,8 +846,8 @@ const accGroups = [
 
         <div class="viz-frame">
           <h3 class="panel-h">
-            <span class="lang-en">4a · Depth is a random variable at train time</span>
-            <span class="lang-ko">4a · 학습 시 depth는 확률변수다</span>
+            <span class="lang-en">6a · Depth is a random variable at train time</span>
+            <span class="lang-ko">6a · 학습 시 depth는 확률변수다</span>
           </h3>
           <p class="panel-sub">
             <span class="lang-en">Huginn samples r per step from a log-normal Poisson:
@@ -618,8 +881,8 @@ const accGroups = [
 
         <div class="viz-frame">
           <h3 class="panel-h">
-            <span class="lang-en">4b · Truncated backprop: gradients only through the last k</span>
-            <span class="lang-ko">4b · Truncated backprop: 마지막 k개에만 gradient</span>
+            <span class="lang-en">6b · Truncated backprop: gradients only through the last k</span>
+            <span class="lang-ko">6b · Truncated backprop: 마지막 k개에만 gradient</span>
           </h3>
           <p class="panel-sub">
             <span class="lang-en">Unrolling 32+ iterations for backprop would be ruinous. Huginn
@@ -661,8 +924,8 @@ const accGroups = [
 
         <div class="viz-frame">
           <h3 class="panel-h">
-            <span class="lang-en">4c · LOTUS: dense latent supervision — dense across positions, at the final iteration</span>
-            <span class="lang-ko">4c · LOTUS: dense latent supervision — 위치에 대해 dense, 마지막 iteration에서</span>
+            <span class="lang-en">6c · LOTUS: dense latent supervision — dense across positions, at the final iteration</span>
+            <span class="lang-ko">6c · LOTUS: dense latent supervision — 위치에 대해 dense, 마지막 iteration에서</span>
           </h3>
           <p class="panel-sub">
             <span class="lang-en">Every latent position’s <b>post-loop</b> state h⁽ᴿ⁾ is decoded
@@ -714,16 +977,39 @@ const accGroups = [
           </svg>
           </div>
         </div>
+        <div class="arc-takeaway">
+          <span class="arc-takeaway-label"><span class="lang-en">Takeaway</span><span class="lang-ko">핵심 한 줄</span></span>
+          <span class="lang-en">Three verified tricks — sample r per step (log-normal Poisson,
+            r̄ = 32), backprop only through the last k = 8 iterations, and (LOTUS) supervise every
+            latent position at the final iteration — together produce a core that behaves at any
+            r.</span>
+          <span class="lang-ko">검증된 세 가지 트릭 — r을 스텝마다 샘플링(log-normal Poisson,
+            r̄ = 32), 마지막 k = 8 iteration만 backprop, 그리고 (LOTUS) 마지막 iteration에서 모든
+            latent 위치를 supervision — 이 셋이 합쳐져 어떤 r에서도 제대로 동작하는 core를
+            만든다.</span>
+        </div>
+        <p class="arc-question">
+          <span class="lang-en">Trained under random depth, the model accepts any r at inference. What does turning that knob actually buy — and when does it stop paying?</span>
+          <span class="lang-ko">random depth로 학습된 모델은 inference에서 어떤 r이든 받는다. 그 노브를 돌리면 실제로 무엇을 얻는가 — 그리고 언제부터 돈값을 못 하는가?</span>
+        </p>
       </div>
     </section>
 
-    <!-- ============ 5 · TEST-TIME DEPTH ============ -->
-    <section class="section-tight" id="scale-view">
+    <!-- ============ §7 · TEST-TIME DEPTH ============ -->
+    <section class="section-tight" id="arc-s7">
       <div class="container">
-        <h2 class="viz-h">
-          <span class="lang-en">5 · Test-time depth: the runtime knob, and what it caches</span>
-          <span class="lang-ko">5 · Test-time depth: 런타임 노브, 그리고 무엇이 cache되는가</span>
+        <h2 class="arc-heading"><span class="arc-num">§7</span>
+          <span class="lang-en">Test-time depth: the runtime knob, and what it caches</span>
+          <span class="lang-ko">Test-time depth: 런타임 노브, 그리고 무엇이 cache되는가</span>
         </h2>
+        <p class="arc-bridge">
+          <span class="lang-en">This is the payoff the title promised. Because no single depth was
+            baked in at training, r is now an inference-time choice — the interesting facts are the
+            shape of the quality curve, and what each extra loop quietly costs.</span>
+          <span class="lang-ko">제목이 약속한 보상이 여기다. 학습에서 특정 깊이가 구워지지
+            않았으므로 r은 이제 inference 시점의 선택이다 — 흥미로운 사실은 품질 곡선의 모양, 그리고
+            추가 loop 하나하나가 조용히 청구하는 비용이다.</span>
+        </p>
         <p class="viz-sub">
           <span class="lang-en">Trained under random r, the model accepts any r at inference.
             Quality follows a saturating exponential — Parcae fits it explicitly as
@@ -793,10 +1079,26 @@ const accGroups = [
           </div>
         </div>
 
+        <p class="viz-sub">
+          <span class="lang-en">Because r was sampled at training time, no single depth is baked
+            in — the model must produce something sensible at r = 4 and at r = 64. That is what
+            turns depth into a runtime knob: quality follows a saturating exponential in r, the
+            ceiling is task-dependent (recall saturates early, reasoning keeps climbing), and a
+            per-token KL test tells you when a token is done thinking. Depth becomes a scheduling
+            decision, made per token, at inference. One more consequence hides inside the loop:
+            every extra iteration runs attention again — which is the panel below.</span>
+          <span class="lang-ko">r이 학습 시점에 샘플링되었기에 특정 깊이가 구워져 있지 않다 —
+            모델은 r = 4에서도 r = 64에서도 말이 되는 출력을 내야 한다. 이것이 깊이를 런타임 노브로
+            바꾼다: 품질은 r의 포화 지수 곡선을 따르고, 천장은 task마다 다르며(recall은 일찍 포화,
+            reasoning은 계속 상승), token이 생각을 끝냈는지는 per-token KL 검사가 알려 준다. 깊이는
+            inference에서 token 단위로 내리는 스케줄링 결정이 된다. loop 안에는 결과가 하나 더 숨어
+            있다: 추가 iteration마다 attention이 다시 돈다 — 그것이 아래 패널이다.</span>
+        </p>
+
         <div class="viz-frame">
           <h3 class="panel-h">
-            <span class="lang-en">5b · What the loop caches: KV along the iteration axis</span>
-            <span class="lang-ko">5b · Loop가 cache하는 것: iteration 축의 KV</span>
+            <span class="lang-en">7b · What the loop caches: KV along the iteration axis</span>
+            <span class="lang-ko">7b · Loop가 cache하는 것: iteration 축의 KV</span>
           </h3>
           <p class="panel-sub">
             <span class="lang-en">Each loop iteration runs attention again, so at generation the
@@ -851,16 +1153,39 @@ const accGroups = [
           </svg>
           </div>
         </div>
+        <div class="arc-takeaway">
+          <span class="arc-takeaway-label"><span class="lang-en">Takeaway</span><span class="lang-ko">핵심 한 줄</span></span>
+          <span class="lang-en">Depth is now a per-token runtime knob — task-dependent ceilings,
+            KL-based exit (&lt; 5×10⁻⁴) — but what it spends is compute: FLOPs grow linearly in r,
+            and naive KV grows along the loop axis until slots are shared i mod k.</span>
+          <span class="lang-ko">깊이는 이제 token 단위 런타임 노브다 — task별 천장, KL 기반 exit
+            (&lt; 5×10⁻⁴) — 하지만 지출되는 것은 연산이다: FLOPs는 r에 선형으로 늘고, naive KV는
+            slot을 i mod k로 공유하기 전까지 loop 축을 따라 자란다.</span>
+        </div>
+        <p class="arc-question">
+          <span class="lang-en">So which resources did looping actually make cheaper? Time to open the ledger — it has four lines, and they disagree.</span>
+          <span class="lang-ko">그래서 looping이 실제로 싸게 만든 자원은 무엇인가? 장부를 펼 시간이다 — 네 줄이 있고, 서로 말이 다르다.</span>
+        </p>
       </div>
     </section>
 
-    <!-- ============ 6 · EFFICIENCY LENS ============ -->
-    <section class="section-tight" id="eff-view">
+    <!-- ============ §8 · THE ACCOUNTING (DEEP WATER) ============ -->
+    <section class="section-tight" id="arc-s8">
       <div class="container">
-        <h2 class="viz-h">
-          <span class="lang-en">6 · The accounting: params ≠ FLOPs ≠ bytes</span>
-          <span class="lang-ko">6 · 장부 정리: params ≠ FLOPs ≠ bytes</span>
+        <h2 class="arc-heading"><span class="arc-num">§8</span>
+          <span class="lang-en">The accounting: params ≠ FLOPs ≠ bytes</span>
+          <span class="lang-ko">장부 정리: params ≠ FLOPs ≠ bytes</span>
         </h2>
+        <p class="arc-bridge">
+          <span class="lang-en">This is the hardest section of the page — take it slowly. The word
+            “efficient” is doing four different jobs here: parameters, FLOPs, weight-reads, and KV
+            bytes are separate ledgers, and looping moves each one differently. Everything before
+            this was mechanism; this is what it costs.</span>
+          <span class="lang-ko">이 페이지에서 가장 어려운 섹션이다 — 천천히 읽자. 여기서
+            “efficient”라는 단어는 네 가지 다른 일을 하고 있다: parameters, FLOPs, weight-read, KV
+            byte는 서로 다른 장부이고, looping은 각각을 다르게 움직인다. 지금까지가 메커니즘이었다면,
+            여기는 그 값이다.</span>
+        </p>
         <p class="viz-sub">
           <span class="lang-en">Worked example, all arithmetic labeled [RE]: a 4-layer core looped
             8 times versus 32 unique layers at equal width. Four ledgers, four different
@@ -913,12 +1238,12 @@ const accGroups = [
                 <b>Batch-1 decode bandwidth</b>: the core is re-read from HBM every loop, so at
                 matched effective depth the weight-read floor doesn’t drop [RE]. <b>Capacity floors
                 bite at small scale</b>: MoR’s 135M model underperforms vanilla. And per-task
-                ceilings saturate — more loops stop paying (§5).</span>
+                ceilings saturate — more loops stop paying (§7).</span>
               <span class="lang-ko"><b>FLOPs는 r에 비례</b> — 32번 적용은 32번 적용이다.
                 <b>batch-1 decode bandwidth</b>: core를 loop마다 HBM에서 다시 읽으므로, 동일 유효
                 깊이에서 weight-read 바닥은 내려가지 않는다 [RE]. <b>작은 스케일에선 capacity 바닥이
                 문다</b>: MoR 135M은 vanilla보다 못하다. 그리고 task별 천장이 포화하면 loop를 더 돌려도
-                득이 없다 (§5).</span>
+                득이 없다 (§7).</span>
             </p>
           </div>
           <div class="card">
@@ -938,68 +1263,7 @@ const accGroups = [
             </p>
           </div>
         </div>
-      </div>
-    </section>
-
-    <!-- ============ PROSE ============ -->
-    <section class="section">
-      <div class="container">
         <div class="prose">
-          <h2>
-            <span class="lang-en">Reading the diagram</span>
-            <span class="lang-ko">다이어그램 읽는 법</span>
-          </h2>
-
-          <h3><span class="lang-en">It’s a sandwich, not a cycle</span>
-              <span class="lang-ko">순환 고리가 아니라 샌드위치다</span></h3>
-          <p>
-            <span class="lang-en">
-              The working design is prelude → weight-tied core × r → coda, and the detail that makes
-              it work is in panel 2: the recurrence is s<sub>i</sub> = R(e, s<sub>i−1</sub>), with the
-              input e re-entering at every iteration. Huginn states the reason plainly — with e only
-              at the start, the iteration is not stable. The three verified injection mechanisms
-              (concat + adapter, decay-SSM, additive E + h) are three answers to the same question,
-              and the public Parcae repo ships all three as selectable modules
-              (<code>LinearInjection</code>, <code>DiagonalInjection</code>,
-              <code>AdditiveInjection</code> in <code>parcae_lm/modules/injection.py</code>). Even
-              the initial state is deliberate: noise, so the model learns to converge from anywhere.
-            </span>
-            <span class="lang-ko">
-              작동하는 설계는 prelude → weight-tied core × r → coda이고, 이를 작동하게 만드는
-              디테일은 패널 2에 있다: recurrence는 s<sub>i</sub> = R(e, s<sub>i−1</sub>)이며, 입력
-              e가 매 iteration 재진입한다. Huginn은 이유를 명시한다 — e가 시작에만 들어오면 iteration이
-              불안정하다. 검증된 세 가지 주입 메커니즘(concat + adapter, decay-SSM, additive E + h)은
-              같은 질문에 대한 세 가지 답이고, 공개 Parcae repo는 셋 다 선택 가능한 모듈로 제공한다
-              (<code>parcae_lm/modules/injection.py</code>의 <code>LinearInjection</code>,
-              <code>DiagonalInjection</code>, <code>AdditiveInjection</code>). 초기 state까지도
-              의도적이다: noise에서 시작해, 어디서 출발하든 수렴하도록 학습시킨다.
-            </span>
-          </p>
-
-          <h3><span class="lang-en">Depth stops being an architecture constant</span>
-              <span class="lang-ko">깊이가 더 이상 아키텍처 상수가 아니다</span></h3>
-          <p>
-            <span class="lang-en">
-              Because r is sampled at training time (log-normal Poisson, mean 32 for Huginn), no
-              single depth is baked in — the model must produce something sensible at r = 4 and at
-              r = 64. That is what turns depth into a runtime knob: quality follows a saturating
-              exponential in r (Parcae fits it as a law), the ceiling is task-dependent (recall
-              saturates early, reasoning keeps climbing), and a per-token KL test tells you when a
-              token is done thinking. Depth becomes a scheduling decision, made per token, at
-              inference.
-            </span>
-            <span class="lang-ko">
-              r이 학습 시점에 샘플링되므로(Huginn은 평균 32의 log-normal Poisson) 특정 깊이가
-              구워지지 않는다 — 모델은 r = 4에서도 r = 64에서도 말이 되는 출력을 내야 한다. 이것이
-              깊이를 런타임 노브로 바꾼다: 품질은 r의 포화 지수 곡선을 따르고(Parcae는 법칙으로
-              피팅한다), 천장은 task마다 다르며(recall은 일찍 포화, reasoning은 계속 상승), token이
-              생각을 끝냈는지는 per-token KL 검사가 알려 준다. 깊이는 inference에서 token 단위로
-              내리는 스케줄링 결정이 된다.
-            </span>
-          </p>
-
-          <h3><span class="lang-en">The ledger has four different lines</span>
-              <span class="lang-ko">장부에는 서로 다른 네 줄이 있다</span></h3>
           <p>
             <span class="lang-en">
               Weight tying divides <em>unique parameter storage</em> by ~r, and that is real: fewer
@@ -1008,8 +1272,7 @@ const accGroups = [
               core (hundreds of MB) is re-read from HBM every pass, so the weight-bandwidth floor at
               matched effective depth doesn’t move either [RE]. The subtlest line is KV: attention
               runs every iteration, so naive KV grows with r — until you share slots i mod k along
-              the loop axis, which Huginn reports as free at budget 4. Params, FLOPs, weight bytes,
-              KV bytes: four ledgers, and looping helps two of them.
+              the loop axis, which Huginn reports as free at budget 4.
             </span>
             <span class="lang-ko">
               weight tying은 <em>unique 파라미터 저장량</em>을 ~r로 나누고, 이것은 실질적이다:
@@ -1018,9 +1281,74 @@ const accGroups = [
               수백 MB짜리 core를 pass마다 HBM에서 다시 읽으므로 동일 유효 깊이의 weight-bandwidth
               바닥도 움직이지 않는다 [RE]. 가장 미묘한 줄은 KV다: iteration마다 attention이 돌아
               naive KV는 r에 비례해 자란다 — loop 축에서 slot을 i mod k로 공유하기 전까지는. Huginn은
-              budget 4에서 이것이 공짜라고 보고한다. params, FLOPs, weight bytes, KV bytes: 장부 네
-              줄 중 looping이 돕는 것은 두 줄이다.
+              budget 4에서 이것이 공짜라고 보고한다.
             </span>
+          </p>
+        </div>
+        <div class="arc-takeaway">
+          <span class="arc-takeaway-label"><span class="lang-en">Takeaway</span><span class="lang-ko">핵심 한 줄</span></span>
+          <span class="lang-en">Params, FLOPs, weight bytes, KV bytes: four ledgers, and looping
+            helps two — stored parameters (÷ ~r) and KV (only with loop-axis sharing). Compute and
+            batch-1 decode weight-reads stay put at matched effective depth.</span>
+          <span class="lang-ko">params, FLOPs, weight bytes, KV bytes: 장부 네 줄 중 looping이 돕는
+            것은 두 줄이다 — 저장 파라미터(÷ ~r)와 KV(loop 축 공유가 있을 때만). 연산량과 batch-1
+            decode weight-read는 동일 유효 깊이에서 그대로다.</span>
+        </div>
+        <p class="arc-question">
+          <span class="lang-en">If the honest wins are storage, capacity-per-byte, and a brand-new KV axis — where is the field pushing next?</span>
+          <span class="lang-ko">정직한 이득이 저장량, byte당 capacity, 그리고 완전히 새로운 KV 축이라면 — 이 분야는 다음으로 어디를 밀고 있는가?</span>
+        </p>
+      </div>
+    </section>
+
+    <!-- ============ §9 · WHERE THIS GOES ============ -->
+    <section class="section" id="arc-s9">
+      <div class="container">
+        <h2 class="arc-heading"><span class="arc-num">§9</span>
+          <span class="lang-en">Where this goes</span>
+          <span class="lang-ko">앞으로의 방향</span>
+        </h2>
+        <p class="arc-bridge">
+          <span class="lang-en">The mechanics are on the table. What remains is the frontier: what
+            the field is scaling, what it is automating, and what nobody has solved yet.</span>
+          <span class="lang-ko">메커니즘은 테이블 위에 다 올려놓았다. 남은 것은 최전선이다: 이
+            분야가 무엇을 키우고 있고, 무엇을 자동화하고 있으며, 아직 아무도 풀지 못한 것은
+            무엇인가.</span>
+        </p>
+        <div class="prose">
+          <p>
+            <span class="lang-en">Three directions carry most of the momentum. <b>Scale</b>: Ouro
+              (arXiv 2510.25741) pretrained looped LMs on 7.7T tokens, with 1.4B/2.6B models
+              reported to match much larger SOTA LLMs — whether the advantage persists at frontier
+              scale is open. <b>Adaptive depth</b>: Huginn exits zero-shot on a KL test,
+              Mixture-of-Recursions learns per-token routers, Ouro trains an entropy-regularized
+              halting objective — depth is turning into a serving and scheduling problem, and
+              batching tokens that exit at different depths efficiently is largely unsolved.
+              <b>The loop-axis KV cache</b>: a genuinely new structured-redundancy axis — the
+              published record already spans full per-iteration caches, modulo-budget sharing, and
+              recursion-wise caching — and it is an open target for cache work.</span>
+            <span class="lang-ko">추진력 대부분은 세 방향에 실려 있다. <b>스케일</b>: Ouro(arXiv
+              2510.25741)는 looped LM을 7.7T token으로 사전학습했고, 1.4B/2.6B 모델이 훨씬 큰 SOTA
+              LLM에 상응한다고 보고한다 — frontier 스케일에서도 이 이점이 유지되는지는 열린
+              문제다. <b>적응형 깊이</b>: Huginn은 KL 검사로 zero-shot exit하고,
+              Mixture-of-Recursions는 token별 router를 학습하며, Ouro는 entropy-regularized
+              halting 목적함수를 학습한다 — 깊이는 serving·스케줄링 문제로 변하는 중이고, 서로 다른
+              깊이에서 exit하는 token들을 효율적으로 batch하는 문제는 대체로 미해결이다.
+              <b>loop 축 KV cache</b>: 진짜로 새로운 구조적 중복 축이다 — 공개된 기록만 해도 full
+              per-iteration cache, modulo-budget 공유, recursion-wise caching에 걸쳐 있다 — cache
+              연구의 열린 표적이다.</span>
+          </p>
+          <p>
+            <span class="lang-en">Two edges are worth watching from this site’s reviews: LOTUS uses
+              the loop to bridge latent and explicit chain-of-thought reasoning
+              (<a href="/reviews/lotus/">review</a>), and at the small-model end weight sharing is
+              already shipping — MobileLLM’s block-wise layer sharing is the same trick aimed at
+              on-device budgets (<a href="/reviews/mobilellm/">review</a>).</span>
+            <span class="lang-ko">이 사이트의 리뷰에서 지켜볼 만한 가장자리 둘: LOTUS는 loop로
+              latent reasoning과 explicit chain-of-thought 사이를 잇고
+              (<a href="/reviews/lotus/">리뷰</a>), 소형 모델 쪽에서는 weight 공유가 이미 제품으로
+              나가고 있다 — MobileLLM의 block-wise layer 공유는 같은 트릭을 on-device 예산에 겨눈
+              것이다 (<a href="/reviews/mobilellm/">리뷰</a>).</span>
           </p>
         </div>
 
@@ -1061,10 +1389,10 @@ const accGroups = [
         </div>
 
         <div class="prose">
-          <h2>
+          <h3>
             <span class="lang-en">Going deeper</span>
             <span class="lang-ko">더 깊이 보기</span>
-          </h2>
+          </h3>
           <ul class="deeper-list">
             <li><a class="arrow-link" href="https://arxiv.org/abs/2502.05171" target="_blank" rel="noopener">Huginn — scaling test-time compute with latent recurrent depth (arXiv 2502.05171)</a></li>
             <li><a class="arrow-link" href="https://arxiv.org/abs/2604.12946" target="_blank" rel="noopener">Parcae — stable looped LMs via SSM-style state transitions (arXiv 2604.12946)</a></li>
@@ -1091,7 +1419,7 @@ const accGroups = [
               Between Latent and Explicit Reasoning with Looped Transformers”; K = 6, c = 25, R = 6
               at 3B on GSM8k-Aug; loss design and ablation; 70.0 ± 0.9 vs 71.5 in-domain; OOD 63.9
               vs 62.1; thought-phase 2.5–6.9× / total 2.1×). UT, ALBERT, looped-TF-algorithms, MoR,
-              and Ouro as cited inline. Schematic charts (§3, §5) are labeled as such; every [RE]
+              and Ouro as cited inline. Schematic charts (§5, §7) are labeled as such; every [RE]
               item is this page’s arithmetic on those published inputs, not a measured or published
               result. MoR’s speedup is quoted as “up to 2.06×” per its §3.3 (B=Max setting).
             </span>
@@ -1107,7 +1435,7 @@ const accGroups = [
               and Explicit Reasoning with Looped Transformers”; 3B, GSM8k-Aug에서 K = 6, c = 25,
               R = 6; loss 설계와 ablation; in-domain 70.0 ± 0.9 vs 71.5; OOD 63.9 vs 62.1;
               thought-phase 2.5–6.9× / 전체 2.1×). UT, ALBERT, looped-TF-algorithms, MoR, Ouro는
-              본문 인용처 그대로. 개략도 차트(§3, §5)는 그렇게 표기했고, 모든 [RE] 항목은 공개된
+              본문 인용처 그대로. 개략도 차트(§5, §7)는 그렇게 표기했고, 모든 [RE] 항목은 공개된
               입력값 위에서 이 페이지가 한 산술이지 측정되거나 발표된 결과가 아니다. MoR의 speedup은
               §3.3의 “최대 2.06×” (B=Max 설정)를 그대로 인용했다.
             </span>
@@ -1122,7 +1450,7 @@ const accGroups = [
 
 <style is:global>
   /* ---- page chrome ---- */
-  .loop-page .toggle-row { margin: 1.2rem 0 0; }
+  .loop-page .hero-top { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 0.4rem; }
   .loop-page .jump-row { display: flex; gap: 0.6rem; flex-wrap: wrap; margin: 1.4rem 0 0; }
   .loop-page .jump-row .tag { transition: border-color 0.2s, color 0.2s; }
   .loop-page .jump-row .tag:hover { border-color: var(--accent); color: var(--accent-strong); }
@@ -1366,8 +1694,8 @@ const accGroups = [
           ko: 'Iteration {i} / {r}: adapter A가 [sᵢ₋₁ ; e]를 폭 h로 접어 넣고, 4-layer core가 변환한다 — 다른 모든 pass와 동일한 1.5 B params다. 저장소에서 새로 가져오는 것은 없다; 움직인 것은 state뿐이다.',
         },
         end: {
-          en: 'The coda decodes s_r into logits: p = C(s_r). Training used r̄ = 32 on average (132 layer-applications from a 3.5 B model — derived count); at test time r is yours to choose — that is section 5.',
-          ko: 'coda가 s_r을 logits로 decode한다: p = C(s_r). 학습은 평균 r̄ = 32를 썼고(3.5 B 모델에서 132번의 layer-application — 계산값), test 시점의 r은 사용자의 선택이다 — 그것이 섹션 5다.',
+          en: 'The coda decodes s_r into logits: p = C(s_r). Training used r̄ = 32 on average (132 layer-applications from a 3.5 B model — derived count); at test time r is yours to choose — that is §7.',
+          ko: 'coda가 s_r을 logits로 decode한다: p = C(s_r). 학습은 평균 r̄ = 32를 썼고(3.5 B 모델에서 132번의 layer-application — 계산값), test 시점의 r은 사용자의 선택이다 — 그것이 §7이다.',
         },
       },
     },
@@ -1387,8 +1715,8 @@ const accGroups = [
           ko: 'Parcae도 noise에서 시작한다 — 배포 config는 state_init = “like-init”, embedding-init std의 truncated-normal을 쓴다 (parcae.py::initialize_state). prelude 출력 e는 loop에 들어가기 전에 normalize된다.',
         },
         iter: {
-          en: 'Iteration {i} / {r}: the diagonal decay e^(−Δ·A) shrinks the old state elementwise (every entry in (0,1) by construction), Δ·(B e) injects the input, and the transformer block adds its residual R̄. The injection transition cannot learn its way to ρ ≥ 1 — that is the whole §3 story.',
-          ko: 'Iteration {i} / {r}: 대각 decay e^(−Δ·A)가 이전 state를 elementwise로 줄이고(모든 성분이 구조상 (0,1)), Δ·(B e)가 입력을 주입하며, transformer block이 residual R̄를 더한다. injection transition은 학습으로도 ρ ≥ 1에 도달할 수 없다 — 그것이 §3의 전부다.',
+          en: 'Iteration {i} / {r}: the diagonal decay e^(−Δ·A) shrinks the old state elementwise (every entry in (0,1) by construction), Δ·(B e) injects the input, and the transformer block adds its residual R̄. The injection transition cannot learn its way to ρ ≥ 1 — that is the whole §5 story.',
+          ko: 'Iteration {i} / {r}: 대각 decay e^(−Δ·A)가 이전 state를 elementwise로 줄이고(모든 성분이 구조상 (0,1)), Δ·(B e)가 입력을 주입하며, transformer block이 residual R̄를 더한다. injection transition은 학습으로도 ρ ≥ 1에 도달할 수 없다 — 그것이 §5의 전부다.',
         },
         end: {
           en: 'After r = 8 loops, Parcae-1.3B has run 80 layer-applications from 24 unique layers. Published result: +2.99 CORE over a matched transformer — up to 87.5% the relative quality of one twice its size.',

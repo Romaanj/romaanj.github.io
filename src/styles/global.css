@@ -307,3 +307,94 @@ a.card:hover {
 @media (max-width: 640px) {
   .card-grid { grid-template-columns: 1fr; }
 }
+
+/* ---------- study narrative arc (shared by study pages) ---------- */
+.arc-roadmap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1.6rem 0 0.4rem;
+}
+.arc-roadmap a {
+  font-size: 0.82rem;
+  font-weight: 500;
+  padding: 0.32em 0.9em;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  background: var(--surface);
+  transition: color 0.15s, border-color 0.15s;
+}
+.arc-roadmap a:hover { color: var(--accent-strong); border-color: var(--accent); }
+.arc-roadmap a .arc-n {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--accent-strong);
+  margin-right: 0.45em;
+}
+
+.arc-prereq {
+  max-width: var(--prose-width);
+  margin: 1.4rem 0 0;
+  padding: 0.9rem 1.2rem;
+  background: var(--surface-warm);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  font-size: 0.92rem;
+  color: var(--text-secondary);
+}
+.arc-prereq strong { color: var(--text); }
+
+.arc-bridge {
+  max-width: var(--prose-width);
+  font-family: var(--font-serif);
+  font-size: 1.14rem;
+  font-style: italic;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin: 0 0 1.4rem;
+}
+
+.arc-takeaway {
+  max-width: var(--prose-width);
+  margin: 1.6rem 0;
+  padding: 1rem 1.3rem;
+  border-left: 3px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface));
+  border-radius: 0 var(--radius-m) var(--radius-m) 0;
+  font-size: 0.98rem;
+}
+.arc-takeaway .arc-takeaway-label {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent-strong);
+  margin-bottom: 0.3rem;
+}
+
+.arc-question {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5em;
+  margin: 0.4rem 0 0;
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 1.02rem;
+  color: var(--accent-strong);
+}
+.arc-question::before { content: '↳'; font-style: normal; }
+
+.arc-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 0.7em;
+}
+.arc-heading .arc-num {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  font-weight: 600;
+  color: var(--accent-strong);
+  white-space: nowrap;
+}

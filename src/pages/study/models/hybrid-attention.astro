@@ -31,7 +31,10 @@ const layers = Array.from({ length: NL }, (_, i) => {
   <div class="hyb-page">
     <section class="section">
       <div class="container">
-        <p class="eyebrow">Study · Model anatomy</p>
+        <div class="hero-top">
+          <p class="eyebrow">Study · Model anatomy</p>
+          <LangToggle />
+        </div>
         <h1>
           <span class="lang-en">Inside Qwen3.5: a hybrid linear + full attention LLM</span>
           <span class="lang-ko">Qwen3.5 해부: linear + full attention 하이브리드 LLM</span>
@@ -52,13 +55,34 @@ const layers = Array.from({ length: NL }, (_, i) => {
           </span>
         </p>
 
-        <div class="toggle-row"><LangToggle /></div>
+        <nav class="arc-roadmap" aria-label="Sections">
+          <a href="#arc-s1"><span class="arc-n">§1</span><span class="lang-en">The itch</span><span class="lang-ko">문제</span></a>
+          <a href="#arc-s2"><span class="arc-n">§2</span><span class="lang-en">Two memories</span><span class="lang-ko">두 가지 기억</span></a>
+          <a href="#arc-s3"><span class="arc-n">§3</span><span class="lang-en">Layer stack</span><span class="lang-ko">레이어 스택</span></a>
+          <a href="#arc-s4"><span class="arc-n">§4</span><span class="lang-en">Two mixers</span><span class="lang-ko">두 mixer</span></a>
+          <a href="#arc-s5"><span class="arc-n">§5</span><span class="lang-en">Delta rule</span><span class="lang-ko">Delta rule</span></a>
+          <a href="#arc-s6"><span class="arc-n">§6</span><span class="lang-en">Memory race</span><span class="lang-ko">메모리 경주</span></a>
+          <a href="#arc-s7"><span class="arc-n">§7</span><span class="lang-en">The recall tax</span><span class="lang-ko">recall의 대가</span></a>
+          <a href="#arc-s8"><span class="arc-n">§8</span><span class="lang-en">Where this goes</span><span class="lang-ko">다음 갈 곳</span></a>
+        </nav>
 
-        <div class="jump-row">
-          <a class="tag" href="#stack-view">1 · Layer-stack map</a>
-          <a class="tag" href="#mixer-view">2 · Two mixers</a>
-          <a class="tag" href="#memory-view">3 · Memory race</a>
-          <a class="tag" href="#why-view">4 · Why hybridize</a>
+        <div class="arc-prereq">
+          <span class="lang-en">
+            <strong>Before you start:</strong> this page assumes you can read a decoder block —
+            what Q, K, V are, why decode-time inference keeps a <em>KV cache</em>, and roughly what
+            RoPE does to Q and K. If any of that is hazy, the
+            <a href="/study/models/attention-anatomy/">attention anatomy</a> page rebuilds standard
+            attention tensor by tensor, and the <a href="/study/models/rope/">RoPE</a> page covers
+            positional rotation. Everything else is introduced along the way.
+          </span>
+          <span class="lang-ko">
+            <strong>시작 전에:</strong> 이 페이지는 decoder block을 읽을 수 있다는 전제로 쓰였다 —
+            Q, K, V가 무엇인지, decode 추론이 왜 <em>KV cache</em>를 유지하는지, RoPE가 Q와 K에
+            대략 무엇을 하는지. 흐릿하다면 <a href="/study/models/attention-anatomy/">attention
+            해부</a> 페이지가 표준 attention을 tensor 단위로 다시 쌓아 주고,
+            <a href="/study/models/rope/">RoPE</a> 페이지가 위치 회전을 다룬다. 나머지는 본문에서
+            필요한 순간에 소개한다.
+          </span>
         </div>
 
         <div class="config-note">
@@ -79,12 +103,168 @@ const layers = Array.from({ length: NL }, (_, i) => {
       </div>
     </section>
 
-    <!-- ============ 1 · LAYER-STACK MAP ============ -->
-    <section class="section-tight" id="stack-view">
+    <!-- ============ §1 · THE ITCH ============ -->
+    <section class="section-tight" id="arc-s1">
       <div class="container">
-        <h2 class="viz-h">
-          <span class="lang-en">1 · The layer stack: 48 linear + 16 full</span>
-          <span class="lang-ko">1 · 레이어 스택: linear 48 + full 16</span>
+        <h2 class="viz-h arc-heading">
+          <span class="arc-num">§1</span>
+          <span><span class="lang-en">The itch: memory that grows with every token</span>
+          <span class="lang-ko">문제: token마다 자라는 메모리</span></span>
+        </h2>
+        <p class="arc-prose">
+          <span class="lang-en">
+            A decoder LLM generates one token at a time, and to attend back over its past it must
+            <em>keep</em> that past: every attention layer appends the new token's K and V vectors
+            to a cache, and nothing is ever evicted. The cost is small per token and merciless in
+            aggregate. A conventional all-attention model of this page's shape pays 256 KB of cache
+            per token; run it to Qwen3.5's native 262,144-token context and one sequence holds
+            <strong>64 GB</strong> of cache — more than the 27B model's own BF16 weights (≈54 GB).
+            Long context does not fail on compute first; it fails on memory. Batch sizes collapse,
+            and the cost of a conversation scales with its length.
+          </span>
+          <span class="lang-ko">
+            decoder LLM은 token을 하나씩 생성하고, 과거를 attend하려면 그 과거를 <em>보관</em>해야
+            한다: 모든 attention layer가 새 token의 K, V 벡터를 cache에 덧붙이고, 무엇도 제거되지
+            않는다. token당 비용은 작지만 누적은 무자비하다. 이 페이지와 같은 shape의 전통적
+            all-attention 모델은 token당 cache 256 KB를 내는데, Qwen3.5의 네이티브 262,144-token
+            context까지 돌리면 시퀀스 하나가 <strong>64 GB</strong>의 cache를 든다 — 27B 모델의
+            BF16 가중치(≈54 GB)보다 크다. long context는 연산보다 메모리에서 먼저 무너진다.
+            batch 크기가 붕괴하고, 대화 비용이 길이에 비례해 커진다.
+          </span>
+        </p>
+
+        <div class="viz-frame">
+          <svg viewBox="0 0 740 150" role="img" aria-label="The KV cache grows by 256 KB with every generated token; at 262,144 tokens it reaches 64 GB, larger than the model weights" style="width:100%; height:auto;">
+            <text class="stitle" x="20" y="22">every generated token appends to every layer's cache — and nothing leaves</text>
+            {Array.from({ length: 9 }, (_, i) => (
+              <g>
+                <rect class="sbox" x={20 + i * 52} y={38} width="40" height="22" rx="5"></rect>
+                <text class="smono" x={40 + i * 52} y="53" text-anchor="middle">t{i + 1}</text>
+                <rect class="itch-bar" x={24 + i * 52} y={104 - (i + 1) * 5} width="32" height={(i + 1) * 5} rx="2"></rect>
+              </g>
+            ))}
+            <text class="smono" x="490" y="53">… t262,144</text>
+            <rect class="itch-bar itch-bar-end" x="560" y="42" width="40" height="62" rx="3"></rect>
+            <text class="stitle sm taccent" x="612" y="66">64 GB cache / sequence</text>
+            <text class="ssub" x="612" y="84">at 256 KB per token × 262,144</text>
+            <text class="smono" x="20" y="132">cache ledger: +256 KB / token (64 layers × 4 KB) — weights ≈ 54 GB stay fixed; the cache does not</text>
+          </svg>
+        </div>
+
+        <div class="arc-takeaway">
+          <span class="arc-takeaway-label"><span class="lang-en">Takeaway</span><span class="lang-ko">핵심 한 줄</span></span>
+          <span class="lang-en">The KV cache is append-only state that grows without bound — at long
+            context it, not the weights, is the resource that runs out.</span>
+          <span class="lang-ko">KV cache는 무한히 자라는 append-only state다 — long context에서
+            바닥나는 자원은 가중치가 아니라 cache다.</span>
+        </div>
+        <p class="arc-question">
+          <span class="lang-en">Can a layer mix the sequence without keeping the whole sequence around?</span>
+          <span class="lang-ko">시퀀스 전체를 보관하지 않고도 layer가 시퀀스를 섞을 수 있을까?</span>
+        </p>
+      </div>
+    </section>
+
+    <!-- ============ §2 · FOUNDATIONS ============ -->
+    <section class="section-tight" id="arc-s2">
+      <div class="container">
+        <h2 class="viz-h arc-heading">
+          <span class="arc-num">§2</span>
+          <span><span class="lang-en">Foundations: two ways to remember a sequence</span>
+          <span class="lang-ko">기초: 시퀀스를 기억하는 두 가지 방법</span></span>
+        </h2>
+        <p class="arc-prose">
+          <span class="lang-en">
+            First, be precise about what the cache buys. At decode time, softmax attention lets the
+            current query score <em>every</em> stored key and read the matching values — token
+            200,000 is as sharply addressable as token 3. It is a <strong>random-access
+            archive</strong>: exact, position-addressable recall, paid for with O(T) memory and an
+            O(T) read per token.
+          </span>
+          <span class="lang-ko">
+            먼저 cache가 사 주는 것을 정확히 하자. decode 시점의 softmax attention은 현재 query가
+            저장된 <em>모든</em> key를 채점하고 해당 value를 읽게 해 준다 — token 200,000도
+            token 3만큼 선명하게 지정된다. 이것은 <strong>random-access 아카이브</strong>다:
+            정확한 위치 지정 recall을, token당 O(T) 메모리와 O(T) 읽기로 사는 것이다.
+          </span>
+        </p>
+        <p class="arc-prose">
+          <span class="lang-en">
+            The older alternative is the RNN's: fold history into a <strong>fixed-size state</strong>
+            updated in place — O(1) memory, but the past survives only as a lossy summary. Linear
+            attention connects the two worlds: drop the softmax, and the attention sum factors into
+            a running matrix S = Σ v·kᵀ with output o = S·q — softmax attention's shape, an RNN's
+            memory. But the plain version has two flaws: it never forgets (every write piles on top
+            of the last), and it cannot <em>correct</em> — a new value for an old key just
+            accumulates next to the stale one. Fixing those two flaws — a decay gate for forgetting,
+            an error-correcting write for replacement — is exactly what "Gated" and "Delta" will
+            mean in the mixer this page opens in §4.
+          </span>
+          <span class="lang-ko">
+            더 오래된 대안은 RNN의 방식이다: 히스토리를 제자리에서 갱신되는 <strong>고정 크기
+            state</strong>로 접어 넣는다 — O(1) 메모리, 대신 과거는 손실 요약으로만 남는다.
+            linear attention이 두 세계를 잇는다: softmax를 빼면 attention 합이 누적 행렬
+            S = Σ v·kᵀ로 인수분해되고 출력은 o = S·q — softmax attention의 형태에 RNN의 메모리다.
+            그러나 순정 버전에는 결함이 둘 있다: 망각이 없고(모든 쓰기가 이전 위에 쌓인다),
+            <em>수정</em>도 못 한다 — 같은 key의 새 value가 낡은 것 옆에 누적될 뿐이다. 이 두
+            결함을 고치는 것 — 망각을 위한 decay gate, 교체를 위한 오차-수정 쓰기 — 이 바로 §4에서
+            열어 볼 mixer의 "Gated"와 "Delta"의 의미다.
+          </span>
+        </p>
+
+        <div class="viz-frame">
+          <svg viewBox="0 0 740 190" role="img" aria-label="Two memory contracts: a growing archive of K V rows versus a fixed-size state matrix overwritten in place" style="width:100%; height:auto;">
+            <text class="stitle taccent" x="60" y="24">archive — softmax attention</text>
+            {Array.from({ length: 5 }, (_, i) => (
+              <rect class="kv-chip" x="60" y={34 + i * 21} width="220" height="16" rx="4" opacity={1 - i * 0.13}></rect>
+            ))}
+            {Array.from({ length: 5 }, (_, i) => (
+              <text class="smono" x="170" y={46 + i * 21} text-anchor="middle">K/V of token {i + 1}</text>
+            ))}
+            <text class="smono" x="170" y="152" text-anchor="middle">… one row per token, forever</text>
+            <text class="ssub" x="170" y="174" text-anchor="middle">exact recall · O(T) memory</text>
+
+            <text class="stitle tlin" x="450" y="24">slate — recurrent / linear state</text>
+            <rect class="st-chip" x="450" y="34" width="110" height="104" rx="8"></rect>
+            <text class="smono tlin" x="505" y="80" text-anchor="middle">S ∈ ℝ^(128×128)</text>
+            <text class="smono" x="505" y="98" text-anchor="middle">overwritten in place</text>
+            <path class="stateline" d="M596,60 C630,70 630,102 596,112"></path>
+            <path d="M596,112 l10,-4 m-10,4 l9,5" class="stateline" style="stroke-dasharray:none;"></path>
+            <text class="ssub" x="640" y="90">read + write,</text>
+            <text class="ssub" x="640" y="104">every token</text>
+            <text class="smono" x="505" y="152" text-anchor="middle">same size at token 1 and 262,144</text>
+            <text class="ssub" x="505" y="174" text-anchor="middle">lossy summary · O(1) memory</text>
+          </svg>
+        </div>
+
+        <div class="arc-takeaway">
+          <span class="arc-takeaway-label"><span class="lang-en">Takeaway</span><span class="lang-ko">핵심 한 줄</span></span>
+          <span class="lang-en">Sequence memory is a dial between an exact, growing archive and a
+            lossy, constant slate — every long-context architecture is choosing a point on it.</span>
+          <span class="lang-ko">시퀀스 기억은 정확하지만 자라는 아카이브와 손실이 있지만 고정된
+            슬레이트 사이의 다이얼이다 — 모든 long-context 아키텍처는 그 위의 한 점을 고른다.</span>
+        </div>
+        <p class="arc-question">
+          <span class="lang-en">Qwen3.5 refuses to pick one end. Where, in its 64 layers, does it mix the two?</span>
+          <span class="lang-ko">Qwen3.5는 한쪽 끝을 고르지 않는다. 64개 layer의 어디에서 둘을 섞을까?</span>
+        </p>
+      </div>
+    </section>
+
+    <!-- ============ §3 · LAYER-STACK MAP ============ -->
+    <section class="section-tight" id="stack-view">
+      <div class="container" id="arc-s3">
+        <p class="arc-bridge">
+          <span class="lang-en">We now have the dial. Qwen3.5's position on it is written in a
+            single config field — <code>layer_types</code> — and you can read the whole answer in
+            one strip.</span>
+          <span class="lang-ko">이제 다이얼을 손에 들었다. Qwen3.5의 선택은 config의 필드 하나 —
+            <code>layer_types</code> — 에 적혀 있고, 그 답 전체를 한 줄의 스트립으로 읽을 수 있다.</span>
+        </p>
+        <h2 class="viz-h arc-heading">
+          <span class="arc-num">§3</span>
+          <span><span class="lang-en">The layer stack: 48 linear + 16 full</span>
+          <span class="lang-ko">레이어 스택: linear 48 + full 16</span></span>
         </h2>
         <p class="viz-sub">
           <span class="lang-en">The whole depth as one strip — exactly the
@@ -135,15 +315,55 @@ const layers = Array.from({ length: NL }, (_, i) => {
           </svg>
           </div>
         </div>
+
+        <p class="arc-prose">
+          <span class="lang-en">
+            The strip is the config's <code>layer_types</code> verbatim: 16 repeats of three Gated
+            DeltaNet layers followed by one Gated Attention layer. Both mixers take [L × 5,120] in
+            and give [L × 5,120] out, and both are followed by the identical dense SwiGLU FFN
+            (5,120 → 17,408) — the residual stream cannot tell them apart. What differs is what each
+            layer must <em>remember</em> to serve the next token: the full layer appends 4 KB of K/V
+            per token and keeps it forever; the DeltaNet layer overwrites a fixed 3 MB matrix in place.
+          </span>
+          <span class="lang-ko">
+            이 스트립은 config의 <code>layer_types</code> 그대로다: Gated DeltaNet 3개 + Gated
+            Attention 1개가 16번 반복된다. 두 mixer 모두 [L × 5,120]을 받아 [L × 5,120]을 내놓고,
+            뒤에는 동일한 dense SwiGLU FFN (5,120 → 17,408)이 붙는다 — residual stream 입장에서는
+            구분이 안 된다. 다른 것은 다음 token을 위해 각 layer가 <em>기억해야 하는 것</em>이다:
+            full layer는 token마다 4 KB의 K/V를 덧붙여 영원히 보관하고, DeltaNet layer는 고정된
+            3 MB 행렬을 제자리에서 덮어쓴다.
+          </span>
+        </p>
+
+        <div class="arc-takeaway">
+          <span class="arc-takeaway-label"><span class="lang-en">Takeaway</span><span class="lang-ko">핵심 한 줄</span></span>
+          <span class="lang-en">Three of every four layers never touch the KV cache; to the residual
+            stream the two mixers are interchangeable — only their memory contracts differ.</span>
+          <span class="lang-ko">4개 layer 중 3개는 KV cache를 아예 만지지 않는다; residual stream에게
+            두 mixer는 호환 부품이고, 다른 것은 메모리 계약뿐이다.</span>
+        </div>
+        <p class="arc-question">
+          <span class="lang-en">"Interchangeable from outside" — but what is actually inside each of the two boxes?</span>
+          <span class="lang-ko">"밖에서 보면 호환" — 그럼 두 상자의 안에는 실제로 무엇이 들어 있을까?</span>
+        </p>
       </div>
     </section>
 
-    <!-- ============ 2 · TWO MIXERS ============ -->
+    <!-- ============ §4 · TWO MIXERS ============ -->
     <section class="section-tight" id="mixer-view">
-      <div class="container">
-        <h2 class="viz-h">
-          <span class="lang-en">2 · The two token mixers, side by side</span>
-          <span class="lang-ko">2 · 두 token mixer 나란히 보기</span>
+      <div class="container" id="arc-s4">
+        <p class="arc-bridge">
+          <span class="lang-en">We know where the two mixers sit. This section opens both boxes at
+            the tensor level — same input, same output, and the archive/slate split of §2 made
+            concrete in silicon shapes.</span>
+          <span class="lang-ko">두 mixer가 어디에 있는지는 알았다. 이 절에서는 두 상자를 tensor
+            수준에서 연다 — 같은 입력, 같은 출력, 그리고 §2의 아카이브/슬레이트 구분이 실제
+            shape로 구체화된 모습이다.</span>
+        </p>
+        <h2 class="viz-h arc-heading">
+          <span class="arc-num">§4</span>
+          <span><span class="lang-en">The two token mixers, side by side</span>
+          <span class="lang-ko">두 token mixer 나란히 보기</span></span>
         </h2>
         <p class="viz-sub">
           <span class="lang-en">Same input, same output shape, opposite memory contracts. Hover
@@ -362,15 +582,106 @@ const layers = Array.from({ length: NL }, (_, i) => {
             </div>
           </div>
         </div>
+
+        <div class="arc-takeaway">
+          <span class="arc-takeaway-label"><span class="lang-en">Takeaway</span><span class="lang-ko">핵심 한 줄</span></span>
+          <span class="lang-en">Identical interface, opposite memory: the attention mixer's
+            softmax reads ALL cached K/V (+4 KB/token/layer, forever), while the DeltaNet mixer
+            reads and writes the same fixed 128×128-per-head matrix at every step.</span>
+          <span class="lang-ko">인터페이스는 동일, 메모리는 정반대: attention mixer의 softmax는
+            cache된 K/V 전부를 읽고(layer당 token마다 +4 KB, 영원히), DeltaNet mixer는 매 스텝
+            같은 고정 128×128 행렬(head당)을 읽고 쓴다.</span>
+        </div>
+        <p class="arc-question">
+          <span class="lang-en">One line is doing all the work: S ← α·S + β·(v − S·k)·kᵀ. Why the error term, and not just S + v·kᵀ?</span>
+          <span class="lang-ko">모든 일을 하는 것은 한 줄이다: S ← α·S + β·(v − S·k)·kᵀ. 왜 그냥 S + v·kᵀ가 아니라 오차 항일까?</span>
+        </p>
       </div>
     </section>
 
-    <!-- ============ 3 · MEMORY RACE ============ -->
-    <section class="section-tight" id="memory-view">
+    <!-- ============ §5 · DEEP WATER: THE DELTA RULE ============ -->
+    <section class="section-tight" id="arc-s5">
       <div class="container">
-        <h2 class="viz-h">
-          <span class="lang-en">3 · The memory race: KV cache vs recurrent state</span>
-          <span class="lang-ko">3 · 메모리 경주: KV cache vs recurrent state</span>
+        <p class="arc-bridge">
+          <span class="lang-en">This is the hardest section of the page — one equation, taken
+            slowly. Everything the 48 linear layers do to justify their fixed 3 MB hangs on it.</span>
+          <span class="lang-ko">여기가 이 페이지에서 가장 어려운 절이다 — 식 하나를 천천히 읽는다.
+            linear layer 48개가 고정 3 MB로 밥값을 하는 근거 전부가 이 식에 걸려 있다.</span>
+        </p>
+        <h2 class="viz-h arc-heading">
+          <span class="arc-num">§5</span>
+          <span><span class="lang-en">Deep water: the delta rule is an online learner</span>
+          <span class="lang-ko">깊은 물: delta rule은 온라인 학습기다</span></span>
+        </h2>
+
+        <p class="arc-prose">
+          <span class="lang-en">
+            Read the update S ← α·S + β·(v − S·k)·kᵀ as one step of online regression: the state
+            <em>predicts</em> S·k for the incoming key, the error (v − S·k) is written back along k
+            with learning rate β, and α forgets. That error-correcting write is why DeltaNet-family
+            mixers retrieve better than plain additive linear attention (S ← S + v·kᵀ) — a new value
+            for an old key <em>replaces</em> the stale association instead of piling on top of it.
+            §2's two flaws are answered in one line: α is the forgetting that additive linear
+            attention lacked, and the (v − S·k) error term is the correction it could not do.
+          </span>
+          <span class="lang-ko">
+            업데이트 S ← α·S + β·(v − S·k)·kᵀ는 온라인 회귀의 한 스텝으로 읽으면 된다: state가
+            들어온 key에 대해 S·k를 <em>예측</em>하고, 오차 (v − S·k)를 학습률 β로 k 방향에 되써
+            넣고, α가 망각을 담당한다. 이 오차-수정형 쓰기 덕분에 DeltaNet 계열이 단순 덧셈형
+            linear attention (S ← S + v·kᵀ)보다 retrieval에 강하다 — 같은 key의 새 value가 낡은
+            연합 위에 쌓이는 게 아니라 <em>교체</em>된다. §2의 두 결함이 한 줄에서 해결된다:
+            α는 덧셈형 linear attention에 없던 망각이고, 오차 항 (v − S·k)는 그것이 못 하던
+            수정이다.
+          </span>
+        </p>
+        <p class="arc-prose">
+          <span class="lang-en">
+            Two details in the §4 diagram are not decoration but stabilizers: the short kernel-4
+            causal convolution gives cheap local mixing where the recurrence has no positional
+            signal, and the L2-norm on q/k replaces softmax's normalization so the recurrence stays
+            bounded — together they are what makes this online learner trainable at 27B scale. Note
+            also what α and β are: <em>per-token, per-head projections of the input</em>, so the
+            model decides, token by token, how much to forget and how hard to write.
+          </span>
+          <span class="lang-ko">
+            §4 다이어그램의 디테일 두 개는 장식이 아니라 안정장치다: kernel 4짜리 짧은 causal
+            convolution은 위치 신호가 없는 recurrence에 값싼 local mixing을 공급하고, q/k의
+            L2-norm은 softmax의 정규화를 대신해 recurrence를 유계로 유지한다 — 이 둘이 이 온라인
+            학습기를 27B 규모에서 학습 가능하게 만든다. α와 β의 정체도 눈여겨보자:
+            <em>token마다, head마다 입력에서 projection되는 값</em>이라, 모델이 token 단위로 얼마나
+            잊고 얼마나 세게 쓸지를 스스로 결정한다.
+          </span>
+        </p>
+
+        <div class="arc-takeaway">
+          <span class="arc-takeaway-label"><span class="lang-en">Takeaway</span><span class="lang-ko">핵심 한 줄</span></span>
+          <span class="lang-en">The delta rule is online regression on a fixed slate — predict,
+            write back the error, forget — and replacement rather than accumulation is what buys
+            its retrieval quality.</span>
+          <span class="lang-ko">delta rule은 고정 슬레이트 위의 온라인 회귀다 — 예측하고, 오차를
+            되써 넣고, 잊는다 — retrieval 품질을 사는 것은 누적이 아니라 교체다.</span>
+        </div>
+        <p class="arc-question">
+          <span class="lang-en">A 3 MB slate per layer vs a cache growing 4 KB per token per layer — at what context length does the trade pay off, in actual bytes?</span>
+          <span class="lang-ko">layer당 3 MB 슬레이트 vs layer당 token마다 4 KB씩 자라는 cache — 이 거래는 실제 byte 기준으로 어느 context 길이부터 이득일까?</span>
+        </p>
+      </div>
+    </section>
+
+    <!-- ============ §6 · MEMORY RACE ============ -->
+    <section class="section-tight" id="memory-view">
+      <div class="container" id="arc-s6">
+        <p class="arc-bridge">
+          <span class="lang-en">We have both mixers and the mechanism that lets one of them live on
+            a fixed slate. What remains is arithmetic — and the arithmetic is the argument for the
+            whole architecture.</span>
+          <span class="lang-ko">두 mixer와, 그중 하나가 고정 슬레이트 위에서 살 수 있게 하는
+            메커니즘까지 갖췄다. 남은 것은 산수다 — 그리고 그 산수가 이 아키텍처 전체의 논증이다.</span>
+        </p>
+        <h2 class="viz-h arc-heading">
+          <span class="arc-num">§6</span>
+          <span><span class="lang-en">The memory race: KV cache vs recurrent state</span>
+          <span class="lang-ko">메모리 경주: KV cache vs recurrent state</span></span>
         </h2>
         <p class="viz-sub">
           <span class="lang-en">Drag the context-length slider or step through the milestones.
@@ -478,15 +789,58 @@ const layers = Array.from({ length: NL }, (_, i) => {
             </p>
           </noscript>
         </div>
+
+        <p class="arc-prose">
+          <span class="lang-en">
+            Per layer, the trade is 3,227,648 bytes of constant state (3 MB matrix + 80 KB conv
+            buffer) against 4,096 bytes of KV per token — they tie at <strong>788 tokens</strong>.
+            Everything past that is profit, and it compounds: at the native 262,144-token context
+            the hybrid holds 16.1 GB where an all-full sibling would hold 64 GB. The asymptotic
+            ratio is simply the layer ratio, 16/64 = 4×. Notice what the ratio does <em>not</em>
+            change: the 16 full layers still grow linearly. The hybrid divides the KV-cache
+            problem by four; it does not delete it.
+          </span>
+          <span class="lang-ko">
+            layer당 거래는 상수 state 3,227,648 bytes (3 MB 행렬 + 80 KB conv buffer) 대
+            token당 KV 4,096 bytes — <strong>788 tokens</strong>에서 동점이 된다. 그 이후는
+            전부 이득이고 복리로 쌓인다: 네이티브 262,144 token context에서 hybrid는 16.1 GB,
+            all-full 형제 모델은 64 GB를 든다. 점근 비율은 layer 비율 그대로 16/64 = 4×다.
+            이 비율이 바꾸지 <em>못하는</em> 것도 보인다: full layer 16개는 여전히 선형으로
+            자란다. hybrid는 KV cache 문제를 4로 나눌 뿐, 지우지는 않는다.
+          </span>
+        </p>
+
+        <div class="arc-takeaway">
+          <span class="arc-takeaway-label"><span class="lang-en">Takeaway</span><span class="lang-ko">핵심 한 줄</span></span>
+          <span class="lang-en">Recurrent state is a fixed cost paid up front; past T = 788 the
+            hybrid wins and never looks back — but its 16 full layers still grow, so the KV problem
+            is divided by 4, not deleted.</span>
+          <span class="lang-ko">recurrent state는 선불 고정비다; T = 788을 지나면 hybrid가 이기고
+            다시는 역전되지 않는다 — 그러나 full layer 16개는 여전히 자라므로, KV 문제는 지워진
+            게 아니라 4로 나뉜 것이다.</span>
+        </div>
+        <p class="arc-question">
+          <span class="lang-en">If the slate is this cheap, why keep any full-attention layers at all — why not 64 linear layers?</span>
+          <span class="lang-ko">슬레이트가 이렇게 싸다면 full-attention layer를 왜 남겨 둘까 — 왜 64개 전부 linear가 아닐까?</span>
+        </p>
       </div>
     </section>
 
-    <!-- ============ 4 · WHY HYBRIDIZE ============ -->
+    <!-- ============ §7 · WHY HYBRIDIZE ============ -->
     <section class="section-tight" id="why-view">
-      <div class="container">
-        <h2 class="viz-h">
-          <span class="lang-en">4 · Why not 64 linear layers? The recall tax</span>
-          <span class="lang-ko">4 · 왜 64개 전부 linear가 아닐까? recall의 대가</span>
+      <div class="container" id="arc-s7">
+        <p class="arc-bridge">
+          <span class="lang-en">The memory race makes all-linear look like a free win. This section
+            is the other half of the ledger — what the published record says you give up when the
+            last archive is gone.</span>
+          <span class="lang-ko">메모리 경주만 보면 all-linear가 공짜 승리처럼 보인다. 이 절은
+            장부의 나머지 절반이다 — 마지막 아카이브까지 없앴을 때 무엇을 잃는지, 공개된 기록이
+            말해 주는 것.</span>
+        </p>
+        <h2 class="viz-h arc-heading">
+          <span class="arc-num">§7</span>
+          <span><span class="lang-en">Why not 64 linear layers? The recall tax</span>
+          <span class="lang-ko">왜 64개 전부 linear가 아닐까? recall의 대가</span></span>
         </h2>
         <p class="viz-sub">
           <span class="lang-en">If constant-size state were free, every layer would be linear.
@@ -554,84 +908,36 @@ const layers = Array.from({ length: NL }, (_, i) => {
             컨텍스트 전체에 대한 진짜 random-access 읽기를 제공하고, 사이의 linear layer들이
             token당 O(1) 메모리로 시퀀스 혼합의 대부분을 처리한다.</span>
         </p>
+
+        <div class="arc-takeaway">
+          <span class="arc-takeaway-label"><span class="lang-en">Takeaway</span><span class="lang-ko">핵심 한 줄</span></span>
+          <span class="lang-en">Fixed-size state is lossy compression of an unbounded past — exact,
+            position-addressable recall is the tax, and the periodic full layers are how the hybrid
+            keeps paying it.</span>
+          <span class="lang-ko">고정 크기 state는 무한한 과거의 손실 압축이다 — 세금은 정확한 위치
+            지정 recall이고, 주기적 full layer가 hybrid로 하여금 그 세금을 계속 내게 하는 장치다.</span>
+        </div>
+        <p class="arc-question">
+          <span class="lang-en">The architecture is settled — 3:1, break-even at 788 tokens. What does it change for the people optimizing inference?</span>
+          <span class="lang-ko">아키텍처는 정해졌다 — 3:1, 788 tokens에서 손익분기. 추론을 최적화하는 사람들에게는 무엇이 달라질까?</span>
+        </p>
       </div>
     </section>
 
-    <!-- ============ PROSE ============ -->
-    <section class="section">
+    <!-- ============ §8 · WHERE THIS GOES ============ -->
+    <section class="section" id="arc-s8">
       <div class="container">
-        <div class="prose">
-          <h2>
-            <span class="lang-en">Reading the diagram</span>
-            <span class="lang-ko">다이어그램 읽는 법</span>
-          </h2>
-
-          <h3><span class="lang-en">One stack, two memory contracts</span>
-              <span class="lang-ko">하나의 스택, 두 개의 메모리 계약</span></h3>
-          <p>
-            <span class="lang-en">
-              The strip in view 1 is the config's <code>layer_types</code> verbatim: 16 repeats of
-              three Gated DeltaNet layers followed by one Gated Attention layer. Both mixers take
-              [L × 5,120] in and give [L × 5,120] out, and both are followed by the identical dense
-              SwiGLU FFN (5,120 → 17,408) — the residual stream cannot tell them apart. What
-              differs is what each layer must <em>remember</em> to serve the next token: the full
-              layer appends 4 KB of K/V per token and keeps it forever; the DeltaNet layer
-              overwrites a fixed 3 MB matrix in place.
-            </span>
-            <span class="lang-ko">
-              뷰 1의 스트립은 config의 <code>layer_types</code> 그대로다: Gated DeltaNet 3개 +
-              Gated Attention 1개가 16번 반복된다. 두 mixer 모두 [L × 5,120]을 받아 [L × 5,120]을
-              내놓고, 뒤에는 동일한 dense SwiGLU FFN (5,120 → 17,408)이 붙는다 — residual stream
-              입장에서는 구분이 안 된다. 다른 것은 다음 token을 위해 각 layer가 <em>기억해야
-              하는 것</em>이다: full layer는 token마다 4 KB의 K/V를 덧붙여 영원히 보관하고,
-              DeltaNet layer는 고정된 3 MB 행렬을 제자리에서 덮어쓴다.
-            </span>
-          </p>
-
-          <h3><span class="lang-en">The delta rule is an online learner</span>
-              <span class="lang-ko">delta rule은 온라인 학습기다</span></h3>
-          <p>
-            <span class="lang-en">
-              Read the update S ← α·S + β·(v − S·k)·kᵀ as one step of online regression: the state
-              predicts S·k for the incoming key, the error (v − S·k) is written back along k with
-              learning rate β, and α forgets. That error-correcting write is why DeltaNet-family
-              mixers retrieve better than plain additive linear attention (S ← S + v·kᵀ) — a new
-              value for an old key <em>replaces</em> the stale association instead of piling on top
-              of it. The short kernel-4 convolution and the L2-norm on q/k are the two small
-              stabilizers that make the recurrence trainable at scale.
-            </span>
-            <span class="lang-ko">
-              업데이트 S ← α·S + β·(v − S·k)·kᵀ는 온라인 회귀의 한 스텝으로 읽으면 된다: state가
-              들어온 key에 대해 S·k를 예측하고, 오차 (v − S·k)를 학습률 β로 k 방향에 되써 넣고,
-              α가 망각을 담당한다. 이 오차-수정형 쓰기 덕분에 DeltaNet 계열이 단순 덧셈형 linear
-              attention (S ← S + v·kᵀ)보다 retrieval에 강하다 — 같은 key의 새 value가 낡은 연합
-              위에 쌓이는 게 아니라 <em>교체</em>된다. kernel 4짜리 짧은 convolution과 q/k의
-              L2-norm은 이 recurrence를 대규모로 학습 가능하게 만드는 두 개의 안정장치다.
-            </span>
-          </p>
-
-          <h3><span class="lang-en">The arithmetic that decides the ratio</span>
-              <span class="lang-ko">비율을 결정하는 산수</span></h3>
-          <p>
-            <span class="lang-en">
-              Per layer, the trade is 3,227,648 bytes of constant state (3 MB matrix + 80 KB conv
-              buffer) against 4,096 bytes of KV per token — they tie at <strong>788 tokens</strong>.
-              Everything past that is profit, and it compounds: at the native 262,144-token context
-              the hybrid holds 16.1 GB where an all-full sibling would hold 64 GB. The asymptotic
-              ratio is simply the layer ratio, 16/64 = 4×. Notice what the ratio does <em>not</em>
-              change: the 16 full layers still grow linearly. The hybrid divides the KV-cache
-              problem by four; it does not delete it.
-            </span>
-            <span class="lang-ko">
-              layer당 거래는 상수 state 3,227,648 bytes (3 MB 행렬 + 80 KB conv buffer) 대
-              token당 KV 4,096 bytes — <strong>788 tokens</strong>에서 동점이 된다. 그 이후는
-              전부 이득이고 복리로 쌓인다: 네이티브 262,144 token context에서 hybrid는 16.1 GB,
-              all-full 형제 모델은 64 GB를 든다. 점근 비율은 layer 비율 그대로 16/64 = 4×다.
-              이 비율이 바꾸지 <em>못하는</em> 것도 보인다: full layer 16개는 여전히 선형으로
-              자란다. hybrid는 KV cache 문제를 4로 나눌 뿐, 지우지는 않는다.
-            </span>
-          </p>
-        </div>
+        <p class="arc-bridge">
+          <span class="lang-en">The tour is done: one dial, two mixers, one equation, one crossover.
+            The last question is where the field takes it from here.</span>
+          <span class="lang-ko">투어는 끝났다: 다이얼 하나, mixer 둘, 식 하나, crossover 하나.
+            마지막 질문은 필드가 여기서 어디로 가느냐다.</span>
+        </p>
+        <h2 class="viz-h arc-heading">
+          <span class="arc-num">§8</span>
+          <span><span class="lang-en">Where this goes</span>
+          <span class="lang-ko">여기서 어디로 가는가</span></span>
+        </h2>
 
         <div class="eff-note band-dark">
           <h3>
@@ -672,10 +978,33 @@ const layers = Array.from({ length: NL }, (_, i) => {
         </div>
 
         <div class="prose">
-          <h2>
+          <p>
+            <span class="lang-en">
+              Three directions are visibly live. <strong>Ratios and layouts:</strong> 7:1
+              (MiniMax-01), 3:1 (Qwen3-Next, Qwen3.5) — how much full attention is enough, and
+              where in the depth it belongs, is still decided empirically per model family.
+              <strong>The remaining archive:</strong> once 48 layers are linear, the whole
+              long-context budget sits in 16 full layers, so the KV-cache literature — quantization
+              (KIVI, KVQuant), eviction (H2O), retrieval-head splitting (DuoAttention) — now applies
+              to a smaller but more critical surface. <strong>The slate itself:</strong> better
+              update rules than the delta rule, and kernels that make fixed-state decode fast, are
+              an open race.
+            </span>
+            <span class="lang-ko">
+              눈에 보이게 살아 있는 방향은 셋이다. <strong>비율과 배치:</strong> 7:1
+              (MiniMax-01), 3:1 (Qwen3-Next, Qwen3.5) — full attention이 얼마면 충분한지, 깊이의
+              어디에 두어야 하는지는 여전히 모델 패밀리마다 경험적으로 정해진다.
+              <strong>남은 아카이브:</strong> 48개 layer가 linear가 되면 long-context 예산 전체가
+              full layer 16개에 앉게 되고, KV cache 문헌 — quantization (KIVI, KVQuant), eviction
+              (H2O), retrieval-head 분리 (DuoAttention) — 이 더 작지만 더 결정적인 표면에 적용된다.
+              <strong>슬레이트 자체:</strong> delta rule보다 나은 update rule, 그리고 고정 state
+              decode를 빠르게 만드는 kernel은 열린 경주다.
+            </span>
+          </p>
+          <h3>
             <span class="lang-en">Going deeper</span>
             <span class="lang-ko">더 깊이 보기</span>
-          </h2>
+          </h3>
           <ul class="deeper-list">
             <li><a class="arrow-link" href="https://huggingface.co/Qwen/Qwen3.5-27B" target="_blank" rel="noopener">Qwen3.5-27B — model card &amp; config.json (the numbers on this page)</a></li>
             <li><a class="arrow-link" href="https://huggingface.co/Qwen/Qwen3-Next-80B-A3B-Instruct" target="_blank" rel="noopener">Qwen3-Next-80B-A3B — where the 3:1 hybrid layout debuted</a></li>
@@ -683,6 +1012,10 @@ const layers = Array.from({ length: NL }, (_, i) => {
             <li><a class="arrow-link" href="https://arxiv.org/abs/2501.08313" target="_blank" rel="noopener">MiniMax-01 — lightning attention hybrid at 456B scale (arXiv 2501.08313)</a></li>
             <li><a class="arrow-link" href="/reviews/gated-deltanet/">This site's review: Gated DeltaNet</a></li>
             <li><a class="arrow-link" href="/reviews/minimax-01/">This site's review: MiniMax-01</a></li>
+            <li><a class="arrow-link" href="/reviews/kivi/">This site's review: KIVI — KV cache quantization</a></li>
+            <li><a class="arrow-link" href="/reviews/kvquant/">This site's review: KVQuant</a></li>
+            <li><a class="arrow-link" href="/reviews/h2o/">This site's review: H2O — KV cache eviction</a></li>
+            <li><a class="arrow-link" href="/reviews/duo-attention/">This site's review: DuoAttention</a></li>
           </ul>
           <p class="fine-print">
             <span class="lang-en">
@@ -721,10 +1054,7 @@ const layers = Array.from({ length: NL }, (_, i) => {
 
 <style is:global>
   /* ---- page chrome ---- */
-  .hyb-page .toggle-row { margin: 1.2rem 0 0; }
-  .hyb-page .jump-row { display: flex; gap: 0.6rem; flex-wrap: wrap; margin: 1.4rem 0 0; }
-  .hyb-page .jump-row .tag { transition: border-color 0.2s, color 0.2s; }
-  .hyb-page .jump-row .tag:hover { border-color: var(--accent); color: var(--accent-strong); }
+  .hyb-page .hero-top { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 0.4rem; }
   .hyb-page .config-note {
     margin-top: 1.4rem; display: flex; flex-wrap: wrap; gap: 0.45rem; align-items: center;
     font-size: 0.88rem; color: var(--text-secondary);
@@ -733,6 +1063,14 @@ const layers = Array.from({ length: NL }, (_, i) => {
   .hyb-page .viz-h { margin-bottom: 0.4rem; }
   .hyb-page .viz-sub { color: var(--text-secondary); max-width: 48em; margin: 0 0 0.4rem; }
   .hyb-page .hyb-scroll { overflow-x: auto; }
+
+  /* ---- narrative arc (page-local tweaks) ---- */
+  .hyb-page .arc-prose { max-width: 48em; color: var(--text-secondary); line-height: 1.7; margin: 0.6rem 0 1rem; }
+  .hyb-page .arc-prose strong { color: var(--text); }
+  .hyb-page .arc-heading > span:last-child em { font-style: italic; }
+  .hyb-page .arc-question { margin-bottom: 0.4rem; }
+  .hyb-page .itch-bar { fill: var(--accent); opacity: 0.75; }
+  .hyb-page .itch-bar-end { opacity: 1; }
 
   /* ---- shared SVG vocabulary ---- */
   .hyb-page svg text { font-family: var(--font-sans); fill: var(--text); }

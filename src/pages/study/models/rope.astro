@@ -119,14 +119,35 @@ const zB1 = eX(40.5);
           </span>
         </p>
 
-        <div class="jump-row">
-          <a class="tag" href="#where">a · Where it lands</a>
-          <a class="tag" href="#pair">b · One pair, one dial</a>
-          <a class="tag" href="#wall">c · The dial wall</a>
-          <a class="tag" href="#combine">d · Bands combine</a>
-          <a class="tag" href="#edits">e · Editing the bands</a>
-          <a class="tag" href="#systems">f · Systems corner</a>
-          <a class="tag" href="#worked">g · Worked example</a>
+        <nav class="arc-roadmap" aria-label="Page roadmap">
+          <a href="#arc-s1"><span class="arc-n">§1</span><span class="lang-en">Why position at all</span><span class="lang-ko">position이 왜 필요한가</span></a>
+          <a href="#arc-s2"><span class="arc-n">§2</span><span class="lang-en">From added to rotated</span><span class="lang-ko">더하기에서 돌리기로</span></a>
+          <a href="#arc-s3"><span class="arc-n">§3</span><span class="lang-en">Where it lands (a)</span><span class="lang-ko">꽂히는 곳 (a)</span></a>
+          <a href="#arc-s4"><span class="arc-n">§4</span><span class="lang-en">One pair, one dial (b)</span><span class="lang-ko">pair 하나 = 다이얼 하나 (b)</span></a>
+          <a href="#arc-s5"><span class="arc-n">§5</span><span class="lang-en">The dial wall (c)</span><span class="lang-ko">다이얼 벽 (c)</span></a>
+          <a href="#arc-s6"><span class="arc-n">§6</span><span class="lang-en">Bands combine (d)</span><span class="lang-ko">band 합성 (d)</span></a>
+          <a href="#arc-s7"><span class="arc-n">§7</span><span class="lang-en">Editing the bands (e)</span><span class="lang-ko">band 수정 (e)</span></a>
+          <a href="#arc-s8"><span class="arc-n">§8</span><span class="lang-en">Systems corner (f)</span><span class="lang-ko">systems corner (f)</span></a>
+          <a href="#arc-s9"><span class="arc-n">§9</span><span class="lang-en">Worked example (g)</span><span class="lang-ko">수치 예제 (g)</span></a>
+          <a href="#arc-s10"><span class="arc-n">§10</span><span class="lang-en">Where this goes</span><span class="lang-ko">다음은 어디로</span></a>
+        </nav>
+
+        <div class="arc-prereq">
+          <span class="lang-en"><strong>Before you start.</strong> This page assumes you know
+            how one attention layer works — queries, keys, values, softmax(qkᵀ)·V — and that
+            decoders keep a KV cache during generation. If any of that is hazy, read the
+            <a href="/study/models/attention-anatomy/">attention-head anatomy</a> page first;
+            the <a href="/study/models/hybrid-attention/">hybrid-attention</a> page covers
+            stacks where only some layers use this machinery. No prior exposure to position
+            embeddings is needed — that story starts from zero in §1.</span>
+          <span class="lang-ko"><strong>시작하기 전에.</strong> 이 페이지는 attention layer
+            하나의 동작 — query, key, value, softmax(qkᵀ)·V — 과 decoder가 생성 중 KV
+            cache를 유지한다는 사실을 안다고 가정한다. 흐릿하다면
+            <a href="/study/models/attention-anatomy/">attention-head anatomy</a> 페이지를
+            먼저 읽는 것이 좋다. 일부 layer만 이 기계를 쓰는 stack은
+            <a href="/study/models/hybrid-attention/">hybrid-attention</a> 페이지가 다룬다.
+            position embedding에 대한 사전 지식은 필요 없다 — 그 이야기는 §1에서
+            0부터 시작한다.</span>
         </div>
 
         <div class="config-note">
@@ -145,13 +166,222 @@ const zB1 = eX(40.5);
       </div>
     </section>
 
+    <!-- ============ §1 · THE ITCH ============ -->
+    <section class="section-tight" id="itch">
+      <div class="container">
+        <h2 class="viz-h arc-heading" id="arc-s1">
+          <span class="arc-num">§1</span>
+          <span class="lang-en">The itch — attention cannot see order</span>
+          <span class="lang-ko">가려운 곳 — attention은 순서를 보지 못한다</span>
+        </h2>
+        <div class="prose">
+          <p>
+            <span class="lang-en">An attention layer scores every pair of tokens with a dot
+              product and takes a weighted average. Nothing in that recipe mentions
+              <em>where</em> a token sits: shuffle the input and the outputs shuffle along
+              with it, unchanged. To a bare attention layer, "the dog bit the man" and "the
+              man bit the dog" are the same bag of tokens and produce the same pair-score
+              table. Word order carries most of the meaning in language — a model that
+              literally cannot see it cannot do the job.</span>
+            <span class="lang-ko">attention layer는 모든 token pair를 dot product로 점수
+              매기고 가중 평균을 낸다. 이 레시피 어디에도 token이 <em>어디</em> 있는지는
+              등장하지 않는다: 입력을 섞으면 출력도 그대로 따라 섞일 뿐이다. 맨몸의
+              attention layer에게 "개가 사람을 물었다"와 "사람이 개를 물었다"는 같은 token
+              주머니이고, 같은 pair-score 표를 만든다. 언어에서 의미의 대부분은 어순이
+              나른다 — 어순을 아예 보지 못하는 모델은 언어를 할 수 없다.</span>
+          </p>
+        </div>
+
+        <div class="viz-frame">
+          <div class="rope-scroll">
+            <svg viewBox="0 0 700 190" role="img" style="width:100%; height:auto; min-width:560px; max-width:760px;"
+              aria-label="Two sentences with opposite word order feed a bare attention layer and produce the same pair-score table">
+              <defs>
+                <marker id="itch-arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                  <path d="M0,0 L10,5 L0,10 z" fill="#87857c"></path>
+                </marker>
+              </defs>
+              <g>
+                {['the', 'dog', 'bit', 'the', 'man'].map((w, j) => (
+                  <g>
+                    <rect class="sbox" x={24 + j * 62} y="24" width="54" height="34" rx="8"></rect>
+                    <text class="stitle sm" x={51 + j * 62} y="45" text-anchor="middle">{w}</text>
+                  </g>
+                ))}
+                {['the', 'man', 'bit', 'the', 'dog'].map((w, j) => (
+                  <g>
+                    <rect class="sbox" x={24 + j * 62} y="124" width="54" height="34" rx="8"></rect>
+                    <text class="stitle sm" x={51 + j * 62} y="145" text-anchor="middle">{w}</text>
+                  </g>
+                ))}
+                <line class="flowline" x1="336" y1="41" x2="416" y2="80" marker-end="url(#itch-arr)"></line>
+                <line class="flowline" x1="336" y1="141" x2="416" y2="102" marker-end="url(#itch-arr)"></line>
+                <rect class="sbox sbox-accent" x="420" y="64" width="196" height="54" rx="9"></rect>
+                <text class="stitle sm taccent" x="518" y="86" text-anchor="middle">bare attention</text>
+                <text class="smono" x="518" y="104" text-anchor="middle">identical pair scores</text>
+                <text class="ssub" x="24" y="180">a dot product between two token vectors has no idea which one came first</text>
+              </g>
+            </svg>
+          </div>
+          <p class="cap">
+            <span class="lang-en">The problem this whole page exists to solve: position must
+              be injected into attention from outside. Every mainstream open-weight LLM today
+              — Llama, Qwen, Gemma, DeepSeek — injects it with the same trick, rotary
+              position embeddings, and the choice of how echoes everywhere: how far a model
+              can read, and what its cached bytes physically contain.</span>
+            <span class="lang-ko">이 페이지 전체가 풀려는 문제: position은 밖에서 attention에
+              주입되어야 한다. 오늘날 주류 open-weight LLM — Llama, Qwen, Gemma, DeepSeek —
+              은 전부 같은 트릭, rotary position embedding으로 주입하며, 그 주입 방식의
+              선택이 모든 곳에 메아리친다: 모델이 얼마나 멀리 읽을 수 있는지, cache된
+              byte에 물리적으로 무엇이 담기는지까지.</span>
+          </p>
+        </div>
+
+        <p class="arc-question">
+          <span class="lang-en">Order must be injected — but injected how, and where?</span>
+          <span class="lang-ko">어순을 주입해야 한다 — 그런데 어떻게, 어디에 주입하나?</span>
+        </p>
+      </div>
+    </section>
+
+    <!-- ============ §2 · FOUNDATIONS ============ -->
+    <section class="section-tight" id="foundations">
+      <div class="container">
+        <h2 class="viz-h arc-heading" id="arc-s2">
+          <span class="arc-num">§2</span>
+          <span class="lang-en">Foundations — from added positions to rotated ones</span>
+          <span class="lang-ko">기초 — 더하는 position에서 돌리는 position으로</span>
+        </h2>
+        <div class="prose">
+          <p>
+            <span class="lang-en">The first fix is the obvious one: give every index its own
+              vector. Learn a table of position embeddings, add entry m to the m-th token's
+              embedding, done — GPT-2 worked this way, and the original Transformer's
+              sinusoidal variant merely swaps the learned table for fixed waves. But adding
+              cracks in two places. First, a learned table simply ends: a model trained with
+              2,048 rows has no row 2,049 — positions past the trained length do not exist.
+              Second, and deeper: what language mostly needs is <em>relative</em> structure.
+              "The adjective three tokens back" is the same relationship at index 10 and at
+              index 1,847 — but an absolute code gives those two situations completely
+              different position vectors, and the model must re-learn every relationship at
+              every index it might occur.</span>
+            <span class="lang-ko">첫 번째 해법은 뻔한 쪽이다: index마다 vector를 하나씩
+              준다. position embedding 표를 학습하고, m번째 token embedding에 m번째 행을
+              더하면 끝 — GPT-2가 이렇게 동작했고, 원조 Transformer의 sinusoidal 방식은
+              학습된 표를 고정된 파동으로 바꿨을 뿐이다. 그런데 "더하기"는 두 군데서
+              갈라진다. 첫째, 학습된 표는 그냥 끝난다: 2,048행으로 학습한 모델에 2,049번째
+              행은 없다 — 학습 길이 밖의 position은 존재하지 않는다. 둘째, 더 깊은 균열:
+              언어에 주로 필요한 것은 <em>상대적</em> 구조다. "세 token 앞의 형용사"는
+              index 10에서도 index 1,847에서도 같은 관계다 — 그러나 절대 좌표는 이 두
+              상황에 완전히 다른 position vector를 주고, 모델은 나타날 수 있는 모든
+              index에서 모든 관계를 다시 배워야 한다.</span>
+          </p>
+          <p>
+            <span class="lang-en">So state what we actually want: the attention logit between
+              positions m and n should depend on n − m, not on m and n separately. Now the
+              rotation idea has a reason to exist. Encode position not as something you
+              <em>add</em> to the content vector but as an <em>angle</em> you turn it by.
+              A rotation never changes a vector's length — the content is untouched — and
+              the dot product of two rotated vectors depends only on the angle
+              <em>between</em> them. Turn q by m·ω and k by n·ω, and their score can only
+              see (n − m)·ω: relative position, by construction. That is the whole trick.
+              RoFormer (2021) built it into transformers and named it RoPE.</span>
+            <span class="lang-ko">그러니 원하는 것을 정확히 적자: position m과 n 사이의
+              attention logit이 m, n 각각이 아니라 n − m에 의존해야 한다. 이제 회전이라는
+              발상이 존재할 이유가 생긴다. position을 내용 vector에 <em>더하는</em> 무언가가
+              아니라, 내용을 <em>돌리는 각도</em>로 encode하는 것이다. 회전은 vector의
+              길이를 절대 바꾸지 않는다 — 내용은 손대지 않는다 — 그리고 회전된 두 vector의
+              dot product는 오직 둘 <em>사이의</em> 각도에만 의존한다. q를 m·ω만큼, k를
+              n·ω만큼 돌리면 score는 (n − m)·ω만 볼 수 있다: 구조적으로 상대 position이다.
+              트릭의 전부가 이것이다. RoFormer(2021)가 이를 transformer에 심고 RoPE라
+              이름 붙였다.</span>
+          </p>
+        </div>
+
+        <div class="viz-frame">
+          <div class="rope-scroll">
+            <svg viewBox="0 0 700 210" role="img" style="width:100%; height:auto; min-width:560px; max-width:760px;"
+              aria-label="Left: absolute position embedding added to the content vector changes it. Right: rotating the content vector by an angle proportional to position preserves its length.">
+              <defs>
+                <marker id="fnd-arr-q" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+                  <path d="M0,0 L10,5 L0,10 z" fill="#c15f3c"></path>
+                </marker>
+                <marker id="fnd-arr-k" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+                  <path d="M0,0 L10,5 L0,10 z" fill="#576270"></path>
+                </marker>
+              </defs>
+              <g>
+                <text class="stitle sm" x="160" y="26" text-anchor="middle">add: x + p_m</text>
+                <line class="veca vk" x1="90" y1="160" x2="180" y2="120" marker-end="url(#fnd-arr-k)"></line>
+                <line class="ghostline gq" x1="180" y1="120" x2="228" y2="64"></line>
+                <line class="veca vq" x1="90" y1="160" x2="228" y2="64" marker-end="url(#fnd-arr-q)"></line>
+                <text class="smono" x="120" y="126">x</text>
+                <text class="smono" x="212" y="98">p_m</text>
+                <text class="smono" x="150" y="76">x + p_m</text>
+                <text class="ssub" x="40" y="196">content and position blend into one vector — length changes</text>
+                <line x1="350" y1="20" x2="350" y2="190" stroke="var(--line)" stroke-width="1"></line>
+                <text class="stitle sm" x="530" y="26" text-anchor="middle">rotate: R(mω)x</text>
+                <circle cx="530" cy="120" r="62" fill="none" stroke="var(--line-strong)" stroke-width="1.2" stroke-dasharray="3 4"></circle>
+                <line class="veca vk" x1="530" y1="120" x2="592" y2="120" marker-end="url(#fnd-arr-k)"></line>
+                <line class="veca vq" x1="530" y1="120" x2="574" y2="76" marker-end="url(#fnd-arr-q)"></line>
+                <path d="M 568 120 A 38 38 0 0 0 557 93" fill="none" stroke="var(--accent-strong)" stroke-width="1.3" marker-end="url(#fnd-arr-q)"></path>
+                <text class="smono" x="596" y="136">x</text>
+                <text class="smono" x="560" y="66">R(mω)x</text>
+                <text class="smono" x="590" y="96">m·ω</text>
+                <text class="ssub" x="410" y="196">length preserved — position lives only in the angle</text>
+              </g>
+            </svg>
+          </div>
+          <p class="cap">
+            <span class="lang-en">Adding mixes position into the content; rotating keeps them
+              separable — the content is the length and direction pattern, the position is a
+              phase on top. In a dot product between two rotated vectors the absolute phases
+              cancel and only the difference survives. §4 shows this live and §9 checks it to
+              machine precision.</span>
+            <span class="lang-ko">더하기는 position을 내용에 섞어 버리지만, 돌리기는 둘을
+              분리 가능하게 유지한다 — 내용은 길이와 방향 패턴이고, position은 그 위의
+              위상이다. 회전된 두 vector의 dot product에서 절대 위상은 상쇄되고 차이만
+              살아남는다. §4가 이를 실시간으로 보여주고 §9가 machine precision까지
+              검산한다.</span>
+          </p>
+        </div>
+
+        <div class="arc-takeaway">
+          <span class="arc-takeaway-label"><span class="lang-en">Takeaway</span><span class="lang-ko">핵심 한 줄</span></span>
+          <span class="lang-en">Position should enter attention as an angle, not as an added
+            vector — because dot products see only <em>differences</em> of angles, which is
+            exactly the relative structure language needs.</span>
+          <span class="lang-ko">position은 attention에 더해지는 vector가 아니라 각도로
+            들어가야 한다 — dot product는 각도의 <em>차이</em>만 보고, 그것이 정확히 언어에
+            필요한 상대 구조이기 때문이다.</span>
+        </div>
+        <p class="arc-question">
+          <span class="lang-en">Where exactly in a real model's forward pass does this
+            rotation get applied — and to which tensors?</span>
+          <span class="lang-ko">실제 모델의 forward pass에서 이 회전은 정확히 어디에, 어떤
+            tensor에 적용되나?</span>
+        </p>
+      </div>
+    </section>
+
     <!-- ============ a · WHERE THE ROTATION LANDS ============ -->
     <section class="section-tight" id="where">
       <div class="container">
-        <h2 class="viz-h">
+        <h2 class="viz-h arc-heading" id="arc-s3">
+          <span class="arc-num">§3</span>
           <span class="lang-en">a · Where the rotation lands — q and k only, after the projections</span>
           <span class="lang-ko">a · 회전이 꽂히는 곳 — projection 뒤의 q와 k에만</span>
         </h2>
+        <p class="arc-bridge">
+          <span class="lang-en">§2 gave us the principle: position as an angle on q and k.
+            But a principle is not an implementation — this section pins the rotation to its
+            exact spot in a real model's forward pass, and shows which tensors it touches
+            and, just as importantly, which it never does.</span>
+          <span class="lang-ko">§2에서 원리를 얻었다: q와 k 위의 각도로서의 position.
+            그러나 원리는 구현이 아니다 — 이 section은 실제 모델의 forward pass에서 회전이
+            꽂히는 정확한 지점을 못 박고, 회전이 만지는 tensor와 — 똑같이 중요하게 —
+            절대 만지지 않는 tensor를 보여준다.</span>
+        </p>
         <p class="viz-sub">
           <span class="lang-en">One attention layer, Qwen3-accurate. Hover every box — the V
             path has the "why not v?" answer. RoFormer Eq. 14 defines RoPE as
@@ -294,16 +524,72 @@ const zB1 = eX(40.5);
               이 두 사실이 section f의 systems 이야기 전부를 떠받친다.</span>
           </p>
         </div>
+
+        <div class="prose">
+          <p>
+            <span class="lang-en">
+              Note what the diagram does <em>not</em> contain: RoPE models add no position
+              embedding anywhere. Position enters as a phase — block i of every head's q and
+              k is spun by m·ωᵢ — and the only place that phase becomes observable is the
+              q·k dot product, where R(m)ᵀR(n) collapses to R(n−m): rotations compose
+              additively per 2D block, so the absolute angles cancel (RoFormer Eq. 16;
+              section g checks it numerically). That is why the rotation must land on q and
+              k after their projections and nowhere else: the score is the only bilinear
+              meeting point, and v would just carry the spin into the output without
+              creating any relative-position term. In Qwen3-class code the verified order is
+              q_proj → q_norm → RoPE → cache update — QK-norm, where it exists, sits before
+              the rotation.
+            </span>
+            <span class="lang-ko">
+              다이어그램에 <em>없는</em> 것을 보라: RoPE 모델은 어디에도 position
+              embedding을 더하지 않는다. position은 위상으로 들어온다 — 모든 head의 q와
+              k에서 block i가 m·ωᵢ만큼 돈다 — 그리고 그 위상이 관측 가능해지는 유일한 곳이
+              q·k dot product다. 2D block마다 회전이 덧셈으로 합성되어 R(m)ᵀR(n)이
+              R(n−m)으로 붕괴하고, 절대 각도는 상쇄된다 (RoFormer Eq. 16; section g에서
+              수치로 확인). 회전이 projection 뒤의 q와 k에만 꽂혀야 하는 이유가 이것이다:
+              score가 유일한 bilinear 접점이고, v를 돌리면 상대-position 항은 생기지 않은
+              채 출력 내용만 돌아간다. Qwen3 계열 코드에서 검증된 순서는 q_proj → q_norm →
+              RoPE → cache update — QK-norm이 있는 모델에서는 norm이 회전보다 먼저다.
+            </span>
+          </p>
+        </div>
+
+        <div class="arc-takeaway">
+          <span class="arc-takeaway-label"><span class="lang-en">Takeaway</span><span class="lang-ko">핵심 한 줄</span></span>
+          <span class="lang-en">RoPE rewrites only q and k — after the projections, after
+            QK-norm where one exists. V is never rotated, and every cached K enters the
+            cache already stamped with its write-time position.</span>
+          <span class="lang-ko">RoPE는 오직 q와 k만 다시 쓴다 — projection 뒤, QK-norm이
+            있으면 그 뒤에서. V는 절대 회전되지 않고, cache되는 모든 K는 쓰인 시점의
+            position이 새겨진 채 cache에 들어간다.</span>
+        </div>
+        <p class="arc-question">
+          <span class="lang-en">The diagram says R(m) as if it were one thing — what does a
+            single 2×2 block of that rotation actually do as m and n move?</span>
+          <span class="lang-ko">다이어그램은 R(m)을 하나의 덩어리처럼 그렸다 — 그 회전의
+            2×2 block 하나는 m과 n이 움직일 때 실제로 무엇을 하나?</span>
+        </p>
       </div>
     </section>
 
     <!-- ============ b · ONE PAIR = ONE DIAL ============ -->
     <section class="section-tight" id="pair">
       <div class="container">
-        <h2 class="viz-h">
+        <h2 class="viz-h arc-heading" id="arc-s4">
+          <span class="arc-num">§4</span>
           <span class="lang-en">b · One pair = one dial — the 2×2 block, live</span>
           <span class="lang-ko">b · pair 하나 = 다이얼 하나 — 2×2 block을 실시간으로</span>
         </h2>
+        <p class="arc-bridge">
+          <span class="lang-en">We now know where the rotation lands. But §2's central
+            promise — that absolute positions cancel and only n − m survives — was stated,
+            not seen. This section makes it tangible: one 2×2 block, two sliders, and the
+            cancellation happening in front of you.</span>
+          <span class="lang-ko">회전이 어디에 꽂히는지는 알았다. 그러나 §2의 핵심 약속 —
+            절대 position은 상쇄되고 n − m만 살아남는다 — 은 말로만 했지 아직 눈으로 보지
+            못했다. 이 section이 그것을 만질 수 있게 만든다: 2×2 block 하나, slider 두 개,
+            그리고 눈앞에서 일어나는 상쇄.</span>
+        </p>
         <p class="viz-sub">
           <span class="lang-en">One (2i, 2i+1) channel pair from the d = 8 worked example
             (section g). Drag the position sliders: q spins with m, k with n — and the pair
@@ -469,16 +755,47 @@ const zB1 = eX(40.5);
             </p>
           </noscript>
         </div>
+
+        <div class="arc-takeaway">
+          <span class="arc-takeaway-label"><span class="lang-en">Takeaway</span><span class="lang-ko">핵심 한 줄</span></span>
+          <span class="lang-en">One channel pair is one dial turning at ω rad/token, and its
+            score depends only on Δ = n − m — move both positions together and nothing
+            changes. Which channels form a pair is a checkpoint-bound convention, not a free
+            choice.</span>
+          <span class="lang-ko">channel pair 하나는 ω rad/token으로 도는 다이얼 하나이고,
+            그 score는 오직 Δ = n − m에만 의존한다 — 두 position을 같이 밀면 아무것도 변하지
+            않는다. 어떤 channel끼리 pair가 되는지는 checkpoint에 묶인 관례이지 자유로운
+            선택이 아니다.</span>
+        </div>
+        <p class="arc-question">
+          <span class="lang-en">A dial forgets after one wavelength — the four chips above
+            already span λ 6.3 to 6,283 tokens. How does a real head's full set of dials
+            divide up all the distances a context can contain?</span>
+          <span class="lang-ko">다이얼은 wavelength 한 바퀴가 지나면 잊는다 — 위의 chip 네
+            개만 해도 λ 6.3에서 6,283 token까지 걸쳐 있다. 실제 head의 다이얼 전체는
+            context가 담을 수 있는 모든 거리를 어떻게 나눠 맡나?</span>
+        </p>
       </div>
     </section>
 
     <!-- ============ c · THE DIAL WALL ============ -->
     <section class="section-tight" id="wall">
       <div class="container">
-        <h2 class="viz-h">
+        <h2 class="viz-h arc-heading" id="arc-s5">
+          <span class="arc-num">§5</span>
           <span class="lang-en">c · The dial wall — all 64 speeds at once</span>
           <span class="lang-ko">c · 다이얼 벽 — 64개의 속도를 한눈에</span>
         </h2>
+        <p class="arc-bridge">
+          <span class="lang-en">One dial, one speed, one blind spot: it measures distance
+            only modulo its wavelength. RoPE's answer is not a better dial but a ladder of
+            them — 64 per head at head_dim 128, geometrically spaced so that every distance
+            scale finds a dial moving at a useful rate. This is that ladder, on one wall.</span>
+          <span class="lang-ko">다이얼 하나, 속도 하나, 맹점 하나: 거리는 자기 wavelength로
+            나눈 나머지로만 잰다. RoPE의 답은 더 좋은 다이얼이 아니라 다이얼의 사다리다 —
+            head_dim 128이면 head당 64개, 어느 거리 규모든 쓸모 있는 속도로 도는 다이얼이
+            존재하도록 기하급수 간격으로 배치된다. 그 사다리를 벽 하나에 걸었다.</span>
+        </p>
         <p class="viz-sub">
           <span class="lang-en">Every (2i, 2i+1) pair of a head_dim-128 head is a dial
             advancing ωᵢ = base^(−2i/128) rad per token — an odometer with geometrically
@@ -583,16 +900,42 @@ const zB1 = eX(40.5);
             </p>
           </noscript>
         </div>
+
+        <div class="arc-takeaway">
+          <span class="arc-takeaway-label"><span class="lang-en">Takeaway</span><span class="lang-ko">핵심 한 줄</span></span>
+          <span class="lang-en">The ladder ωᵢ = base^(−2i/128) spans wavelengths from
+            λ₀ = 2π ≈ 6.28 tokens to λ₆₃ ≈ 54,410 tokens at base 10,000 — and the base is
+            the single knob that stretches the entire wall at once.</span>
+          <span class="lang-ko">사다리 ωᵢ = base^(−2i/128)는 base 10,000에서 wavelength
+            λ₀ = 2π ≈ 6.28 token부터 λ₆₃ ≈ 54,410 token까지 걸친다 — 그리고 base는 벽
+            전체를 한 번에 늘리는 단 하나의 손잡이다.</span>
+        </div>
+        <p class="arc-question">
+          <span class="lang-en">Each head carries 64 separate cosines. How do they add up
+            into the one number attention actually uses — the logit?</span>
+          <span class="lang-ko">head 하나가 64개의 독립적인 cosine을 지닌다. 이들은
+            attention이 실제로 쓰는 단 하나의 숫자 — logit — 로 어떻게 합쳐지나?</span>
+        </p>
       </div>
     </section>
 
     <!-- ============ d · HOW BANDS COMBINE ============ -->
     <section class="section-tight" id="combine">
       <div class="container">
-        <h2 class="viz-h">
+        <h2 class="viz-h arc-heading" id="arc-s6">
+          <span class="arc-num">§6</span>
           <span class="lang-en">d · How the bands combine — the logit is a cosine series</span>
           <span class="lang-ko">d · band는 어떻게 합쳐지는가 — logit은 cosine 급수다</span>
         </h2>
+        <p class="arc-bridge">
+          <span class="lang-en">We have the wall: 64 dials, each contributing its own cosine
+            of Δωᵢ. But attention does not see 64 numbers — it sees their sum. What that sum
+            can look like, and what trained models actually make it look like, is this
+            section.</span>
+          <span class="lang-ko">벽은 얻었다: 다이얼 64개가 각자 Δωᵢ의 cosine을 기여한다.
+            그러나 attention은 64개의 숫자를 보지 않는다 — 그 합을 본다. 그 합이 어떤
+            모양일 수 있고, 학습된 모델이 실제로 어떤 모양으로 만드는지가 이 section이다.</span>
+        </p>
         <p class="viz-sub">
           <span class="lang-en">Writing q and k as d/2 two-dim sub-vectors, the attention
             logit at relative distance Δ is Σᵢ aᵢ·cos(Δωᵢ − φᵢ), where the per-band
@@ -788,16 +1131,70 @@ const zB1 = eX(40.5);
               논문의 라벨을 간접 인용한 것이다.)</span>
           </p>
         </div>
+
+        <div class="prose">
+          <p>
+            <span class="lang-en">
+              Read the panel and the Gemma findings together and a head's reach stops being
+              mysterious. High-frequency bands buy sharp local structure — the diagonal and
+              previous-token heads at the first and last layers; low-frequency bands act as
+              nearly distance-agnostic content channels. And RoFormer's famous long-term
+              decay curve should be read as an upper-bound envelope produced by many
+              incommensurate cosines dephasing, not a per-pair guarantee — Barbero et al.
+              explicitly argue decay is "unlikely to be the core reason" RoPE helps.
+            </span>
+            <span class="lang-ko">
+              panel과 Gemma 관측을 겹쳐 읽으면 head의 사정거리는 더 이상 신비롭지 않다.
+              high-frequency band는 날카로운 국소 구조를 산다 — 첫·마지막 layer의 diagonal
+              head와 previous-token head. low-frequency band는 거의 거리-불변인 내용
+              channel로 작동한다. 그리고 RoFormer의 유명한 long-term decay 곡선은 서로
+              공약수 없는 여러 cosine이 어긋나며 만드는 upper-bound envelope로 읽어야지
+              pair별 보장이 아니다 — Barbero et al.은 decay가 RoPE가 잘 작동하는 "핵심
+              이유일 가능성은 낮다"고 명시적으로 반박한다.
+            </span>
+          </p>
+        </div>
+
+        <div class="arc-takeaway">
+          <span class="arc-takeaway-label"><span class="lang-en">Takeaway</span><span class="lang-ko">핵심 한 줄</span></span>
+          <span class="lang-en">The attention logit at distance Δ is a cosine series
+            Σᵢ aᵢ·cos(Δωᵢ − φᵢ) whose amplitudes aᵢ = ‖q₍ᵢ₎‖·‖k₍ᵢ₎‖ are chosen by training —
+            and trained models pile the largest amplitudes onto the slowest dials.</span>
+          <span class="lang-ko">거리 Δ에서의 attention logit은 cosine 급수
+            Σᵢ aᵢ·cos(Δωᵢ − φᵢ)이고, amplitude aᵢ = ‖q₍ᵢ₎‖·‖k₍ᵢ₎‖는 학습이 고른다 —
+            그리고 학습된 모델은 가장 큰 amplitude를 가장 느린 다이얼에 쌓는다.</span>
+        </div>
+        <p class="arc-question">
+          <span class="lang-en">Training chose those amplitudes for one context length. What
+            happens when inference must run past it — can the dial speeds themselves be
+            edited after training?</span>
+          <span class="lang-ko">그 amplitude는 하나의 context 길이에 맞춰 학습됐다.
+            inference가 그 길이를 넘어야 한다면 — 다이얼 속도 자체를 학습 후에 수정할 수
+            있나?</span>
+        </p>
       </div>
     </section>
 
     <!-- ============ e · EDITING THE BANDS ============ -->
     <section class="section-tight" id="edits">
       <div class="container">
-        <h2 class="viz-h">
+        <h2 class="viz-h arc-heading" id="arc-s7">
+          <span class="arc-num">§7</span>
           <span class="lang-en">e · Editing the bands — every long-context method on one axis</span>
           <span class="lang-ko">e · band 수정하기 — 모든 long-context 기법을 한 축 위에</span>
         </h2>
+        <p class="arc-bridge">
+          <span class="lang-en">This is the hardest section on the page — take it slowly.
+            Four methods with four papers' worth of notation (PI, NTK-aware, YaRN,
+            base-scaling) collapse onto a single picture once you ask the right question:
+            for each of the 64 dials, by what factor does this method multiply its speed?
+            Hold onto that question and every formula below becomes a curve on one plot.</span>
+          <span class="lang-ko">이 페이지에서 가장 어려운 section이다 — 천천히 가라. 논문
+            네 편 분량의 표기법을 가진 네 기법(PI, NTK-aware, YaRN, base-scaling)이 올바른
+            질문 하나를 던지는 순간 그림 하나로 접힌다: 64개 다이얼 각각에 대해, 이 기법은
+            그 속도에 어떤 배율을 곱하는가? 이 질문만 붙들면 아래의 모든 공식이 한 그래프
+            위의 곡선이 된다.</span>
+        </p>
         <p class="viz-sub">
           <span class="lang-en">To stretch a context from L to s·L you must slow some dials
             down. The whole design space is WHICH dials, by HOW MUCH: the y-axis below is
@@ -1010,16 +1407,74 @@ const zB1 = eX(40.5);
               아니라 가장 낮은 frequency를 제거하는 쪽이다.</span>
           </p>
         </div>
+
+        <div class="prose">
+          <p>
+            <span class="lang-en">
+              On one shared wavelength axis the four routes stop looking like rival tricks
+              and become one decision — which dials to slow, by how much. PI drags every
+              dial down equally and pays with blurred local order; NTK-aware tilts the
+              ladder, pinning the fast end and fully interpolating the slow end; YaRN makes
+              the tilt piecewise with an explicit r = L/λ ramp (α = 1, β = 32) plus a logit
+              temperature; big-base pretraining stretches the ladder before training so
+              nothing needs editing afterwards. Partial RoPE is the limiting edit — a
+              fraction of dials never turn at all. Which dials deserve protection is exactly
+              what the p-RoPE ablation asks from the training side, and there, removing the
+              lowest quarter of frequencies retrained slightly better than protecting them
+              with a bigger base.
+            </span>
+            <span class="lang-ko">
+              하나의 wavelength 축 위에 올려놓으면 네 경로는 경쟁하는 트릭이 아니라 하나의
+              결정이 된다 — 어느 다이얼을, 얼마나 늦출 것인가. PI는 모든 다이얼을
+              똑같이 끌어내리고 국소 순서의 흐릿함으로 값을 치른다. NTK-aware는 빠른 끝을
+              고정하고 느린 끝을 완전 interpolation하며 사다리를 기울인다. YaRN은 그
+              기울임을 r = L/λ ramp(α = 1, β = 32)로 조각별로 명시하고 logit temperature를
+              더한다. big-base pretraining은 학습 전에 사다리를 늘려 두어 이후 수정이
+              필요 없게 만든다. partial RoPE는 극한의 수정이다 — 일부 다이얼은 아예 돌지
+              않는다. 어느 다이얼을 보호해야 하는가는 p-RoPE ablation이 학습 쪽에서 던진
+              바로 그 질문인데, 거기서는 가장 낮은 frequency 4분의 1을 제거하고 재학습한
+              쪽이 더 큰 base로 보호한 쪽보다 근소하게 나았다.
+            </span>
+          </p>
+        </div>
+
+        <div class="arc-takeaway">
+          <span class="arc-takeaway-label"><span class="lang-en">Takeaway</span><span class="lang-ko">핵심 한 줄</span></span>
+          <span class="lang-en">Every long-context method is the same edit expressed
+            differently: a per-dial frequency multiplier between 1 and 1/s. PI is a flat
+            line, NTK-aware a geometric tilt, YaRN a piecewise ramp, base-scaling the same
+            stretch bought at training time.</span>
+          <span class="lang-ko">모든 long-context 기법은 같은 수정을 다르게 표기한 것이다:
+            1과 1/s 사이의 다이얼별 frequency 배율. PI는 수평선, NTK-aware는 기하급수
+            기울임, YaRN은 조각별 ramp, base-scaling은 같은 늘림을 학습 시점에 산 것이다.</span>
+        </div>
+        <p class="arc-question">
+          <span class="lang-en">All of this mathematics ends up frozen into the KV cache —
+            what does a rotation baked into cached bytes force on real serving systems?</span>
+          <span class="lang-ko">이 수학 전부가 결국 KV cache 안에 얼어붙는다 — cache된
+            byte에 구워진 회전은 실제 serving 시스템에 무엇을 강제하나?</span>
+        </p>
       </div>
     </section>
 
     <!-- ============ f · SYSTEMS CORNER ============ -->
     <section class="section-tight" id="systems">
       <div class="container">
-        <h2 class="viz-h">
+        <h2 class="viz-h arc-heading" id="arc-s8">
+          <span class="arc-num">§8</span>
           <span class="lang-en">f · Systems corner — where the rotation meets the cache</span>
           <span class="lang-ko">f · Systems corner — 회전이 cache를 만나는 곳</span>
         </h2>
+        <p class="arc-bridge">
+          <span class="lang-en">Everything so far was mathematics. But §3 planted a systems
+            fact with long consequences: K enters the cache already rotated, so position is
+            physically inside the cached bytes. Here are three published designs that exist
+            because of that one fact.</span>
+          <span class="lang-ko">지금까지는 전부 수학이었다. 그러나 §3이 긴 그림자를 드리우는
+            systems 사실 하나를 심어 두었다: K는 이미 회전된 채 cache에 들어가고, 따라서
+            position은 cache된 byte 안에 물리적으로 존재한다. 그 한 사실 때문에 존재하는
+            공개된 설계 세 가지를 소개한다.</span>
+        </p>
         <p class="viz-sub">
           <span class="lang-en">Three published designs that exist because of section a's
             two facts: K is cached post-RoPE, and position lives only in the q·k score.
@@ -1095,16 +1550,82 @@ const zB1 = eX(40.5);
             <span class="ev-chip">quantize pre-RoPE → dequant → rotate on read</span>
           </div>
         </div>
+
+        <div class="eff-note band-dark">
+          <h3>
+            <span class="lang-en">Why the dial board matters for efficient inference</span>
+            <span class="lang-ko">왜 이 다이얼 보드가 효율적 inference에 중요한가</span>
+          </h3>
+          <p>
+            <span class="lang-en">
+              The KV cache stores rotated keys, so position is physically inside the cached
+              bytes: any system that moves, evicts, shares or compresses cached keys
+              inherits the dial board. The three published designs in the systems corner are
+              all responses to that one fact — DeepSeek's MLA carves position into a
+              separate 64-dim side-channel precisely so the other 512 dims stay absorbable;
+              KVQuant quantizes keys before the rotation because the rotation smears the
+              channel-wise outlier structure its quantizer relies on; and every
+              rotate-at-write cache commits each K entry to the position it was written at.
+              Reading rope_theta, partial_rotary_factor and rope_scaling out of a model's
+              config tells you — before any profiling — which dials exist, how fast they
+              turn, and which parts of the cached representation carry position at all.
+            </span>
+            <span class="lang-ko">
+              KV cache는 회전된 key를 저장하므로 position은 cache된 byte 안에 물리적으로
+              들어 있다: cache된 key를 옮기고, 내보내고, 공유하고, 압축하는 모든 시스템이
+              이 다이얼 보드를 물려받는다. systems corner의 세 공개 설계가 전부 이 한
+              사실에 대한 응답이다 — DeepSeek의 MLA는 나머지 512개 차원이 계속 흡수
+              가능하도록 position을 별도 64-dim side-channel로 도려냈고, KVQuant는 회전이
+              quantizer가 기대는 channel별 outlier 구조를 뭉개기 때문에 회전 전에
+              quantize하며, rotate-at-write cache는 모든 K 항목을 쓰인 시점의 position에
+              묶는다. 모델 config에서 rope_theta·partial_rotary_factor·rope_scaling을
+              읽으면 — profiling 없이도 — 어떤 다이얼이 존재하고, 얼마나 빨리 돌고,
+              cache된 표현의 어느 부분이 position을 나르는지 알 수 있다.
+            </span>
+          </p>
+          <div class="eff-chips">
+            <span class="eff-chip">position lives in the cached K bytes</span>
+            <span class="eff-chip">MLA: 512 position-free + 64 rotated</span>
+            <span class="eff-chip">KVQuant: quantize pre-RoPE, rotate on read</span>
+          </div>
+        </div>
+
+        <div class="arc-takeaway">
+          <span class="arc-takeaway-label"><span class="lang-en">Takeaway</span><span class="lang-ko">핵심 한 줄</span></span>
+          <span class="lang-en">Because K is cached post-rotation, every system that touches
+            cached keys inherits the dial board — MLA, KVQuant and rotate-at-write caches
+            are three published shapes of that inheritance.</span>
+          <span class="lang-ko">K가 회전된 뒤 cache되기 때문에, cache된 key를 만지는 모든
+            시스템은 다이얼 보드를 물려받는다 — MLA, KVQuant, rotate-at-write cache가 그
+            상속의 공개된 세 가지 형태다.</span>
+        </div>
+        <p class="arc-question">
+          <span class="lang-en">Claims on a page are cheap — do the equations actually hold
+            digit for digit? Time to recompute everything by hand.</span>
+          <span class="lang-ko">지면 위의 주장은 값싸다 — 수식이 정말 자릿수 단위로
+            성립하나? 이제 전부 손으로 재계산할 시간이다.</span>
+        </p>
       </div>
     </section>
 
     <!-- ============ g · WORKED EXAMPLE ============ -->
     <section class="section-tight" id="worked">
       <div class="container">
-        <h2 class="viz-h">
+        <h2 class="viz-h arc-heading" id="arc-s9">
+          <span class="arc-num">§9</span>
           <span class="lang-en">g · Worked example — d = 8, check every digit</span>
           <span class="lang-ko">g · 수치 예제 — d = 8, 모든 자릿수를 직접 검산</span>
         </h2>
+        <p class="arc-bridge">
+          <span class="lang-en">A derivation you cannot recompute is a rumor. Before leaving
+            the mechanism, shrink it until nothing can hide: d = 8, four dials, one query,
+            one key — every claim from §2 through §6 reduced to arithmetic you can redo on
+            paper.</span>
+          <span class="lang-ko">직접 재계산할 수 없는 유도는 소문일 뿐이다. 메커니즘을
+            떠나기 전에, 아무것도 숨을 수 없을 만큼 줄여 보자: d = 8, 다이얼 4개, query
+            하나, key 하나 — §2부터 §6까지의 모든 주장이 종이 위에서 다시 할 수 있는
+            산수로 환원된다.</span>
+        </p>
         <p class="viz-sub">
           <span class="lang-en">The full pipeline at d = 8 (four pairs, base 10,000),
             small enough to recompute by hand. All values machine-checked [derived on this
@@ -1152,156 +1673,95 @@ const zB1 = eX(40.5);
             </p>
           </noscript>
         </div>
+
+        <div class="arc-takeaway">
+          <span class="arc-takeaway-label"><span class="lang-en">Takeaway</span><span class="lang-ko">핵심 한 줄</span></span>
+          <span class="lang-en">The relative-position identity survives contact with actual
+            numbers: ⟨R(3)q, R(7)k⟩ = ⟨q, R(4)k⟩ = ⟨R(13)q, R(17)k⟩ = 0.154972 — three
+            routes, one value, machine precision.</span>
+          <span class="lang-ko">상대-position 항등식은 실제 숫자와의 접촉에서도 살아남는다:
+            ⟨R(3)q, R(7)k⟩ = ⟨q, R(4)k⟩ = ⟨R(13)q, R(17)k⟩ = 0.154972 — 세 가지 경로,
+            하나의 값, machine precision.</span>
+        </div>
+        <p class="arc-question">
+          <span class="lang-en">The mechanism is settled — but the design space around it is
+            not. What is the field still arguing about?</span>
+          <span class="lang-ko">메커니즘은 정리됐다 — 그러나 그 주변의 설계 공간은 아니다.
+            field는 아직 무엇을 두고 다투고 있나?</span>
+        </p>
       </div>
     </section>
 
     <!-- ============ PROSE ============ -->
     <section class="section">
       <div class="container">
+        <h2 class="arc-heading" id="arc-s10">
+          <span class="arc-num">§10</span>
+          <span class="lang-en">Where this goes — the open edges</span>
+          <span class="lang-ko">다음은 어디로 — 열린 가장자리들</span>
+        </h2>
         <div class="prose">
-          <h2>
-            <span class="lang-en">Reading the diagram</span>
-            <span class="lang-ko">다이어그램 읽기</span>
-          </h2>
-
-          <h3>
-            <span class="lang-en">Position never exists as a vector — only as an angle</span>
-            <span class="lang-ko">position은 vector로 존재하지 않는다 — 오직 각도로만</span>
-          </h3>
           <p>
             <span class="lang-en">
-              RoPE models add no position embedding anywhere. Position enters as a phase:
-              block i of every head's q and k is spun by m·ωᵢ, and the only place that phase
-              becomes observable is the q·k dot product, where R(m)ᵀR(n) collapses to
-              R(n−m) — rotations compose additively per 2D block, so the absolute angles
-              cancel (RoFormer Eq. 16; section g checks it numerically). That is why the
-              rotation must land on q and k after their projections and nowhere else: the
-              score is the only bilinear meeting point, and v would just carry the spin into
-              the output without creating any relative-position term. In Qwen3-class code
-              the verified order is q_proj → q_norm → RoPE → cache update — QK-norm, where
-              it exists, sits before the rotation.
+              The open questions are no longer about whether RoPE works but about which of
+              its dials are actually needed. The p-RoPE result of section d — removing the
+              lowest quarter of frequencies and retraining slightly beats protecting them
+              with a bigger base — exists only at Gemma-2B scale, retrained from scratch;
+              whether frontier-scale models want the same diet is unmeasured. Architectures
+              push the same question from the other side: Qwen3.5's hybrid stack rotates
+              only its full-attention layers (one in four), mRoPE splits the dial budget
+              across temporal/height/width axes for multimodal inputs, and linear-attention
+              hybrids keep softmax attention — and with it, the dial board — in only a small
+              fraction of layers (see the <a href="/reviews/minimax-01/">MiniMax-01</a> and
+              <a href="/reviews/gated-deltanet/">Gated DeltaNet</a> reviews, and the
+              <a href="/study/models/hybrid-attention/">hybrid-attention</a> page).
             </span>
             <span class="lang-ko">
-              RoPE 모델은 어디에도 position embedding을 더하지 않는다. position은 위상으로
-              들어온다: 모든 head의 q와 k에서 block i가 m·ωᵢ만큼 돌고, 그 위상이 관측
-              가능해지는 유일한 곳이 q·k dot product다 — 2D block마다 회전이 덧셈으로
-              합성되어 R(m)ᵀR(n)이 R(n−m)으로 붕괴하고, 절대 각도는 상쇄된다 (RoFormer
-              Eq. 16; section g에서 수치로 확인). 회전이 projection 뒤의 q와 k에만 꽂혀야
-              하는 이유가 이것이다: score가 유일한 bilinear 접점이고, v를 돌리면 상대-
-              position 항은 생기지 않은 채 출력 내용만 돌아간다. Qwen3 계열 코드에서
-              검증된 순서는 q_proj → q_norm → RoPE → cache update — QK-norm이 있는
-              모델에서는 norm이 회전보다 먼저다.
+              열린 질문은 이제 "RoPE가 작동하는가"가 아니라 "어느 다이얼이 실제로
+              필요한가"다. section d의 p-RoPE 결과 — 가장 낮은 frequency 4분의 1을
+              제거하고 재학습한 쪽이 더 큰 base로 보호한 쪽을 근소하게 이긴다 — 는
+              처음부터 재학습한 Gemma-2B 규모에서만 존재하고, frontier 규모 모델이 같은
+              식단을 원하는지는 측정된 바 없다. 아키텍처는 같은 질문을 반대편에서 민다:
+              Qwen3.5의 hybrid stack은 full-attention layer(4개 중 1개)만 회전시키고,
+              mRoPE는 멀티모달 입력을 위해 다이얼 예산을 temporal/height/width 축으로
+              나누며, linear-attention hybrid는 softmax attention을 — 그리고 그와 함께
+              다이얼 보드를 — 소수의 layer에만 남긴다
+              (<a href="/reviews/minimax-01/">MiniMax-01</a>·<a href="/reviews/gated-deltanet/">Gated
+              DeltaNet</a> 리뷰와 <a href="/study/models/hybrid-attention/">hybrid-attention</a>
+              페이지 참고).
+            </span>
+          </p>
+          <p>
+            <span class="lang-en">
+              The serving edge is the collision between section f's fact and cache
+              compression. Position lives in the cached K bytes, so every KV-cache
+              compression design must take a stance on the rotation: KVQuant quantizes keys
+              before it to keep the channel-wise outlier structure
+              (<a href="/reviews/kvquant/">review</a>), KIVI picks its quantization axes on
+              the post-RoPE tensors (<a href="/reviews/kivi/">review</a>), and DuoAttention
+              asks which heads need full positional resolution at all before deciding whose
+              cache to shrink (<a href="/reviews/duo-attention/">review</a>). Where the
+              rotation should sit relative to compression, eviction and sharing is a live
+              design question, still being argued paper by paper.
+            </span>
+            <span class="lang-ko">
+              serving 쪽 가장자리는 section f의 사실과 cache 압축의 충돌이다. position이
+              cache된 K byte 안에 살기 때문에, 모든 KV-cache 압축 설계는 회전에 대한
+              입장을 정해야 한다: KVQuant는 channel별 outlier 구조를 지키려 회전 전에
+              quantize하고 (<a href="/reviews/kvquant/">리뷰</a>), KIVI는 post-RoPE tensor
+              위에서 quantization 축을 고르며 (<a href="/reviews/kivi/">리뷰</a>),
+              DuoAttention은 누구의 cache를 줄일지 정하기 전에 어느 head가 full positional
+              resolution을 필요로 하는지부터 묻는다
+              (<a href="/reviews/duo-attention/">리뷰</a>). 회전이 압축·eviction·공유에
+              대해 어디에 놓여야 하는가는 살아 있는 설계 질문이고, 아직 논문 단위로
+              다투는 중이다.
             </span>
           </p>
 
           <h3>
-            <span class="lang-en">A head's reach is a cosine series</span>
-            <span class="lang-ko">head의 사정거리는 cosine 급수다</span>
-          </h3>
-          <p>
-            <span class="lang-en">
-              Split q and k into d/2 two-dim sub-vectors and the logit at distance Δ is
-              Σᵢ aᵢ·cos(Δωᵢ − φᵢ), with amplitude aᵢ = ‖q₍ᵢ₎‖·‖k₍ᵢ₎‖ — a derivation you can
-              verify against section g's numbers, and exactly the quantity Barbero et al.
-              measure when they report that trained Gemma places its largest norms on the
-              lowest frequencies. High-frequency bands buy sharp local structure — the
-              diagonal and previous-token heads at the first and last layers; low-frequency
-              bands act as nearly distance-agnostic content channels. RoFormer's long-term
-              decay curve should be read as an upper-bound envelope produced by many
-              incommensurate cosines dephasing, not a per-pair guarantee — and Barbero et
-              al. explicitly argue decay is "unlikely to be the core reason" RoPE helps.
-            </span>
-            <span class="lang-ko">
-              q와 k를 d/2개의 2차원 sub-vector로 쪼개면 거리 Δ에서의 logit은
-              Σᵢ aᵢ·cos(Δωᵢ − φᵢ)이고 amplitude는 aᵢ = ‖q₍ᵢ₎‖·‖k₍ᵢ₎‖다 — section g의
-              숫자로 직접 검산할 수 있는 유도이며, Barbero et al.이 "학습된 Gemma는 가장
-              큰 norm을 가장 낮은 frequency에 둔다"고 보고할 때 측정한 양이 정확히
-              이것이다. high-frequency band는 날카로운 국소 구조를 산다 — 첫·마지막
-              layer의 diagonal head와 previous-token head. low-frequency band는 거의
-              거리-불변인 내용 channel로 작동한다. RoFormer의 long-term decay 곡선은 서로
-              공약수 없는 여러 cosine이 어긋나며 만드는 upper-bound envelope로 읽어야지
-              pair별 보장이 아니다 — Barbero et al.은 decay가 RoPE가 잘 작동하는 "핵심
-              이유일 가능성은 낮다"고 명시적으로 반박한다.
-            </span>
-          </p>
-
-          <h3>
-            <span class="lang-en">Every long-context method is a band edit</span>
-            <span class="lang-ko">모든 long-context 기법은 band 수정이다</span>
-          </h3>
-          <p>
-            <span class="lang-en">
-              On one shared wavelength axis the four routes stop looking like rival tricks
-              and become one decision — which dials to slow, by how much. PI drags every
-              dial down equally and pays with blurred local order; NTK-aware tilts the
-              ladder, pinning the fast end and fully interpolating the slow end; YaRN makes
-              the tilt piecewise with an explicit r = L/λ ramp (α = 1, β = 32) plus a logit
-              temperature; big-base pretraining stretches the ladder before training so
-              nothing needs editing afterwards. Partial RoPE is the limiting edit — a
-              fraction of dials never turn at all. Which dials deserve protection is exactly
-              what the p-RoPE ablation asks from the training side, and there, removing the
-              lowest quarter of frequencies retrained slightly better than protecting them
-              with a bigger base.
-            </span>
-            <span class="lang-ko">
-              하나의 wavelength 축 위에 올려놓으면 네 경로는 경쟁하는 트릭이 아니라 하나의
-              결정이 된다 — 어느 다이얼을, 얼마나 늦출 것인가. PI는 모든 다이얼을
-              똑같이 끌어내리고 국소 순서의 흐릿함으로 값을 치른다. NTK-aware는 빠른 끝을
-              고정하고 느린 끝을 완전 interpolation하며 사다리를 기울인다. YaRN은 그
-              기울임을 r = L/λ ramp(α = 1, β = 32)로 조각별로 명시하고 logit temperature를
-              더한다. big-base pretraining은 학습 전에 사다리를 늘려 두어 이후 수정이
-              필요 없게 만든다. partial RoPE는 극한의 수정이다 — 일부 다이얼은 아예 돌지
-              않는다. 어느 다이얼을 보호해야 하는가는 p-RoPE ablation이 학습 쪽에서 던진
-              바로 그 질문인데, 거기서는 가장 낮은 frequency 4분의 1을 제거하고 재학습한
-              쪽이 더 큰 base로 보호한 쪽보다 근소하게 나았다.
-            </span>
-          </p>
-        </div>
-
-        <div class="eff-note band-dark">
-          <h3>
-            <span class="lang-en">Why the dial board matters for efficient inference</span>
-            <span class="lang-ko">왜 이 다이얼 보드가 효율적 inference에 중요한가</span>
-          </h3>
-          <p>
-            <span class="lang-en">
-              The KV cache stores rotated keys, so position is physically inside the cached
-              bytes: any system that moves, evicts, shares or compresses cached keys
-              inherits the dial board. The three published designs in the systems corner are
-              all responses to that one fact — DeepSeek's MLA carves position into a
-              separate 64-dim side-channel precisely so the other 512 dims stay absorbable;
-              KVQuant quantizes keys before the rotation because the rotation smears the
-              channel-wise outlier structure its quantizer relies on; and every
-              rotate-at-write cache commits each K entry to the position it was written at.
-              Reading rope_theta, partial_rotary_factor and rope_scaling out of a model's
-              config tells you — before any profiling — which dials exist, how fast they
-              turn, and which parts of the cached representation carry position at all.
-            </span>
-            <span class="lang-ko">
-              KV cache는 회전된 key를 저장하므로 position은 cache된 byte 안에 물리적으로
-              들어 있다: cache된 key를 옮기고, 내보내고, 공유하고, 압축하는 모든 시스템이
-              이 다이얼 보드를 물려받는다. systems corner의 세 공개 설계가 전부 이 한
-              사실에 대한 응답이다 — DeepSeek의 MLA는 나머지 512개 차원이 계속 흡수
-              가능하도록 position을 별도 64-dim side-channel로 도려냈고, KVQuant는 회전이
-              quantizer가 기대는 channel별 outlier 구조를 뭉개기 때문에 회전 전에
-              quantize하며, rotate-at-write cache는 모든 K 항목을 쓰인 시점의 position에
-              묶는다. 모델 config에서 rope_theta·partial_rotary_factor·rope_scaling을
-              읽으면 — profiling 없이도 — 어떤 다이얼이 존재하고, 얼마나 빨리 돌고,
-              cache된 표현의 어느 부분이 position을 나르는지 알 수 있다.
-            </span>
-          </p>
-          <div class="eff-chips">
-            <span class="eff-chip">position lives in the cached K bytes</span>
-            <span class="eff-chip">MLA: 512 position-free + 64 rotated</span>
-            <span class="eff-chip">KVQuant: quantize pre-RoPE, rotate on read</span>
-          </div>
-        </div>
-
-        <div class="prose">
-          <h2>
             <span class="lang-en">Going deeper</span>
             <span class="lang-ko">더 깊이 가기</span>
-          </h2>
+          </h3>
           <ul class="deeper-list">
             <li><a class="arrow-link" href="https://arxiv.org/abs/2104.09864" target="_blank" rel="noopener">RoFormer: Enhanced Transformer with Rotary Position Embedding (Su et al., 2021)</a></li>
             <li><a class="arrow-link" href="https://arxiv.org/abs/2306.15595" target="_blank" rel="noopener">Extending Context Window via Position Interpolation (Chen et al., 2023)</a></li>

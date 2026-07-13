@@ -13,8 +13,9 @@ What it does:
         or a bare id in the filename/body)
   * Emits src/content/reviews/<slug>.md with the full reviews frontmatter
     (source: autosweep, summary/summary_ko placeholders, topic/links/resources/
-    figures stubs, and a bilingual 13-item analysis block with every value TODO
-    — enriched format: 2-4 sentences per key, first = the crisp claim) plus a
+    figures stubs, a bilingual 13-item analysis block with every value TODO
+    — enriched format: 2-4 sentences per key, first = the crisp claim — plus
+    bilingual `thread:` block-scalar TODOs and an empty `sparks:` list) plus a
     minimal body template. It deliberately NEVER copies note prose — internal
     notes contain private research commentary that must not be published.
   * Refuses (exit 1) if the output slug already exists.
@@ -191,6 +192,15 @@ def main() -> None:
         lines.append(f"  {lang}:")
         for key in ANALYSIS_KEYS:
             lines.append(f"    {key}: 'TODO'")
+    lines.append(
+        "thread:  # 3-4 blank-line-separated paragraphs: lineage → conceptual shift → what it opens"
+    )
+    for lang in ("ko", "en"):
+        lines.append(f"  {lang}: |-")
+        lines.append("    TODO")
+    lines.append(
+        "sparks: []  # 2-3 {ko, en} idea seeds, strictly from the paper's stated limitations/future work"
+    )
     lines.append('source: "autosweep"')
     lines.append("---")
     content = "\n".join(lines) + "\n" + BODY_TEMPLATE

@@ -55,6 +55,12 @@ const reviews = defineCollection({
       .default([]),
     /** bilingual 13-item structured analysis; en shown by default, ko via toggle */
     analysis: z.object({ ko: analysisBlock, en: analysisBlock }).optional(),
+    /** narrative research-thread section: lineage → what this paper changes → what it opens.
+     *  Multi-paragraph (blank-line separated), analogical, AGI-Papers-style. */
+    thread: z.object({ ko: z.string(), en: z.string() }).optional(),
+    /** 2-3 idea seeds STRICTLY grounded in the paper's stated limitations/future work —
+     *  field-generic, never the owner's private research angles */
+    sparks: z.array(z.object({ ko: z.string(), en: z.string() })).default([]),
     source: z.enum(['autosweep', 'manual']).default('manual'),
     rating: z.number().min(1).max(5).optional(),
   }),

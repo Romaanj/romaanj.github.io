@@ -41,10 +41,28 @@ const maskRows = Array.from({ length: N }, (_, q) => ({
           layer 하나를 열어 본 뒤, 디코딩을 한 단계씩 밟으며 KV cache가 자라는 모습을 지켜보자.</span>
         </p>
 
-        <div class="jump-row">
-          <a class="tag" href="#stack-view">1 · Model stack</a>
-          <a class="tag" href="#layer-view">2 · Layer internals</a>
-          <a class="tag" href="#decode-view">3 · Decoding timeline</a>
+        <nav class="arc-roadmap" aria-label="Page roadmap">
+          <a href="#arc-s1"><span class="arc-n">§1</span><span class="lang-en">The itch</span><span class="lang-ko">문제의식</span></a>
+          <a href="#arc-s2"><span class="arc-n">§2</span><span class="lang-en">Foundations</span><span class="lang-ko">기초 다지기</span></a>
+          <a href="#arc-s3"><span class="arc-n">§3</span><span class="lang-en">Model stack</span><span class="lang-ko">모델 스택</span></a>
+          <a href="#arc-s4"><span class="arc-n">§4</span><span class="lang-en">The mask</span><span class="lang-ko">Mask</span></a>
+          <a href="#arc-s5"><span class="arc-n">§5</span><span class="lang-en">Decoding loop</span><span class="lang-ko">디코딩 루프</span></a>
+          <a href="#arc-s6"><span class="arc-n">§6</span><span class="lang-en">Where this goes</span><span class="lang-ko">이 다음</span></a>
+        </nav>
+
+        <div class="arc-prereq">
+          <span class="lang-en"><strong>Before you start:</strong> this page assumes you can read a
+          transformer decoder layer — Q/K/V projections, multi-head attention, GQA — at the level of
+          the <a href="/study/models/attention-anatomy/">attention-head anatomy</a> page, and that
+          you know why batch-1 decoding is limited by memory bandwidth rather than compute
+          (<a href="/study/gpu/memory-hierarchy/">GPU memory hierarchy</a>). RoPE appears once in
+          passing; the <a href="/study/models/rope/">RoPE page</a> covers it properly.</span>
+          <span class="lang-ko"><strong>시작하기 전에:</strong> 이 페이지는
+          <a href="/study/models/attention-anatomy/">attention-head anatomy</a> 페이지 수준으로
+          transformer decoder layer를 읽을 수 있다고 — Q/K/V projection, multi-head attention,
+          GQA — 가정하고, batch-1 디코딩이 연산이 아니라 memory bandwidth에 묶인다는 것도 안다고
+          가정한다 (<a href="/study/gpu/memory-hierarchy/">GPU memory hierarchy</a>). RoPE는 한 번
+          스쳐 지나가는데, 제대로는 <a href="/study/models/rope/">RoPE 페이지</a>가 다룬다.</span>
         </div>
 
         <div class="config-note">
@@ -65,10 +83,198 @@ const maskRows = Array.from({ length: N }, (_, q) => ({
       </div>
     </section>
 
-    <!-- ============ 1 · MODEL STACK ============ -->
-    <section class="section-tight" id="stack-view">
+    <!-- ============ §1 · THE ITCH ============ -->
+    <section class="section-tight" id="arc-s1">
       <div class="container">
-        <h2 class="viz-h">1 · <span class="lang-en">The model stack</span><span class="lang-ko">모델 스택</span></h2>
+        <h2 class="viz-h arc-heading"><span class="arc-num">§1</span><span><span class="lang-en">The itch — one pass, one token</span><span class="lang-ko">문제의식 — pass 하나에 token 하나</span></span></h2>
+        <div class="prose">
+          <p>
+            <span class="lang-en">An autoregressive language model writes like a careful typist:
+            one token, then the next, each requiring a full trip through the network. For the
+            1.7 B-parameter model on this page, one such trip drags roughly 3.4 GB of weights out
+            of GPU memory — all of that traffic to decide a single word. At batch size 1 the
+            arithmetic units are mostly idle; the wait is the memory traffic, so the <em>number of
+            passes</em> is, to first order, the latency. A 500-token answer costs 500 trips through
+            the same 3.4 GB.</span>
+            <span class="lang-ko">autoregressive 언어 모델은 신중한 타이피스트처럼 쓴다: token
+            하나, 그다음 하나 — 매번 네트워크 전체를 통과해야 한다. 이 페이지의 1.7 B-parameter
+            모델이라면 그 한 번의 통과가 대략 3.4 GB의 weight를 GPU 메모리에서 끌어낸다 — 그
+            트래픽 전부가 단어 하나를 정하기 위한 것이다. batch size 1에서 연산 유닛은 대부분
+            놀고 있고, 기다림의 정체는 메모리 트래픽이므로 <em>pass 횟수</em>가 사실상 latency다.
+            500-token짜리 답은 같은 3.4 GB를 500번 도는 값이다.</span>
+          </p>
+          <p>
+            <span class="lang-en">Diffusion language models attack the pass count directly: predict
+            <em>many</em> positions in one pass, and the trips divide. But the pure form gives up
+            the other thing that makes AR serving fast — never redoing work on text that is already
+            written. SDAR-style block diffusion is the study of how to keep both, and the small
+            figure below is its whole promise in one line: the same 8 tokens, in 5 passes instead
+            of 8.</span>
+            <span class="lang-ko">diffusion 언어 모델은 pass 횟수를 정면으로 공격한다: 한 pass에
+            <em>여러</em> 위치를 예측하면 왕복 횟수가 나눠진다. 하지만 순수한 형태는 AR serving을
+            빠르게 만드는 나머지 한 축 — 이미 써 놓은 텍스트에 대한 작업을 절대 반복하지 않는 것 —
+            을 포기한다. SDAR 계열 block diffusion은 이 둘을 어떻게 다 지키는가에 대한 공부이고,
+            아래 작은 그림이 그 약속의 전부다: 같은 8개 token을 8번이 아니라 5번의 pass로.</span>
+          </p>
+        </div>
+
+        <div class="viz-frame">
+          <div class="sdar-scroll">
+          <svg viewBox="0 0 640 168" role="img" aria-label="Forward-pass count comparison: AR uses 8 passes for 8 tokens; the block-diffusion timeline on this page uses 5 denoising passes" style="width:100%; height:auto; min-width:560px; max-width:680px; display:block; margin:0 auto;">
+            <text class="stitle sm" x="16" y="34">AR decoding</text>
+            <text class="ssub" x="16" y="52">1 token / pass</text>
+            {Array.from({ length: 8 }, (_, i) => (
+              <g>
+                <rect class="sbox" x={150 + i * 46} y="18" width="38" height="30" rx="7"></rect>
+                <text class="smono" x={150 + i * 46 + 19} y="37" text-anchor="middle">1</text>
+              </g>
+            ))}
+            <text class="smono" x="530" y="37" text-anchor="start">= 8 passes</text>
+
+            <text class="stitle sm taccent" x="16" y="106">block diffusion</text>
+            <text class="ssub" x="16" y="124">tokens / pass vary</text>
+            {[1, 2, 1, 2, 2].map((n, i) => (
+              <g>
+                <rect class="sbox sbox-accent" x={150 + i * 46} y="90" width="38" height="30" rx="7"></rect>
+                <text class="smono taccent" x={150 + i * 46 + 19} y="109" text-anchor="middle">{n}</text>
+              </g>
+            ))}
+            <text class="smono taccent" x="392" y="109" text-anchor="start">= 5 passes, same 8 tokens</text>
+
+            <text class="ssub" x="16" y="156">each box = one forward pass ≈ one full 3.4 GB weight read (batch 1) · numbers = tokens committed in that pass</text>
+          </svg>
+          </div>
+        </div>
+
+        <p class="arc-question">
+          <span class="lang-en">How can a model even predict several positions at once — and what does that break?</span>
+          <span class="lang-ko">애초에 모델이 여러 위치를 동시에 예측하는 게 어떻게 가능하고, 그러면 무엇이 깨질까?</span>
+        </p>
+      </div>
+    </section>
+
+    <!-- ============ §2 · FOUNDATIONS ============ -->
+    <section class="section-tight" id="arc-s2">
+      <div class="container">
+        <h2 class="viz-h arc-heading"><span class="arc-num">§2</span><span><span class="lang-en">Foundations — the cache and the mask</span><span class="lang-ko">기초 다지기 — cache와 mask</span></span></h2>
+        <div class="prose">
+          <p>
+            <span class="lang-en">Two background ideas make everything on this page legible. First,
+            the <strong>KV cache</strong>. Inside a transformer, every position computes attention
+            over the positions it is allowed to see, and for each visible position the layer needs
+            two vectors — a key and a value. In an AR model the visibility rule is <em>causal</em>:
+            a token sees only its past. That rule has a golden consequence: the past never changes,
+            so the K and V of already-written tokens can be computed once, stored, and reused for
+            every later token. Decoding one new token then costs one pass over the weights plus
+            cheap reads from this cache — and the cached values are <em>exact</em>: recomputing
+            them would reproduce them bit for bit.</span>
+            <span class="lang-ko">이 페이지 전체를 읽히게 만드는 배경 아이디어는 두 개다. 첫째,
+            <strong>KV cache</strong>. transformer 안에서 각 위치는 자신이 볼 수 있는 위치들에
+            대해 attention을 계산하고, 보이는 위치마다 layer는 vector 두 개 — key와 value — 를
+            필요로 한다. AR 모델의 가시성 규칙은 <em>causal</em>이다: token은 자기 과거만 본다.
+            이 규칙의 황금 같은 귀결: 과거는 절대 변하지 않으므로, 이미 써 놓은 token들의 K와 V는
+            한 번 계산해 저장해 두고 이후 모든 token이 재사용할 수 있다. 새 token 하나를 디코딩하는
+            비용은 weight 한 번 통과 + 이 cache에서의 값싼 읽기가 전부다 — 그리고 cache된 값은
+            <em>정확(exact)</em>하다: 다시 계산해도 bit 단위로 같은 값이 나온다.</span>
+          </p>
+          <p>
+            <span class="lang-en">Second, <strong>masked-diffusion generation</strong>. Instead of
+            appending one token at a time, the output starts as a row of <code>[MASK]</code>
+            placeholders. Each forward pass, the model reads the whole sequence —
+            <em>bidirectionally</em>, future slots included — and proposes a token for every masked
+            position at once; the most confident proposals are kept, the rest stay masked for
+            another pass. That is exactly the many-tokens-per-pass parallelism §1 asked for.</span>
+            <span class="lang-ko">둘째, <strong>masked-diffusion 생성</strong>. token을 하나씩
+            덧붙이는 대신, 출력이 <code>[MASK]</code> placeholder 행렬로 시작한다. forward pass마다
+            모델은 시퀀스 전체를 — 미래 슬롯까지 포함해 <em>bidirectional</em>하게 — 읽고 mask된
+            모든 위치에 대해 동시에 token을 제안한다; confidence가 높은 제안은 확정되고, 나머지는
+            다음 pass를 위해 mask로 남는다. §1이 요구한 pass당 여러 token 병렬성이 정확히
+            이것이다.</span>
+          </p>
+          <p>
+            <span class="lang-en">Now the collision. Bidirectionality poisons the cache: if
+            position 7 may attend to position 12, then the K/V computed at 7 depend on whatever
+            currently occupies 12 — and that keeps changing until 12 is final. Nothing is safely
+            “the past”; any stored vector can go stale, so full-attention diffusion LMs must either
+            recompute constantly or manage an <em>approximate</em> cache. Caching wants
+            immutability; parallelism wants bidirectionality — one attention mask cannot grant
+            both everywhere.</span>
+            <span class="lang-ko">이제 충돌이다. bidirectionality는 cache에 독이 된다: 위치 7이
+            위치 12에 attend할 수 있다면, 7에서 계산된 K/V는 지금 12에 놓인 것이 무엇이냐에
+            의존하는데 — 그것은 12가 확정될 때까지 계속 바뀐다. 그 무엇도 안전한 “과거”가 아니고,
+            저장해 둔 vector는 언제든 stale해질 수 있다. 그래서 full-attention diffusion LM은
+            끊임없이 재계산하거나 <em>근사</em> cache를 관리해야 한다. caching은 불변성을 원하고,
+            병렬성은 bidirectionality를 원한다 — attention mask 하나가 모든 곳에서 둘 다 줄 수는
+            없다.</span>
+          </p>
+        </div>
+
+        <div class="viz-frame">
+          <div class="sdar-scroll">
+          <svg viewBox="0 0 640 236" role="img" aria-label="Two attention masks side by side: causal (cache exact, one token per pass) versus fully bidirectional (parallel, cache goes stale)" style="width:100%; height:auto; min-width:560px; max-width:680px; display:block; margin:0 auto;">
+            <text class="stitle sm" x="96" y="20" text-anchor="middle">causal (AR)</text>
+            {Array.from({ length: 4 }, (_, q) => (
+              Array.from({ length: 4 }, (_, k) => (
+                <rect class={`mcell ${k <= q ? 'm-past' : 'm-off'}`} x={36 + k * 32} y={32 + q * 32} width="30" height="30" rx="4"></rect>
+              ))
+            ))}
+            <text class="ssub" x="96" y="182" text-anchor="middle">past never changes</text>
+            <text class="ssub" x="96" y="198" text-anchor="middle">→ cache exact</text>
+            <text class="ssub" x="96" y="214" text-anchor="middle">but 1 token / pass</text>
+
+            <text class="stitle sm" x="342" y="20" text-anchor="middle">full bidirectional (dLLM)</text>
+            {Array.from({ length: 4 }, (_, q) => (
+              Array.from({ length: 4 }, (_, k) => (
+                <rect class="mcell m-intra" x={282 + k * 32} y={32 + q * 32} width="30" height="30" rx="4"></rect>
+              ))
+            ))}
+            <text class="ssub" x="342" y="182" text-anchor="middle">every position may revise</text>
+            <text class="ssub" x="342" y="198" text-anchor="middle">→ parallel decode</text>
+            <text class="ssub" x="342" y="214" text-anchor="middle">but cache goes stale</text>
+
+            <text class="stitle sm taccent" x="548" y="20" text-anchor="middle">both?</text>
+            <rect x="500" y="32" width="126" height="126" rx="10" fill="none" stroke="var(--accent)" stroke-width="1.4" stroke-dasharray="6 5"></rect>
+            <text class="stitle taccent" x="563" y="102" text-anchor="middle">§4</text>
+            <text class="ssub" x="548" y="182" text-anchor="middle">bidirectional inside,</text>
+            <text class="ssub" x="548" y="198" text-anchor="middle">causal across —</text>
+            <text class="ssub" x="548" y="214" text-anchor="middle">a block mask</text>
+          </svg>
+          </div>
+        </div>
+
+        <div class="prose">
+          <p>
+            <span class="lang-en">The escape is to stop demanding one answer everywhere: keep
+            bidirectionality <em>inside</em> a small window and causality <em>across</em> windows.
+            That single move is block diffusion, and it forces everything else on this page —
+            the mask in §4, the decoding loop in §5, even the fact that §3 will look boringly
+            familiar.</span>
+            <span class="lang-ko">탈출구는 모든 곳에서 하나의 답을 요구하지 않는 것이다: 작은 창
+            <em>안쪽</em>에서는 bidirectionality를, 창 <em>사이</em>에서는 causality를 유지한다.
+            이 한 수가 block diffusion이고, 이 페이지의 나머지 전부 — §4의 mask, §5의 디코딩 루프,
+            심지어 §3이 지루할 만큼 낯익어 보일 것이라는 사실까지 — 를 강제한다.</span>
+          </p>
+        </div>
+
+        <p class="arc-question">
+          <span class="lang-en">If the fix is just a mask, what happens to the model itself?</span>
+          <span class="lang-ko">고치는 게 mask뿐이라면, 모델 자체는 무엇이 달라질까?</span>
+        </p>
+      </div>
+    </section>
+
+    <!-- ============ §3 · MODEL STACK ============ -->
+    <section class="section-tight" id="arc-s3">
+      <div class="container">
+        <h2 class="viz-h arc-heading"><span class="arc-num">§3</span><span><span class="lang-en">The model stack</span><span class="lang-ko">모델 스택</span></span></h2>
+        <p class="arc-bridge">
+          <span class="lang-en">We now know the shape of the compromise — bidirectional inside,
+          causal across. The first surprise is what it costs the network: nothing. Here is the
+          entire model, weight by weight.</span>
+          <span class="lang-ko">타협의 모양은 이제 안다 — 안쪽은 bidirectional, 사이는 causal.
+          첫 번째 놀라움은 이것이 네트워크에 요구하는 대가다: 없다. 아래가 모델 전체, weight
+          하나하나다.</span>
+        </p>
         <p class="viz-sub">
           <span class="lang-en">Hover any box for exact parameter counts and bytes. Click a
           transformer block to open its internals.</span>
@@ -105,7 +311,7 @@ const maskRows = Array.from({ length: N }, (_, q) => ({
             <line class="flowline" x1="280" y1="134" x2="280" y2="148" marker-end="url(#arrS)"></line>
 
             <!-- transformer blocks -->
-            <a href="#layer-view" class="blk-link" aria-label="Open transformer block internals">
+            <a href="#arc-s4" class="blk-link" aria-label="Open transformer block internals">
               <g class="clickable" data-tip="Per layer: Q 4.19 M + K 2.10 M + V 2.10 M + O 4.19 M + SwiGLU MLP 37.75 M + norms ≈ 50.33 M params ≈ 100.7 MB BF16. Click to open." data-tip-ko="Layer당: Q 4.19 M + K 2.10 M + V 2.10 M + O 4.19 M + SwiGLU MLP 37.75 M + norm ≈ 50.33 M params ≈ 100.7 MB BF16. 클릭하면 열린다.">
                 <rect class="sbox sbox-blk" x="120" y="150" width="320" height="56" rx="10"></rect>
                 <text class="stitle" x="280" y="172" text-anchor="middle">transformer block 1</text>
@@ -113,7 +319,7 @@ const maskRows = Array.from({ length: N }, (_, q) => ({
               </g>
             </a>
             <line class="flowline-thin" x1="280" y1="206" x2="280" y2="216"></line>
-            <a href="#layer-view" class="blk-link" aria-label="Open transformer block internals">
+            <a href="#arc-s4" class="blk-link" aria-label="Open transformer block internals">
               <g class="clickable" data-tip="Identical shape every layer. Only the weights differ." data-tip-ko="모든 layer가 동일한 shape이다. weight만 다르다.">
                 <rect class="sbox sbox-blk" x="120" y="216" width="320" height="56" rx="10"></rect>
                 <text class="stitle" x="280" y="238" text-anchor="middle">transformer block 2</text>
@@ -123,7 +329,7 @@ const maskRows = Array.from({ length: N }, (_, q) => ({
             <line class="flowline-dash" x1="280" y1="272" x2="280" y2="316"></line>
             <rect x="164" y="284" width="232" height="20" fill="#ffffff"></rect>
             <text class="ssub" x="280" y="298" text-anchor="middle">⋯ blocks 3 – 27 (24 more, identical) ⋯</text>
-            <a href="#layer-view" class="blk-link" aria-label="Open transformer block internals">
+            <a href="#arc-s4" class="blk-link" aria-label="Open transformer block internals">
               <g class="clickable" data-tip="28 layers total: 28 × 50.33 M = 1,409 M backbone params ≈ 2.82 GB BF16." data-tip-ko="총 28개 layer: 28 × 50.33 M = 1,409 M backbone params ≈ 2.82 GB BF16.">
                 <rect class="sbox sbox-blk" x="120" y="316" width="320" height="56" rx="10"></rect>
                 <text class="stitle" x="280" y="338" text-anchor="middle">transformer block 28</text>
@@ -175,13 +381,53 @@ const maskRows = Array.from({ length: N }, (_, q) => ({
           </svg>
           </div>
         </div>
+        <div class="prose">
+          <p>
+            <span class="lang-en">There is no diffusion-specific machinery in the weights. The stack is a plain dense
+            decoder: a 151,936 × 2,048 tied embedding (311 M parameters), 28 identical transformer
+            blocks of about 50.3 M parameters each, a final RMSNorm, and the transposed embedding
+            as the LM head — roughly 1.72 B parameters, 3.4 GB in BF16. This is why SDAR-style
+            models can be <em>adapted</em> from a pretrained AR checkpoint rather than trained
+            from scratch: the published recipe starts from Qwen3 weights and continues training
+            with a block-diffusion objective. Everything that makes the model “diffusion” lives
+            in two places outside the weights: the attention mask and the decoding loop.</span>
+            <span class="lang-ko">weight 안에는 diffusion 전용 장치가 하나도 없다. 스택은 평범한 dense
+            decoder다: 151,936 × 2,048 tied embedding(311 M parameter), 각각 약 50.3 M parameter인
+            동일한 transformer block 28개, 마지막 RMSNorm, 그리고 embedding의 transpose를 LM head로
+            쓴다 — 대략 1.72 B parameter, BF16으로 3.4 GB. SDAR 계열 모델을 처음부터 학습하는 대신
+            사전학습된 AR checkpoint에서 <em>적응(adapt)</em>시킬 수 있는 이유가 여기에 있다:
+            공개된 레시피는 Qwen3 weight에서 출발해 block-diffusion objective로 학습을 이어 간다.
+            이 모델을 “diffusion”으로 만드는 모든 것은 weight 바깥의 두 곳에 산다:
+            attention mask와 디코딩 루프.</span>
+          </p>
+        </div>
+
+        <div class="arc-takeaway">
+          <span class="arc-takeaway-label"><span class="lang-en">Takeaway</span><span class="lang-ko">핵심 한 줄</span></span>
+          <span class="lang-en">SDAR's 1.72 B parameters are, shape for shape, an ordinary Qwen3-style AR decoder — the
+          “diffusion” lives entirely in the attention mask and the decoding loop, not in the weights.</span>
+          <span class="lang-ko">SDAR의 1.72 B parameter는 shape 하나까지 평범한 Qwen3 계열 AR decoder다 —
+          “diffusion”은 weight가 아니라 attention mask와 디코딩 루프에만 산다.</span>
+        </div>
+        <p class="arc-question">
+          <span class="lang-en">So where exactly does that mask sit inside a layer — and what does it change?</span>
+          <span class="lang-ko">그렇다면 그 mask는 layer 안 정확히 어디에 앉아 있고, 무엇을 바꿀까?</span>
+        </p>
       </div>
     </section>
 
-    <!-- ============ 2 · LAYER INTERNALS ============ -->
-    <section class="section-tight" id="layer-view">
+    <!-- ============ §4 · LAYER INTERNALS ============ -->
+    <section class="section-tight" id="arc-s4">
       <div class="container">
-        <h2 class="viz-h">2 · <span class="lang-en">Inside one transformer block</span><span class="lang-ko">Transformer block 하나의 내부</span></h2>
+        <h2 class="viz-h arc-heading"><span class="arc-num">§4</span><span><span class="lang-en">Inside one transformer block</span><span class="lang-ko">Transformer block 하나의 내부</span></span></h2>
+        <p class="arc-bridge">
+          <span class="lang-en">The stack told us where the diffusion is <em>not</em>. This section
+          opens one of the 28 blocks to find where it is: a single mask added to the attention
+          scores — the compromise from §2, drawn cell by cell.</span>
+          <span class="lang-ko">스택은 diffusion이 <em>없는</em> 곳을 알려 줬다. 이 섹션은 28개
+          block 중 하나를 열어 diffusion이 있는 곳을 찾는다: attention score에 더해지는 mask 하나 —
+          §2의 타협을 셀 단위로 그린 것이다.</span>
+        </p>
         <p class="viz-sub">
           <span class="lang-en">Left: the dataflow with every weight matrix and its shape. Right: the
           block-causal attention mask — hover a row to see exactly which K/V positions that query
@@ -390,13 +636,61 @@ const maskRows = Array.from({ length: N }, (_, q) => ({
             </div>
           </div>
         </div>
+
+        <div class="prose">
+          <p>
+            <span class="lang-en">Inside a block: pre-RMSNorm, then Q/K/V projections. The config is GQA-shaped —
+            16 query heads of dimension 128 (W<sub>Q</sub>: 2,048 → 2,048) but only 8 KV heads
+            (W<sub>K</sub>, W<sub>V</sub>: 2,048 → 1,024), so each K/V head serves two query
+            heads and the cache is half the size it would be with MHA. After per-head QK-norm and
+            RoPE comes the one genuinely different ingredient: the <strong>block-causal mask</strong>.
+            Partition positions into blocks of 4. A query may attend to every position in earlier
+            blocks (ordinary causal attention — those K/V come straight from the cache) and to
+            <em>every</em> position of its own block, including future ones. In the matrix panel,
+            the coral cells to the right of the dashed diagonal are precisely the visibility that
+            a causal AR mask forbids — and they are what lets several tokens be predicted jointly
+            in one pass. The MLP is a standard SwiGLU (2,048 → 6,144 → 2,048, 37.75 M parameters
+            per layer — three times the attention weights).</span>
+            <span class="lang-ko">block 내부: pre-RMSNorm 다음 Q/K/V projection. config는 GQA 형태다 —
+            dimension 128짜리 query head 16개(W<sub>Q</sub>: 2,048 → 2,048)에 KV head는 8개뿐이라
+            (W<sub>K</sub>, W<sub>V</sub>: 2,048 → 1,024), K/V head 하나가 query head 두 개를 감당하고
+            cache는 MHA였을 때의 절반 크기다. per-head QK-norm과 RoPE 다음에 진짜로 다른 단 하나의
+            재료가 온다: <strong>block-causal mask</strong>. 위치들을 4개씩 block으로 나눈다.
+            query는 이전 block의 모든 위치(일반적인 causal attention — 그 K/V는 cache에서 바로 온다)와,
+            미래 위치를 포함한 자기 block의 <em>모든</em> 위치에 attend할 수 있다. matrix 패널에서
+            점선 대각선 오른쪽의 coral 셀이 정확히 causal AR mask가 금지하는 가시성이며 — 여러 token을
+            한 pass에 함께 예측할 수 있게 해 주는 것이 바로 이들이다. MLP는 표준 SwiGLU다
+            (2,048 → 6,144 → 2,048, layer당 37.75 M parameter — attention weight의 3배).</span>
+          </p>
+        </div>
+
+        <div class="arc-takeaway">
+          <span class="arc-takeaway-label"><span class="lang-en">Takeaway</span><span class="lang-ko">핵심 한 줄</span></span>
+          <span class="lang-en">One mask buys both halves of §2's bargain: within-block bidirectionality
+          (several positions predicted jointly) and cross-block causality (finalized K/V that never
+          go stale).</span>
+          <span class="lang-ko">mask 하나가 §2의 거래 양쪽을 다 사 온다: block 안 bidirectionality
+          (여러 위치의 동시 예측)와 block 사이 causality (절대 stale해지지 않는 확정 K/V).</span>
+        </div>
+        <p class="arc-question">
+          <span class="lang-en">A mask only says who may look at whom — how does a block of four [MASK]s actually become text?</span>
+          <span class="lang-ko">mask는 누가 누구를 봐도 되는지만 말한다 — [MASK] 4개짜리 block은 실제로 어떻게 텍스트가 될까?</span>
+        </p>
       </div>
     </section>
 
-    <!-- ============ 3 · DECODING TIMELINE ============ -->
-    <section class="section-tight" id="decode-view">
+    <!-- ============ §5 · DECODING TIMELINE ============ -->
+    <section class="section-tight" id="arc-s5">
       <div class="container">
-        <h2 class="viz-h">3 · <span class="lang-en">Decoding timeline</span><span class="lang-ko">디코딩 타임라인</span></h2>
+        <h2 class="viz-h arc-heading"><span class="arc-num">§5</span><span><span class="lang-en">Decoding timeline</span><span class="lang-ko">디코딩 타임라인</span></span></h2>
+        <p class="arc-bridge">
+          <span class="lang-en">This is the hardest section of the page — the full decoding loop,
+          where the mask, the confidence rule and the cache all interact at once. Take it slowly:
+          step with “Next” rather than “Play”, and read each caption before moving on.</span>
+          <span class="lang-ko">여기가 이 페이지에서 가장 어려운 섹션이다 — mask, confidence 규칙,
+          cache가 한꺼번에 맞물리는 디코딩 루프 전체. 천천히 가자: “Play” 대신 “Next”로 한 단계씩
+          밟고, 캡션을 읽고 나서 넘어가는 것을 권한다.</span>
+        </p>
         <p class="viz-sub">
           <span class="lang-en">Step through block-by-block generation: masked slots are denoised in
           parallel, commits follow confidence, and each finalized block appends exact K/V entries
@@ -451,62 +745,8 @@ const maskRows = Array.from({ length: N }, (_, q) => ({
             </p>
           </noscript>
         </div>
-      </div>
-    </section>
 
-    <!-- ============ PROSE ============ -->
-    <section class="section">
-      <div class="container">
         <div class="prose">
-          <h2><span class="lang-en">Reading the diagram</span><span class="lang-ko">다이어그램 읽기</span></h2>
-
-          <h3><span class="lang-en">Stage 1 — the stack is just a transformer</span><span class="lang-ko">Stage 1 — 스택은 그냥 transformer다</span></h3>
-          <p>
-            <span class="lang-en">There is no diffusion-specific machinery in the weights. The stack is a plain dense
-            decoder: a 151,936 × 2,048 tied embedding (311 M parameters), 28 identical transformer
-            blocks of about 50.3 M parameters each, a final RMSNorm, and the transposed embedding
-            as the LM head — roughly 1.72 B parameters, 3.4 GB in BF16. This is why SDAR-style
-            models can be <em>adapted</em> from a pretrained AR checkpoint rather than trained
-            from scratch: the published recipe starts from Qwen3 weights and continues training
-            with a block-diffusion objective. Everything that makes the model “diffusion” lives
-            in two places outside the weights: the attention mask and the decoding loop.</span>
-            <span class="lang-ko">weight 안에는 diffusion 전용 장치가 하나도 없다. 스택은 평범한 dense
-            decoder다: 151,936 × 2,048 tied embedding(311 M parameter), 각각 약 50.3 M parameter인
-            동일한 transformer block 28개, 마지막 RMSNorm, 그리고 embedding의 transpose를 LM head로
-            쓴다 — 대략 1.72 B parameter, BF16으로 3.4 GB. SDAR 계열 모델을 처음부터 학습하는 대신
-            사전학습된 AR checkpoint에서 <em>적응(adapt)</em>시킬 수 있는 이유가 여기에 있다:
-            공개된 레시피는 Qwen3 weight에서 출발해 block-diffusion objective로 학습을 이어 간다.
-            이 모델을 “diffusion”으로 만드는 모든 것은 weight 바깥의 두 곳에 산다:
-            attention mask와 디코딩 루프.</span>
-          </p>
-
-          <h3><span class="lang-en">Stage 2 — one layer, and the mask that changes everything</span><span class="lang-ko">Stage 2 — layer 하나, 그리고 모든 것을 바꾸는 mask</span></h3>
-          <p>
-            <span class="lang-en">Inside a block: pre-RMSNorm, then Q/K/V projections. The config is GQA-shaped —
-            16 query heads of dimension 128 (W<sub>Q</sub>: 2,048 → 2,048) but only 8 KV heads
-            (W<sub>K</sub>, W<sub>V</sub>: 2,048 → 1,024), so each K/V head serves two query
-            heads and the cache is half the size it would be with MHA. After per-head QK-norm and
-            RoPE comes the one genuinely different ingredient: the <strong>block-causal mask</strong>.
-            Partition positions into blocks of 4. A query may attend to every position in earlier
-            blocks (ordinary causal attention — those K/V come straight from the cache) and to
-            <em>every</em> position of its own block, including future ones. In the matrix panel,
-            the coral cells to the right of the dashed diagonal are precisely the visibility that
-            a causal AR mask forbids — and they are what lets several tokens be predicted jointly
-            in one pass. The MLP is a standard SwiGLU (2,048 → 6,144 → 2,048, 37.75 M parameters
-            per layer — three times the attention weights).</span>
-            <span class="lang-ko">block 내부: pre-RMSNorm 다음 Q/K/V projection. config는 GQA 형태다 —
-            dimension 128짜리 query head 16개(W<sub>Q</sub>: 2,048 → 2,048)에 KV head는 8개뿐이라
-            (W<sub>K</sub>, W<sub>V</sub>: 2,048 → 1,024), K/V head 하나가 query head 두 개를 감당하고
-            cache는 MHA였을 때의 절반 크기다. per-head QK-norm과 RoPE 다음에 진짜로 다른 단 하나의
-            재료가 온다: <strong>block-causal mask</strong>. 위치들을 4개씩 block으로 나눈다.
-            query는 이전 block의 모든 위치(일반적인 causal attention — 그 K/V는 cache에서 바로 온다)와,
-            미래 위치를 포함한 자기 block의 <em>모든</em> 위치에 attend할 수 있다. matrix 패널에서
-            점선 대각선 오른쪽의 coral 셀이 정확히 causal AR mask가 금지하는 가시성이며 — 여러 token을
-            한 pass에 함께 예측할 수 있게 해 주는 것이 바로 이들이다. MLP는 표준 SwiGLU다
-            (2,048 → 6,144 → 2,048, layer당 37.75 M parameter — attention weight의 3배).</span>
-          </p>
-
-          <h3><span class="lang-en">Stage 3 — decode in blocks, cache like an AR model</span><span class="lang-ko">Stage 3 — block으로 디코딩, cache는 AR 모델처럼</span></h3>
           <p>
             <span class="lang-en">Generation appends a block of 4 <code>[MASK]</code> tokens and denoises it over a few
             forward passes. Each pass produces a full 151,936-way distribution at every masked
@@ -530,6 +770,34 @@ const maskRows = Array.from({ length: N }, (_, q) => ({
           </p>
         </div>
 
+        <div class="arc-takeaway">
+          <span class="arc-takeaway-label"><span class="lang-en">Takeaway</span><span class="lang-ko">핵심 한 줄</span></span>
+          <span class="lang-en">8 tokens in 5 denoising passes, with an AR-grade cache: the parallelism comes from
+          within-block bidirectionality, the exact append-only KV from cross-block causality — §1's
+          promise, delivered by §4's mask.</span>
+          <span class="lang-ko">denoising pass 5번에 token 8개, cache는 AR급: 병렬성은 block 안
+          bidirectionality에서, 정확한 append-only KV는 block 사이 causality에서 나온다 — §4의
+          mask가 §1의 약속을 이행한 것이다.</span>
+        </div>
+        <p class="arc-question">
+          <span class="lang-en">What does this buy at serving time — and what is still unsolved?</span>
+          <span class="lang-ko">이것이 serving에서 무엇을 사 주고, 무엇은 아직 미해결일까?</span>
+        </p>
+      </div>
+    </section>
+
+    <!-- ============ §6 · WHERE THIS GOES ============ -->
+    <section class="section" id="arc-s6">
+      <div class="container">
+        <h2 class="viz-h arc-heading"><span class="arc-num">§6</span><span><span class="lang-en">Where this goes</span><span class="lang-ko">이 다음</span></span></h2>
+        <p class="arc-bridge">
+          <span class="lang-en">Zoom back out. What we just walked is one released design point —
+          block length 4, one confidence rule, one adapted backbone. Why it matters for serving,
+          and where the field is pushing next.</span>
+          <span class="lang-ko">다시 넓게 보자. 방금 밟은 것은 공개된 설계점 하나다 — block length 4,
+          confidence 규칙 하나, adapt된 backbone 하나. 이것이 serving에 왜 중요한지, 그리고 이
+          분야가 지금 어디를 밀고 있는지.</span>
+        </p>
         <div class="eff-note band-dark">
           <h3><span class="lang-en">Why this matters for efficiency</span><span class="lang-ko">이것이 효율에 중요한 이유</span></h3>
           <p>
@@ -566,7 +834,40 @@ const maskRows = Array.from({ length: N }, (_, q) => ({
         </div>
 
         <div class="prose">
-          <h2><span class="lang-en">Going deeper</span><span class="lang-ko">더 깊이 읽기</span></h2>
+          <p>
+            <span class="lang-en">The frontier around this design is active on several sides. One
+            line of work keeps the full-attention diffusion form and manages the approximate cache
+            it implies — <a href="/reviews/llada/">LLaDA</a> established the model class, and
+            <a href="/reviews/fast-dllm/">Fast-dLLM</a> shows how far training-free caching and
+            parallel decoding can push it. A second line scales the block-diffusion recipe itself
+            to much larger models — see <a href="/reviews/nemotron-diffusion/">Nemotron-Diffusion</a>.
+            A third asks how to steer parallel decoding: for instance, enforcing output constraints
+            when tokens no longer arrive left-to-right
+            (<a href="/reviews/constrained-decoding-dllm/">constrained decoding for dLLMs</a>).</span>
+            <span class="lang-ko">이 설계 주변의 최전선은 여러 방향에서 움직이고 있다. 한 갈래는
+            full-attention diffusion 형태를 유지한 채 그것이 강제하는 근사 cache를 관리한다 —
+            <a href="/reviews/llada/">LLaDA</a>가 이 모델 클래스를 세웠고,
+            <a href="/reviews/fast-dllm/">Fast-dLLM</a>은 training-free caching과 병렬 디코딩이
+            어디까지 갈 수 있는지 보여 준다. 두 번째 갈래는 block-diffusion 레시피 자체를 훨씬 큰
+            모델로 스케일한다 — <a href="/reviews/nemotron-diffusion/">Nemotron-Diffusion</a>을 보라.
+            세 번째는 병렬 디코딩을 어떻게 조종할지 묻는다: 예컨대 token이 더 이상 왼쪽에서
+            오른쪽으로 도착하지 않을 때 출력 제약을 지키는 문제
+            (<a href="/reviews/constrained-decoding-dllm/">dLLM constrained decoding</a>)다.</span>
+          </p>
+          <p>
+            <span class="lang-en">And plenty is unsolved: how the block-size / quality trade-off
+            behaves at scale, how to schedule the threshold τ instead of fixing it, how block-causal
+            attention holds up at long context, and how block-diffusion decoding composes with the
+            batching and scheduling machinery of real serving stacks. The mechanics on this page
+            are the fixed vocabulary those questions are asked in.</span>
+            <span class="lang-ko">미해결 문제도 잔뜩 남아 있다: block 크기 / 품질 트레이드오프가
+            스케일에서 어떻게 움직이는지, threshold τ를 고정하는 대신 어떻게 스케줄링할지,
+            block-causal attention이 long context에서 어떻게 버티는지, block-diffusion 디코딩이
+            실제 serving 스택의 batching·scheduling 장치와 어떻게 결합하는지. 이 페이지의
+            메커니즘은 그 질문들을 서술하는 고정 어휘다.</span>
+          </p>
+
+          <h3><span class="lang-en">Going deeper</span><span class="lang-ko">더 깊이 읽기</span></h3>
           <ul class="deeper-list">
             <li><a class="arrow-link" href="https://github.com/JetAstra/SDAR" target="_blank" rel="noopener">SDAR<span class="lang-en"> — model family, checkpoints &amp; tech report (GitHub)</span><span class="lang-ko"> — 모델 패밀리, checkpoint &amp; tech report (GitHub)</span></a></li>
             <li><a class="arrow-link" href="https://arxiv.org/abs/2503.09573" target="_blank" rel="noopener">Block Diffusion (BD3-LM)<span class="lang-en"> — interpolating between AR and diffusion LMs</span><span class="lang-ko"> — AR와 diffusion LM 사이를 보간하는 모델</span></a></li>
@@ -600,9 +901,6 @@ const maskRows = Array.from({ length: N }, (_, q) => ({
     gap: 0.8rem 1rem; flex-wrap: wrap; margin-bottom: 1.1rem;
   }
   .sdar-page .hero-top .eyebrow { margin-bottom: 0; }
-  .sdar-page .jump-row { display: flex; gap: 0.6rem; flex-wrap: wrap; margin: 1.6rem 0 0; }
-  .sdar-page .jump-row .tag { transition: border-color 0.2s, color 0.2s; }
-  .sdar-page .jump-row .tag:hover { border-color: var(--accent); color: var(--accent-strong); }
   .sdar-page .config-note {
     margin-top: 1.4rem; display: flex; flex-wrap: wrap; gap: 0.45rem; align-items: center;
     font-size: 0.88rem; color: var(--text-secondary);
