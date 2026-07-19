@@ -1,0 +1,140 @@
+---
+import Base from '../../layouts/Base.astro';
+import LangToggle from '../../components/LangToggle.astro';
+import { getCollection } from 'astro:content';
+
+const talks = (await getCollection('talks')).sort(
+  (a, b) => b.data.date.valueOf() - a.data.date.valueOf()
+);
+
+const fmtDate = (d: Date) =>
+  d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+---
+
+<Base
+  title="Talks — Junwon Lee"
+  description="English AI talks and keynotes with Korean subtitles — embedded from the original channels, subtitled with a glossary-driven LLM pipeline."
+>
+  <section class="section hero">
+    <div class="container">
+      <div class="hero-top">
+        <p class="eyebrow">Talks</p>
+        <LangToggle />
+      </div>
+      <h1>AI talks, in Korean</h1>
+      <p class="lede">
+        <span class="lang-en">
+          Great AI talks and keynotes deserve a wider audience. Each video here plays
+          from its original YouTube channel with my Korean subtitles overlaid —
+          built with a glossary-driven translation pipeline tuned for technical accuracy.
+        </span>
+        <span class="lang-ko">
+          좋은 AI 발표는 더 넓은 청중을 만나야 합니다. 여기의 모든 영상은 원본 YouTube
+          채널에서 재생되고, 그 위에 기술 용어 정확도에 맞춰 조정한 용어집 기반 번역
+          파이프라인으로 만든 한글 자막을 얹었습니다.
+        </span>
+      </p>
+      <p class="disclosure">
+        <span class="lang-en">
+          Subtitles are machine-assisted (ASR captions → LLM translation) and may contain
+          errors — corrections welcome. Videos are never re-hosted; all views go to the creators.
+        </span>
+        <span class="lang-ko">
+          자막은 자동 캡션을 LLM으로 번역해 만들어 오류가 있을 수 있습니다 — 제보 환영합니다.
+          영상은 재업로드하지 않으며 조회수는 모두 원작자에게 갑니다.
+        </span>
+      </p>
+    </div>
+  </section>
+
+  <section class="section-tight">
+    <div class="container">
+      <div class="card-grid">
+        {talks.map((t) => (
+          <a class="card talk-card" href={`/talks/${t.id}/`}>
+            <div class="thumb">
+              <img
+                src={`https://i.ytimg.com/vi/${t.data.videoId}/hqdefault.jpg`}
+                alt={t.data.title}
+                loading="lazy"
+              />
+              <span class="badge">KO SUB</span>
+            </div>
+            <span class="card-kicker">{t.data.event ?? t.data.channel}</span>
+            <h3>{t.data.title}</h3>
+            <p class="speaker-line">
+              {t.data.speaker}{t.data.affiliation ? ` · ${t.data.affiliation}` : ''}
+            </p>
+            <p>
+              <span class="lang-en">{t.data.summary}</span>
+              <span class="lang-ko">{t.data.summary_ko ?? t.data.summary}</span>
+            </p>
+            <span class="card-meta">
+              <span class="date">{fmtDate(t.data.date)}</span>
+              {t.data.duration && <span class="date">{t.data.duration}</span>}
+              <span class="date channel">© {t.data.channel} · YouTube</span>
+            </span>
+          </a>
+        ))}
+      </div>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .hero .lede {
+    margin-top: 1.4rem;
+  }
+  .hero-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+  .talk-card .channel {
+    margin-left: auto;
+  }
+  .disclosure {
+    margin-top: 0.9rem;
+    font-size: 0.85rem;
+    color: var(--text-tertiary);
+    max-width: 62ch;
+  }
+  .thumb {
+    position: relative;
+    margin: 0 0 0.9rem;
+    border-radius: var(--radius-s);
+    overflow: hidden;
+    aspect-ratio: 16 / 9;
+    background: var(--surface-warm);
+  }
+  .thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .badge {
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.05em;
+    color: var(--text-on-dark);
+    background: rgba(20, 20, 19, 0.78);
+    padding: 3px 8px;
+    border-radius: 6px;
+  }
+  .speaker-line {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin: -0.2rem 0 0;
+  }
+  .talk-card .date {
+    font-family: var(--font-mono);
+    font-size: 0.74rem;
+    color: var(--text-tertiary);
+    letter-spacing: 0.02em;
+  }
+</style>

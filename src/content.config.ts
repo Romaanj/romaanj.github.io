@@ -96,4 +96,27 @@ const projects = defineCollection({
   }),
 });
 
-export const collections = { reviews, study, projects };
+/** Subtitled talks — English AI talks/keynotes with Korean subtitles.
+ *  Videos are embedded from the original YouTube channel (never re-hosted);
+ *  only the subtitle overlay is ours. Cues live in src/data/talks/<id>.cues.json. */
+const talks = defineCollection({
+  loader: glob({ pattern: '**/*.{md,mdx}', base: './src/content/talks' }),
+  schema: z.object({
+    title: z.string(),
+    title_ko: z.string().optional(),
+    speaker: z.string(),
+    affiliation: z.string().optional(),
+    event: z.string().optional(),
+    /** YouTube channel credit, e.g. "Kimi AI" */
+    channel: z.string(),
+    /** YouTube video id — embed only */
+    videoId: z.string(),
+    duration: z.string().optional(),
+    date: z.coerce.date(),
+    summary: z.string(),
+    summary_ko: z.string().optional(),
+    tags: z.array(z.string()).default([]),
+  }),
+});
+
+export const collections = { reviews, study, projects, talks };
