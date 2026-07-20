@@ -46,7 +46,7 @@ const studyHref = (e: (typeof study)[number]) => e.data.interactive ?? `/study/$
         </span>
       </p>
       <div class="hero-actions">
-        <a class="btn" href="/research/">Explore research</a>
+        <a class="btn" href="/study/">Open the study bench</a>
         <a class="btn ghost" href="/about/">About me</a>
         <LangToggle />
       </div>
@@ -57,15 +57,7 @@ const studyHref = (e: (typeof study)[number]) => e.data.interactive ?? `/study/$
   <section class="section-tight">
     <div class="container">
       <div class="card-grid pillars">
-        <a class="card" href="/research/">
-          <span class="card-kicker">Research</span>
-          <h3>Inference acceleration</h3>
-          <p>
-            <span class="lang-en">Diffusion-LM serving, KV-cache compression and quantization — where the FLOPs are cheap and the bytes are not.</span>
-            <span class="lang-ko">Diffusion-LM serving, KV-cache 압축과 quantization — FLOPs는 싸고 bytes는 비싼 바로 그 지점.</span>
-          </p>
-          <span class="card-meta arrow-link">Research areas</span>
-        </a>
+        {/* Research pillar hidden for now (owner request 2026-07-20) — restore alongside the nav tab */}
         <a class="card" href="/study/">
           <span class="card-kicker">Study</span>
           <h3>Tear-downs, visualized</h3>
