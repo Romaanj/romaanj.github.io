@@ -42,6 +42,7 @@ const fmtDate = (dt: Date) =>
           <div class="sub-ko" id="sub-ko"></div>
           <div class="sub-en" id="sub-en"></div>
         </div>
+        <button id="fs-btn" class="fs-btn" type="button" aria-label="전체화면 (자막 유지)">⛶</button>
       </div>
 
       <div class="bar">
@@ -91,7 +92,9 @@ const fmtDate = (dt: Date) =>
       tag.src = 'https://www.youtube.com/iframe_api';
       document.head.appendChild(tag);
       window.onYouTubeIframeAPIReady = () => {
-        player = new YT.Player('yt', { videoId, playerVars: { rel: 0, playsinline: 1 } });
+        // fs:0 hides YouTube's own fullscreen button — it would fullscreen only
+        // the iframe and lose the subtitle overlay; our fs-btn fullscreens .stage
+        player = new YT.Player('yt', { videoId, playerVars: { rel: 0, playsinline: 1, fs: 0 } });
         setInterval(tick, 150);
       };
 
@@ -121,6 +124,43 @@ const fmtDate = (dt: Date) =>
           enEl.style.visibility = 'hidden';
         }
       }
+
+      // custom fullscreen: fullscreen the .stage container so the subtitle
+      // overlay stays visible; iOS Safari has no element fullscreen → fixed-
+      // position fallback ("fake-fs")
+      const stage = document.querySelector('.stage');
+      const fsBtn = document.getElementById('fs-btn');
+      const fsActive = () =>
+        document.fullscreenElement === stage ||
+        document.webkitFullscreenElement === stage ||
+        stage.classList.contains('fake-fs');
+      const syncFsUi = () => {
+        fsBtn.textContent = fsActive() ? '✕' : '⛶';
+        fsBtn.setAttribute('aria-label', fsActive() ? '전체화면 종료' : '전체화면 (자막 유지)');
+      };
+      const setFakeFs = (on) => {
+        stage.classList.toggle('fake-fs', on);
+        document.body.classList.toggle('fs-lock', on);
+        syncFsUi();
+      };
+      fsBtn.addEventListener('click', () => {
+        if (document.fullscreenElement || document.webkitFullscreenElement) {
+          (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+        } else if (stage.classList.contains('fake-fs')) {
+          setFakeFs(false);
+        } else if (stage.requestFullscreen) {
+          stage.requestFullscreen();
+        } else if (stage.webkitRequestFullscreen) {
+          stage.webkitRequestFullscreen();
+        } else {
+          setFakeFs(true);
+        }
+      });
+      document.addEventListener('fullscreenchange', syncFsUi);
+      document.addEventListener('webkitfullscreenchange', syncFsUi);
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && stage.classList.contains('fake-fs')) setFakeFs(false);
+      });
 
       document.getElementById('toggle-en').addEventListener('click', (e) => {
         const on = document.querySelector('.talk-page').classList.toggle('show-en');
@@ -204,6 +244,53 @@ const fmtDate = (dt: Date) =>
   }
   .talk-page.show-en .sub-en {
     display: block;
+  }
+  .fs-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 5;
+    width: 38px;
+    height: 38px;
+    border: 0;
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.55);
+    color: #fff;
+    font-size: 1.05rem;
+    line-height: 1;
+    cursor: pointer;
+    opacity: 0.75;
+    transition: opacity 0.15s;
+  }
+  .fs-btn:hover {
+    opacity: 1;
+  }
+  /* element fullscreen: overlay stays inside .stage, so subtitles survive */
+  .stage:fullscreen,
+  .stage:-webkit-full-screen {
+    border-radius: 0;
+  }
+  .stage:fullscreen .sub-ko,
+  .stage:-webkit-full-screen .sub-ko {
+    font-size: calc(var(--sub-ko-size, 1.3rem) * 1.7);
+  }
+  .stage:fullscreen .sub-en,
+  .stage:-webkit-full-screen .sub-en {
+    font-size: 1.1rem;
+  }
+  /* iOS fallback: fixed-position pseudo-fullscreen */
+  .stage.fake-fs {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    aspect-ratio: auto;
+    border-radius: 0;
+  }
+  .stage.fake-fs .sub-ko {
+    font-size: calc(var(--sub-ko-size, 1.3rem) * 1.4);
+  }
+  :global(body.fs-lock) {
+    overflow: hidden;
   }
   .bar {
     display: flex;
