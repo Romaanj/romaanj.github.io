@@ -5,6 +5,26 @@ import Base from '../layouts/Base.astro';
 <Base
   title="About — Junwon Lee"
   description="Junwon Lee — MS student at IRIS Lab, Sungkyunkwan University. Training-free acceleration of diffusion LLMs, KV-cache compression, quantization, and efficient inference systems."
+  jsonLd={{
+    '@context': 'https://schema.org',
+    '@type': 'Person',
+    name: 'Junwon Lee',
+    alternateName: '이준원',
+    url: 'https://romaanj.github.io/about/',
+    email: 'jwlee1218@g.skku.edu',
+    affiliation: {
+      '@type': 'Organization',
+      name: 'IRIS Lab, Sungkyunkwan University',
+      url: 'https://iris.skku.edu/',
+    },
+    alumniOf: 'Sungkyunkwan University',
+    sameAs: [
+      'https://github.com/Romaanj',
+      'https://www.linkedin.com/in/junwon-lee-961383204/',
+      'https://iris.skku.edu/authors/m29_junwon_lee/',
+    ],
+    knowsAbout: ['diffusion LLMs', 'KV-cache compression', 'quantization', 'efficient inference'],
+  }}
 >
   <!-- hero -->
   <section class="section hero">

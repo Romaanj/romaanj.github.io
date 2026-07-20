@@ -9,12 +9,36 @@ import Footer from '../components/Footer.astro';
 interface Props {
   title: string;
   description?: string;
+  /** og:type — 'article' for review/study detail pages */
+  type?: 'website' | 'article';
+  /** ISO date for article:published_time */
+  publishedTime?: string;
+  /** path to a social image (defaults to the site card) */
+  image?: string;
+  /** extra JSON-LD object (e.g. Person on the about page) */
+  jsonLd?: Record<string, unknown>;
 }
 
 const {
   title,
   description = 'Junwon Lee — research notes on efficient AI: diffusion LLMs, KV caches, quantization, and GPU systems.',
+  type = 'website',
+  publishedTime,
+  image = '/og-default.png',
+  jsonLd,
 } = Astro.props;
+
+const site = Astro.site ?? new URL('https://romaanj.github.io');
+const canonical = new URL(Astro.url.pathname, site);
+const imageAbs = new URL(image, site);
+
+const websiteLd = {
+  '@context': 'https://schema.org',
+  '@type': 'WebSite',
+  name: 'Junwon Lee — Efficient AI Research',
+  url: site.toString(),
+  author: { '@type': 'Person', name: 'Junwon Lee', affiliation: 'IRIS Lab, Sungkyunkwan University' },
+};
 ---
 
 <!doctype html>
@@ -22,12 +46,39 @@ const {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
     <meta name="description" content={description} />
+    <meta name="author" content="Junwon Lee" />
+    <meta name="theme-color" content="#faf9f5" />
+    <link rel="canonical" href={canonical} />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="sitemap" href="/sitemap-index.xml" />
+
+    <!-- Open Graph -->
+    <meta property="og:site_name" content="Junwon Lee — Efficient AI Research" />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
-    <meta property="og:type" content="website" />
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <title>{title}</title>
+    <meta property="og:type" content={type} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={imageAbs} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Junwon Lee — Efficient AI Research" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:locale:alternate" content="ko_KR" />
+    {type === 'article' && publishedTime && (
+      <meta property="article:published_time" content={publishedTime} />
+    )}
+    {type === 'article' && <meta property="article:author" content="Junwon Lee" />}
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={imageAbs} />
+
+    <script type="application/ld+json" set:html={JSON.stringify(websiteLd)} />
+    {jsonLd && <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />}
   </head>
   <body>
     <Header />

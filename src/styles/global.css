@@ -2,6 +2,18 @@
    Design tokens — Anthropic-inspired warm editorial system
    Ivory ground, ink text, coral accent, serif display type.
    ============================================================ */
+
+/* Wanted Sans (SIL OFL 1.1, self-hosted — license: /fonts/OFL.txt).
+   Sits AFTER the Latin fonts in both stacks, so it renders Hangul only:
+   English keeps Inter/Source Serif, Korean gets Wanted Sans. */
+@font-face {
+  font-family: 'Wanted Sans Variable';
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+  src: url('/fonts/WantedSansVariable.woff2') format('woff2-variations');
+}
+
 :root {
   /* ground + surfaces */
   --bg: #faf9f5;            /* ivory page ground */
@@ -35,9 +47,9 @@
   --line-on-dark: #33322f;
 
   /* type */
-  --font-serif: 'Source Serif 4 Variable', 'Source Serif 4', Georgia, serif;
-  --font-sans: 'Inter Variable', 'Inter', -apple-system, 'Segoe UI', sans-serif;
-  --font-mono: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
+  --font-serif: 'Source Serif 4 Variable', 'Source Serif 4', 'Wanted Sans Variable', Georgia, serif;
+  --font-sans: 'Inter Variable', 'Inter', 'Wanted Sans Variable', -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', Consolas, 'Wanted Sans Variable', monospace;
 
   /* rhythm */
   --radius-s: 8px;

@@ -132,6 +132,8 @@ const hasKoLede = Boolean(entry.data.summary_ko);
 <Base
   title={`${entry.data.title} — Junwon Lee`}
   description={entry.data.summary}
+  type="article"
+  publishedTime={entry.data.date.toISOString()}
 >
   <section class="section">
     <div class="container review-detail">
