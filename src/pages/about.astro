@@ -4,12 +4,16 @@ import Base from '../layouts/Base.astro';
 const experience = [
   {
     org: 'IRIS Lab, Sungkyunkwan University',
+    url: 'https://iris.skku.edu/',
     role: 'Research Intern — Multi-Modal LLM, Video Compression, Diffusion Quantization, Path Planning',
+    advisor: 'Jong Hwan Ko',
     meta: 'Suwon, Korea | Jun 2024 – Sep 2025',
   },
   {
     org: 'DAVIAN Lab, KAIST',
+    url: 'https://davian.kaist.ac.kr/',
     role: 'Research Intern — 3D AI research',
+    advisor: 'Jaegul Choo, Taewoong Kang',
     meta: 'Seongnam, Korea | Dec 2023 – Mar 2024',
   },
   {
@@ -34,7 +38,7 @@ const education = [
   {
     org: 'Sungkyunkwan University',
     role: 'B.S. in Electronic and Electrical Engineering (Magna Cum Laude)',
-    meta: '2020 – 2025',
+    meta: '2020 – 2026',
   },
 ];
 
@@ -130,8 +134,15 @@ const awards = [
       <ul class="cv-list">
         {experience.map((e) => (
           <li>
-            <h3>{e.org}</h3>
+            <h3>
+              {e.url ? (
+                <a class="cv-org-link" href={e.url} target="_blank" rel="noopener">{e.org}</a>
+              ) : (
+                e.org
+              )}
+            </h3>
             <p class="cv-role">{e.role}</p>
+            {e.advisor && <p class="cv-advisor">Advisor: {e.advisor}</p>}
             <p class="cv-meta">{e.meta}</p>
           </li>
         ))}
@@ -248,6 +259,13 @@ const awards = [
     font-size: 0.96rem;
     color: var(--text-secondary);
     line-height: 1.55;
+  }
+  .cv-org-link { color: inherit; }
+  .cv-org-link:hover { color: var(--accent-strong); }
+  .cv-advisor {
+    margin: 0 0 0.15rem;
+    font-size: 0.9rem;
+    color: var(--text-tertiary);
   }
   .cv-meta {
     margin: 0;

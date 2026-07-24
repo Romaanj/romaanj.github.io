@@ -8,41 +8,52 @@ const hasPhoto = fs.existsSync(new URL('../../public/profile.jpg', import.meta.u
 
 const news: { when: string; en: string; ko: string; href?: string }[] = [
   {
-    when: 'Jul 2026',
-    en: 'Launched this site — interactive study notes and daily paper reviews.',
-    ko: '이 사이트를 열었습니다 — 인터랙티브 스터디 노트와 매일의 논문 리뷰.',
-    href: '/study/',
-  },
-  {
-    when: 'Jun 2025',
-    en: 'Best Project Award at the SKKU Capstone Design Project — FPGA-accelerated image super-resolution!',
-    ko: 'SKKU 종합설계프로젝트 최우수상 — FPGA 가속 이미지 super-resolution!',
-  },
-  {
-    when: '2025',
-    en: 'Started the B.S.–M.S. combined program at IRIS Lab, SKKU!',
-    ko: '성균관대학교 IRIS Lab에서 학·석사 연계과정을 시작했습니다!',
+    when: 'Mar 2026',
+    en: 'Starting my M.S. @ IRIS Lab, SKKU!',
+    ko: '성균관대학교 IRIS Lab에서 석사과정을 시작합니다!',
     href: 'https://iris.skku.edu/',
   },
   {
-    when: 'Dec 2024',
-    en: "Dean's List, College of Information and Communication Engineering, SKKU (Fall 2024).",
-    ko: "성균관대학교 정보통신대학 Dean's List 선정 (2024-2학기).",
+    when: 'Feb 2026',
+    en: 'Graduated from Sungkyunkwan University — B.S. in Electronic and Electrical Engineering, magna cum laude.',
+    ko: '성균관대학교 전자전기공학부 졸업 (magna cum laude).',
   },
   {
-    when: 'Dec 2023',
-    en: "Dean's List, College of Information and Communication Engineering, SKKU (Fall 2023).",
-    ko: "성균관대학교 정보통신대학 Dean's List 선정 (2023-2학기).",
+    when: 'Dec 2025',
+    en: 'RUSH accepted to RA-L 2026!',
+    ko: 'RUSH가 RA-L 2026에 게재 승인되었습니다!',
+    href: 'https://ieeexplore.ieee.org/abstract/document/11347481',
+  },
+];
+
+type Pub = {
+  title: string;
+  authors: { n: string; me?: boolean }[];
+  venue: string;
+  tags: string[];
+  links: { label: string; url: string }[];
+};
+const pubs: Pub[] = [
+  {
+    title: 'RUSH: Recursive and Scalable 3D Coarse to Fine Path Planning',
+    authors: [
+      { n: 'Hwajung Lee' }, { n: 'Daegeol Ko' }, { n: 'Jaehyuk Hur' },
+      { n: 'Junwon Lee', me: true }, { n: 'Seongbo Ha' }, { n: 'Jong Hwan Ko' },
+      { n: 'Hyeonwoo Yu' },
+    ],
+    venue: 'IEEE Robotics and Automation Letters (RA-L), 2026',
+    tags: ['#Diffusion', '#PathPlanning'],
+    links: [{ label: 'paper', url: 'https://ieeexplore.ieee.org/abstract/document/11347481' }],
   },
   {
-    when: 'Oct 2023',
-    en: 'Excellence Prize, 2023 Metaverse Developer Competition (Ministry of Science and ICT).',
-    ko: '2023 메타버스 개발자 경진대회 우수상 (과학기술정보통신부).',
-  },
-  {
-    when: 'Aug 2023',
-    en: 'Encouragement Prize, 2023 Blockchain Challenge for Solving Difficult Problems (Ministry of Science and ICT).',
-    ko: '2023 블록체인 난제 해결 챌린지 장려상 (과학기술정보통신부).',
+    title: 'Paper on Diffusion LLM KV Caching',
+    authors: [
+      { n: 'Junwon Lee', me: true }, { n: 'Wonwook Lee' }, { n: 'Dongmin Han' },
+      { n: 'Jae-sun Seo' }, { n: 'Jong Hwan Ko' },
+    ],
+    venue: 'Under review at EMNLP 2026 · in collaboration with Cornell Tech',
+    tags: ['#DiffusionLLM', '#KVCaching'],
+    links: [],
   },
 ];
 
@@ -117,6 +128,35 @@ const explore = [
                 <a class="news-link" href={n.href} target={n.href.startsWith('http') ? '_blank' : undefined} rel="noopener">Link</a>
               )}
             </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  </section>
+
+  <section class="section-tight">
+    <div class="container narrow">
+      <h2 class="news-h">Publications</h2>
+      <ul class="pub-list">
+        {pubs.map((pub) => (
+          <li>
+            <h3 class="pub-title">{pub.title}</h3>
+            <p class="pub-authors">
+              {pub.authors.map((a, i) => (
+                <>
+                  {a.me ? <strong>{a.n}</strong> : a.n}{i < pub.authors.length - 1 ? ', ' : ''}
+                </>
+              ))}
+            </p>
+            <p class="pub-venue">{pub.venue}</p>
+            <p class="pub-tags">{pub.tags.join('  ')}</p>
+            {pub.links.length > 0 && (
+              <p class="pub-chips">
+                {pub.links.map((l) => (
+                  <a class="pub-chip" href={l.url} target="_blank" rel="noopener">{l.label}</a>
+                ))}
+              </p>
+            )}
           </li>
         ))}
       </ul>
@@ -216,6 +256,25 @@ const explore = [
     color: var(--accent-strong);
   }
   .news-link:hover { text-decoration: underline; }
+
+  .pub-list { list-style: none; margin: 0; padding: 0; }
+  .pub-list li { padding: 0.55rem 0 1.3rem; }
+  .pub-title { font-size: 1.22rem; margin-bottom: 0.3rem; }
+  .pub-authors { margin: 0 0 0.1rem; font-size: 0.94rem; color: var(--text); }
+  .pub-authors strong { font-weight: 700; }
+  .pub-venue { margin: 0 0 0.15rem; font-size: 0.9rem; color: var(--text-tertiary); }
+  .pub-tags { margin: 0 0 0.55rem; font-size: 0.9rem; font-style: italic; color: var(--text-secondary); white-space: pre; }
+  .pub-chips { margin: 0; display: flex; gap: 0.5rem; flex-wrap: wrap; }
+  .pub-chip {
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 0.3em 1.1em;
+    border-radius: 999px;
+    background: var(--surface-dark);
+    color: var(--text-on-dark);
+    transition: background 0.15s;
+  }
+  .pub-chip:hover { background: var(--accent-strong); color: #fff; }
 
   .explore-band { padding-bottom: clamp(3rem, 7vw, 5rem); }
   .explore-row {
