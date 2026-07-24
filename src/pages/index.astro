@@ -72,7 +72,7 @@ const explore = [
     <div class="container narrow">
       <div class="profile-top">
         {photoFile ? (
-          <img class="portrait" src={'/' + photoFile} alt="Junwon Lee" width="168" height="168" />
+          <img class="portrait" src={'/' + photoFile} alt="Junwon Lee" width="198" height="264" />
         ) : (
           <div class="portrait monogram" aria-hidden="true">JL</div>
         )}
@@ -189,8 +189,8 @@ const explore = [
     align-items: flex-start;
   }
   .portrait {
-    width: 176px;
-    height: 176px;
+    width: 198px;
+    height: 264px; /* full-frame 3:4 portrait */
     border-radius: var(--radius-l);
     object-fit: cover;
     border: 1px solid var(--line);
