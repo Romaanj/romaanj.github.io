@@ -1,10 +1,68 @@
 ---
 import Base from '../layouts/Base.astro';
+
+const experience = [
+  {
+    org: 'IRIS Lab, Sungkyunkwan University',
+    role: 'Research Intern — Multi-Modal LLM, Video Compression, Diffusion Quantization, Path Planning',
+    meta: 'Suwon, Korea | Jun 2024 – Sep 2025',
+  },
+  {
+    org: 'DAVIAN Lab, KAIST',
+    role: 'Research Intern — 3D AI research',
+    meta: 'Seongnam, Korea | Dec 2023 – Mar 2024',
+  },
+  {
+    org: 'Whancon',
+    role: 'Blockchain Engineer — smart contract & mainnet development',
+    meta: 'Seoul, Korea | Sep 2023 – Jan 2024',
+  },
+  {
+    org: 'Republic of Korea Army',
+    role: 'Sergeant (military service)',
+    meta: 'Sep 2021 – Mar 2023',
+  },
+];
+
+const education = [
+  {
+    org: 'Sungkyunkwan University',
+    role: 'B.S.–M.S. Combined, Graduate School of Electrical and Computer Engineering',
+    extra: 'Intelligent & Resource-efficient Image processing & Systems design (IRIS) Lab | Prof. Jong Hwan Ko',
+    meta: '2025 – present',
+  },
+  {
+    org: 'Sungkyunkwan University',
+    role: 'B.S. in Electronic and Electrical Engineering (Magna Cum Laude)',
+    meta: '2020 – 2025',
+  },
+];
+
+const awards = [
+  {
+    name: 'Best Project Award — SKKU Capstone Design Project',
+    extra: 'FPGA-accelerated image super-resolution (FSRCNN) for hardware-software co-acceleration',
+    meta: 'Sungkyunkwan University | Jun 2025',
+  },
+  {
+    name: "Dean's List — College of Information and Communication Engineering",
+    meta: 'Sungkyunkwan University | Fall 2023, Fall 2024',
+  },
+  {
+    name: 'Excellence Prize — 2023 Metaverse Developer Competition',
+    extra: "Personalized NFT metaverse gallery 'BID:AM'",
+    meta: 'Ministry of Science and ICT | Oct 2023',
+  },
+  {
+    name: 'Encouragement Prize — 2023 Blockchain Challenge for Solving Difficult Problems',
+    meta: 'Ministry of Science and ICT | Aug 2023',
+  },
+];
 ---
 
 <Base
   title="About — Junwon Lee"
-  description="Junwon Lee — MS student at IRIS Lab, Sungkyunkwan University. Training-free acceleration of diffusion LLMs, KV-cache compression, quantization, and efficient inference systems."
+  description="Junwon Lee — B.S.–M.S. combined student at IRIS Lab, Sungkyunkwan University. Training-free acceleration of diffusion LLMs, KV-cache compression, quantization, and efficient inference systems."
   jsonLd={{
     '@context': 'https://schema.org',
     '@type': 'Person',
@@ -18,6 +76,11 @@ import Base from '../layouts/Base.astro';
       url: 'https://iris.skku.edu/',
     },
     alumniOf: 'Sungkyunkwan University',
+    award: [
+      'Best Project Award, SKKU Capstone Design Project (2025)',
+      "Dean's List, College of Information and Communication Engineering, SKKU (Fall 2023, Fall 2024)",
+      'Excellence Prize, 2023 Metaverse Developer Competition (Ministry of Science and ICT)',
+    ],
     sameAs: [
       'https://github.com/Romaanj',
       'https://www.linkedin.com/in/junwon-lee-961383204/',
@@ -33,118 +96,84 @@ import Base from '../layouts/Base.astro';
         <p class="eyebrow">About me</p>
         <h1>Hi, I'm Junwon.</h1>
         <p class="lede">
-          <span class="lang-en">
-            M.S. student at IRIS Lab, Sungkyunkwan University, working on
-            efficient inference for large models.
-          </span>
-          <span class="lang-ko">
-            성균관대학교 IRIS Lab 석사과정. 대형 모델의 효율적인 추론을 연구합니다.
-          </span>
+          I work on efficient inference for large models at IRIS Lab,
+          Sungkyunkwan University — where AI meets hardware.
+        </p>
+        <p class="interest-tags">
+          <span class="tag">Diffusion LLMs</span>
+          <span class="tag">KV-cache compression</span>
+          <span class="tag">Quantization</span>
+          <span class="tag">Hybrid attention</span>
+          <span class="tag">GPU systems</span>
+          <span class="tag">HW-SW co-optimization</span>
         </p>
       </div>
 
-      <!-- decorative monogram (no photo, on purpose) -->
+      <!-- decorative monogram (replaced by /profile.jpg on the home page when added) -->
       <div class="monogram-wrap" aria-hidden="true">
         <svg class="monogram" viewBox="0 0 240 240" xmlns="http://www.w3.org/2000/svg" role="img">
           <rect x="4" y="4" width="232" height="232" rx="24" class="mg-ground" />
-          <!-- quarter-circle, coral -->
           <path d="M 236 236 L 236 140 A 96 96 0 0 0 140 236 Z" class="mg-coral" />
-          <!-- small geometric friends -->
           <circle cx="52" cy="188" r="14" class="mg-olive" />
           <path d="M 178 44 L 206 92 L 150 92 Z" class="mg-kraft" />
-          <!-- serif initials -->
           <text x="46" y="132" class="mg-letters">JL</text>
-          <!-- roofline: bandwidth slope meeting the compute ceiling -->
           <path d="M 46 158 L 118 150 L 194 150" class="mg-roofline" />
         </svg>
       </div>
     </div>
   </section>
 
-  <!-- bio -->
+  <!-- experience -->
   <section class="section-tight">
     <div class="container">
-      <div class="prose">
-        <p>
-          <span class="lang-en">
-            I'm interested in the intersection of AI and hardware —
-            <strong>training-free acceleration</strong> of diffusion LLMs,
-            KV-cache compression and quantization, and hardware-software
-            co-optimization. I try to measure first and propose methods second.
-          </span>
-          <span class="lang-ko">
-            AI와 hardware의 교차점에 관심이 있습니다 — diffusion LLM의
-            <strong>training-free 가속</strong>, KV-cache 압축·quantization,
-            그리고 hardware-software co-optimization. 측정을 먼저 하고 method는
-            그다음에 제안하려 합니다.
-          </span>
-        </p>
-      </div>
-      <p class="interest-tags">
-        <span class="tag">Diffusion LLMs</span>
-        <span class="tag">KV-cache compression</span>
-        <span class="tag">Quantization</span>
-        <span class="tag">Hybrid attention</span>
-        <span class="tag">GPU systems</span>
-        <span class="tag">HW-SW co-optimization</span>
-      </p>
+      <h2 class="cv-h">Experience</h2>
+      <ul class="cv-list">
+        {experience.map((e) => (
+          <li>
+            <h3>{e.org}</h3>
+            <p class="cv-role">{e.role}</p>
+            <p class="cv-meta">{e.meta}</p>
+          </li>
+        ))}
+      </ul>
     </div>
   </section>
 
-  <!-- background -->
-  <section class="section">
+  <!-- education -->
+  <section class="section-tight">
     <div class="container">
-      <p class="eyebrow">Background</p>
-      <h2>A short timeline</h2>
-      <ol class="timeline">
-        <li>
-          <span class="tl-dot" aria-hidden="true"></span>
-          <div class="tl-body">
-            <span class="tl-when">2026–Present</span>
-            <h3>M.S. student — IRIS Lab, Sungkyunkwan University</h3>
-            <p>Advised by Prof. Jong Hwan Ko.</p>
-          </div>
-        </li>
-        <li>
-          <span class="tl-dot" aria-hidden="true"></span>
-          <div class="tl-body">
-            <span class="tl-when">2020–2026</span>
-            <h3>B.S. — Electronic and Electrical Engineering, Sungkyunkwan University</h3>
-          </div>
-        </li>
-      </ol>
+      <h2 class="cv-h">Education</h2>
+      <ul class="cv-list">
+        {education.map((e) => (
+          <li>
+            <h3>{e.org}</h3>
+            <p class="cv-role">{e.role}</p>
+            {e.extra && <p class="cv-role">{e.extra}</p>}
+            <p class="cv-meta">{e.meta}</p>
+          </li>
+        ))}
+      </ul>
     </div>
   </section>
 
   <!-- awards -->
   <section class="section-tight">
     <div class="container">
-      <p class="eyebrow">Awards</p>
-      <h2>
-        <span class="lang-en">Honors &amp; awards</span>
-        <span class="lang-ko">수상</span>
-      </h2>
-      <ul class="awards-list">
-        <li>
-          <span class="aw-when">2024</span>
-          <span class="aw-body">
-            <span class="lang-en">Dean's List — College of Information and Communication Engineering, SKKU (Fall 2024)</span>
-            <span class="lang-ko">Dean's List — 성균관대학교 정보통신대학 (2024-2학기)</span>
-          </span>
-        </li>
-        <li>
-          <span class="aw-when">2023</span>
-          <span class="aw-body">
-            <span class="lang-en">Dean's List — College of Information and Communication Engineering, SKKU (Fall 2023)</span>
-            <span class="lang-ko">Dean's List — 성균관대학교 정보통신대학 (2023-2학기)</span>
-          </span>
-        </li>
+      <h2 class="cv-h">Awards</h2>
+      <ul class="cv-list">
+        {awards.map((a) => (
+          <li>
+            <h3>{a.name}</h3>
+            {a.extra && <p class="cv-role">{a.extra}</p>}
+            <p class="cv-meta">{a.meta}</p>
+          </li>
+        ))}
       </ul>
     </div>
   </section>
 
   <!-- contact -->
-  <section class="section-tight contact">
+  <section class="section contact">
     <div class="container">
       <div class="contact-row">
         <div>
@@ -152,7 +181,7 @@ import Base from '../layouts/Base.astro';
           <h2>Say hello</h2>
           <p class="contact-note">
             Happy to talk about efficient inference, diffusion LLMs, or GPU
-            systems — 커피챗 환영합니다.
+            systems.
           </p>
         </div>
         <div class="contact-actions">
@@ -168,16 +197,7 @@ import Base from '../layouts/Base.astro';
 </Base>
 
 <style>
-
-  .interest-tags { display: flex; flex-wrap: wrap; gap: 0.45rem; margin: 1.1rem 0 0; }
-  .awards-list { list-style: none; margin: 1.2rem 0 0; padding: 0; }
-  .awards-list li { display: flex; gap: 0.9em; padding: 0.4rem 0; font-size: 0.97rem; }
-  .aw-when { font-family: var(--font-mono); font-size: 0.82rem; color: var(--text-tertiary); padding-top: 0.15em; min-width: 3em; }
   .hero { padding-top: clamp(3.5rem, 9vw, 7rem); }
-  .hero h1 em {
-    font-style: italic;
-    color: var(--accent-strong);
-  }
   .hero-grid {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 250px;
@@ -185,19 +205,12 @@ import Base from '../layouts/Base.astro';
     align-items: center;
   }
   .lede { margin-top: 1.6rem; }
+  .interest-tags { display: flex; flex-wrap: wrap; gap: 0.45rem; margin: 1.4rem 0 0; }
 
   /* monogram */
   .monogram-wrap { justify-self: end; }
-  .monogram {
-    display: block;
-    width: 100%;
-    max-width: 250px;
-  }
-  .mg-ground {
-    fill: var(--surface-warm);
-    stroke: var(--line);
-    stroke-width: 1.5;
-  }
+  .monogram { display: block; width: 100%; max-width: 250px; }
+  .mg-ground { fill: var(--surface-warm); stroke: var(--line); stroke-width: 1.5; }
   .mg-coral { fill: var(--accent); }
   .mg-olive { fill: var(--swatch-olive); }
   .mg-kraft { fill: var(--swatch-kraft); }
@@ -216,80 +229,46 @@ import Base from '../layouts/Base.astro';
     stroke-linejoin: round;
   }
 
-  /* warm band for values */
-  .band-warm {
-    background: var(--surface-warm);
-    border-top: 1px solid var(--line);
-    border-bottom: 1px solid var(--line);
+  /* cv-style lists (Experience / Education / Awards) */
+  .cv-h {
+    font-size: clamp(1.5rem, 2.6vw, 2rem);
+    margin-bottom: 1.6rem;
   }
-  .band-warm h2 { margin-bottom: 2rem; }
-  .values .card h3 { font-size: 1.2rem; }
-
-  /* timeline */
-  .timeline {
+  .cv-list {
     list-style: none;
-    margin: 2.2rem 0 0;
+    margin: 0;
     padding: 0;
-    position: relative;
-    max-width: 720px;
+    max-width: 760px;
   }
-  .timeline::before {
-    content: '';
-    position: absolute;
-    left: 7px;
-    top: 6px;
-    bottom: 6px;
-    width: 2px;
-    background: var(--line);
+  .cv-list li { padding: 0 0 1.7rem; }
+  .cv-list li:last-child { padding-bottom: 0.4rem; }
+  .cv-list h3 { font-size: 1.18rem; margin-bottom: 0.25rem; }
+  .cv-role {
+    margin: 0 0 0.15rem;
+    font-size: 0.96rem;
+    color: var(--text-secondary);
+    line-height: 1.55;
   }
-  .timeline li {
-    position: relative;
-    padding: 0 0 2.2rem 2.2rem;
+  .cv-meta {
+    margin: 0;
+    font-size: 0.88rem;
+    color: var(--text-tertiary);
   }
-  .timeline li:last-child { padding-bottom: 0; }
-  .tl-dot {
-    position: absolute;
-    left: 0;
-    top: 0.35rem;
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    background: var(--bg);
-    border: 3px solid var(--accent);
-  }
-  .timeline li:first-child .tl-dot { background: var(--accent); }
-  .tl-when {
-    display: inline-block;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.78rem;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--accent-strong);
-    margin-bottom: 0.3rem;
-  }
-  .tl-body h3 { font-size: 1.25rem; margin: 0 0 0.4rem; }
-  .tl-body p { color: color-mix(in srgb, var(--text) 72%, transparent); max-width: 60ch; }
 
   /* contact */
   .contact-row {
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-start;
     gap: 2rem;
     flex-wrap: wrap;
-    border-top: 1px solid var(--line);
-    padding-top: clamp(2rem, 4vw, 3rem);
   }
-  .contact-note {
-    margin-top: 0.8rem;
-    color: color-mix(in srgb, var(--text) 72%, transparent);
-    max-width: 42ch;
-  }
+  .contact-note { color: var(--text-secondary); max-width: 34em; margin-top: 1rem; }
   .contact-actions {
     display: flex;
-    align-items: center;
-    gap: 1rem;
-    flex-wrap: wrap;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.7rem;
   }
 
   @media (max-width: 760px) {

@@ -70,7 +70,6 @@
   .lt-btn.active { background: var(--text); color: var(--bg); }
   .lt-btn:not(.active):hover { color: var(--text); }
 
-  .lang-ko { display: none; }
-  html[data-lang='ko'] .lang-ko { display: revert; }
-  html[data-lang='ko'] .lang-en { display: none; }
+  /* .lang-en/.lang-ko visibility rules live in global.css (all pages need them,
+     including pages without this toggle button) */
 </style>
