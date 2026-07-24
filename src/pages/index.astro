@@ -1,211 +1,234 @@
 ---
+import fs from 'node:fs';
 import Base from '../layouts/Base.astro';
 import LangToggle from '../components/LangToggle.astro';
-import { getCollection } from 'astro:content';
 
-const reviews = (await getCollection('reviews'))
-  .sort((a, b) => b.data.date.valueOf() - a.data.date.valueOf())
-  .slice(0, 3);
-const study = (await getCollection('study'))
-  .sort((a, b) => b.data.date.valueOf() - a.data.date.valueOf())
-  .slice(0, 3);
+// Drop a square photo at public/profile.jpg and rebuild — it replaces the monogram.
+const hasPhoto = fs.existsSync(new URL('../../public/profile.jpg', import.meta.url));
 
-const trackLabel: Record<string, string> = {
-  models: 'AI Models',
-  quantization: 'Quantization',
-  gpu: 'GPU',
-};
-const studyHref = (e: (typeof study)[number]) => e.data.interactive ?? `/study/${e.id}/`;
+const news: { when: string; en: string; ko: string; href?: string }[] = [
+  {
+    when: 'Jul 2026',
+    en: 'Launched this site — interactive study notes and daily paper reviews.',
+    ko: '이 사이트를 열었습니다 — 인터랙티브 스터디 노트와 매일의 논문 리뷰.',
+    href: '/study/',
+  },
+  {
+    when: 'Mar 2026',
+    en: 'Started my M.S. at IRIS Lab, Sungkyunkwan University!',
+    ko: '성균관대학교 IRIS Lab에서 석사과정을 시작했습니다!',
+    href: 'https://iris.skku.edu/',
+  },
+  {
+    when: 'Feb 2026',
+    en: 'B.S. in Electronic and Electrical Engineering, Sungkyunkwan University.',
+    ko: '성균관대학교 전자전기공학부를 졸업했습니다.',
+  },
+  {
+    when: 'Dec 2024',
+    en: "Dean's List, College of Information and Communication Engineering, SKKU (Fall 2024).",
+    ko: "성균관대학교 정보통신대학 Dean's List 선정 (2024-2학기).",
+  },
+  {
+    when: 'Dec 2023',
+    en: "Dean's List, College of Information and Communication Engineering, SKKU (Fall 2023).",
+    ko: "성균관대학교 정보통신대학 Dean's List 선정 (2023-2학기).",
+  },
+];
+
+const explore = [
+  { href: '/study/', label: 'Study' },
+  { href: '/reviews/', label: 'Paper Review' },
+  { href: '/talks/', label: 'Talks' },
+  { href: '/projects/', label: 'Project' },
+];
 ---
 
 <Base title="Junwon Lee — Efficient AI Research">
-  <!-- hero -->
-  <section class="section hero">
-    <div class="container">
-      <p class="eyebrow">Research · Systems · Efficiency</p>
-      <h1>
-        <span class="lang-en">
-          Making large-model inference<br />
-          <em>cheap enough to matter.</em>
-        </span>
-        <span class="lang-ko">
-          대형 모델 추론을<br />
-          <em>충분히 싸게</em> 만드는 일.
-        </span>
-      </h1>
-      <p class="lede">
-        <span class="lang-en">
-          I'm Junwon Lee, a graduate researcher at IRIS Lab, Sungkyunkwan University.
-          I work on training-free acceleration of diffusion LLMs — KV-cache compression,
-          quantization, and the memory wall between HBM and useful tokens.
-        </span>
-        <span class="lang-ko">
-          성균관대학교 IRIS Lab 대학원 연구원 이준원입니다.
-          diffusion LLM의 training-free 가속을 연구합니다 — KV-cache 압축과
-          quantization, 그리고 HBM과 쓸모 있는 token 사이의 memory wall이 주제입니다.
-        </span>
-      </p>
-      <div class="hero-actions">
-        <a class="btn" href="/study/">Open the study bench</a>
-        <a class="btn ghost" href="/about/">About me</a>
-        <LangToggle />
+  <section class="section profile">
+    <div class="container narrow">
+      <div class="profile-top">
+        {hasPhoto ? (
+          <img class="portrait" src="/profile.jpg" alt="Junwon Lee" width="168" height="168" />
+        ) : (
+          <div class="portrait monogram" aria-hidden="true">JL</div>
+        )}
+        <div class="id-block">
+          <h1>Junwon Lee <span class="name-ko">이준원</span></h1>
+          <p class="role">
+            <span class="lang-en">
+              M.S. Student @ <a href="https://iris.skku.edu/" target="_blank" rel="noopener">IRIS Lab</a>,
+              Sungkyunkwan University (Advisor: Prof. Jong Hwan Ko)
+            </span>
+            <span class="lang-ko">
+              성균관대학교 <a href="https://iris.skku.edu/" target="_blank" rel="noopener">IRIS Lab</a>
+              석사과정 (지도교수: 고종환 교수님)
+            </span>
+          </p>
+          <p class="interests">
+            <span class="lang-en">
+              <strong>Research interest:</strong> efficient AI inference — diffusion LLMs,
+              KV-cache compression &amp; quantization, hybrid attention, and hardware-software
+              co-optimization.
+            </span>
+            <span class="lang-ko">
+              <strong>연구 관심사:</strong> 효율적인 AI 추론 — diffusion LLM,
+              KV-cache 압축·quantization, hybrid attention, 그리고 hardware-software
+              co-optimization.
+            </span>
+          </p>
+          <p class="id-links">
+            <a href="mailto:jwlee1218@g.skku.edu">jwlee1218@g.skku.edu</a>
+            <span class="sep">·</span>
+            <a href="https://github.com/Romaanj" target="_blank" rel="noopener">GitHub</a>
+            <span class="sep">·</span>
+            <a href="https://www.linkedin.com/in/junwon-lee-961383204/" target="_blank" rel="noopener">LinkedIn</a>
+            <span class="sep">·</span>
+            <a href="/about/">About</a>
+          </p>
+          <div class="id-toggle"><LangToggle /></div>
+        </div>
       </div>
     </div>
   </section>
 
-  <!-- pillars -->
   <section class="section-tight">
-    <div class="container">
-      <div class="card-grid pillars">
-        {/* Research pillar hidden for now (owner request 2026-07-20) — restore alongside the nav tab */}
-        <a class="card" href="/study/">
-          <span class="card-kicker">Study</span>
-          <h3>Tear-downs, visualized</h3>
-          <p>
-            <span class="lang-en">Interactive anatomy of models, quantization pipelines, and GPU memory — every matrix multiply drawn out.</span>
-            <span class="lang-ko">모델, quantization pipeline, GPU memory의 인터랙티브 해부도 — 모든 matrix multiply를 직접 그려낸다.</span>
-          </p>
-          <span class="card-meta arrow-link">Open the lab bench</span>
-        </a>
-        <a class="card" href="/reviews/">
-          <span class="card-kicker">Paper Review</span>
-          <h3>The reading graph</h3>
-          <p>
-            <span class="lang-en">Daily paper reviews on dLLMs, KV caching, sparse attention and hybrid architectures — linked like an Obsidian vault.</span>
-            <span class="lang-ko">dLLM, KV caching, sparse attention, hybrid architecture 논문을 매일 리뷰 — Obsidian vault처럼 서로 연결해 둔다.</span>
-          </p>
-          <span class="card-meta arrow-link">Browse reviews</span>
-        </a>
-        <a class="card" href="/talks/">
-          <span class="card-kicker">Talks</span>
-          <h3>AI talks, in Korean</h3>
-          <p>
-            <span class="lang-en">English AI keynotes and talks with glossary-accurate Korean subtitles — embedded from the original channels, never re-hosted.</span>
-            <span class="lang-ko">해외 AI 키노트와 발표에 용어까지 정확한 한글 자막을 얹어서 — 원본 채널 임베드로, 재업로드 없이.</span>
-          </p>
-          <span class="card-meta arrow-link">Watch with subtitles</span>
-        </a>
-        <a class="card" href="/projects/">
-          <span class="card-kicker">Project</span>
-          <h3>Side quests</h3>
-          <p>
-            <span class="lang-en">Things built for fun and curiosity — market-flow analysis, tooling, and whatever else escapes the lab.</span>
-            <span class="lang-ko">재미와 호기심으로 만든 것들 — market-flow 분석, tooling, 그리고 lab 밖으로 새어 나온 나머지 전부.</span>
-          </p>
-          <span class="card-meta arrow-link">See projects</span>
-        </a>
-      </div>
+    <div class="container narrow">
+      <h2 class="news-h">News</h2>
+      <ul class="news-list">
+        {news.map((n) => (
+          <li>
+            <span class="news-when">{n.when}</span>
+            <span class="news-sep">|</span>
+            <span class="news-text">
+              <span class="lang-en">{n.en}</span>
+              <span class="lang-ko">{n.ko}</span>
+              {n.href && (
+                <a class="news-link" href={n.href} target={n.href.startsWith('http') ? '_blank' : undefined} rel="noopener">Link</a>
+              )}
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   </section>
 
-  {reviews.length > 0 && (
-    <section class="section">
-      <div class="container">
-        <div class="row-head">
-          <div>
-            <p class="eyebrow">Latest reviews</p>
-            <h2>
-              <span class="lang-en">Recently on the reading list</span>
-              <span class="lang-ko">최근 reading list에 오른 논문들</span>
-            </h2>
-          </div>
-          <a class="arrow-link" href="/reviews/">All reviews</a>
-        </div>
-        <div class="card-grid">
-          {reviews.map((r) => (
-            <a class="card" href={`/reviews/${r.id}/`}>
-              <span class="card-kicker">{r.data.tags[0] ?? 'Paper'}</span>
-              <h3>{r.data.title}</h3>
-              <p>
-                {r.data.summary_ko ? (
-                  <>
-                    <span class="lang-en">{r.data.summary}</span>
-                    <span class="lang-ko">{r.data.summary_ko}</span>
-                  </>
-                ) : (
-                  r.data.summary
-                )}
-              </p>
-              <span class="card-meta">
-                {r.data.lab && <span>{r.data.lab}</span>}
-                <span>{r.data.date.toISOString().slice(0, 10)}</span>
-              </span>
-            </a>
-          ))}
-        </div>
-      </div>
-    </section>
-  )}
-
-  {study.length > 0 && (
-    <section class="section band-dark">
-      <div class="container">
-        <div class="row-head">
-          <div>
-            <p class="eyebrow">Study</p>
-            <h2>
-              <span class="lang-en">On the bench right now</span>
-              <span class="lang-ko">지금 작업대 위에 있는 것들</span>
-            </h2>
-          </div>
-          <a class="arrow-link" href="/study/">All notes</a>
-        </div>
-        <div class="card-grid">
-          {study.map((s) => (
-            <a class="card" href={studyHref(s)}>
-              <span class="card-kicker">{trackLabel[s.data.track]}</span>
-              <h3>
-                {s.data.title_ko ? (
-                  <>
-                    <span class="lang-en">{s.data.title}</span>
-                    <span class="lang-ko">{s.data.title_ko}</span>
-                  </>
-                ) : (
-                  s.data.title
-                )}
-              </h3>
-              <p>
-                {s.data.summary_ko ? (
-                  <>
-                    <span class="lang-en">{s.data.summary}</span>
-                    <span class="lang-ko">{s.data.summary_ko}</span>
-                  </>
-                ) : (
-                  s.data.summary
-                )}
-              </p>
-              <span class="card-meta">
-                {s.data.interactive && <span class="tag accent">Interactive</span>}
-              </span>
-            </a>
-          ))}
-        </div>
-      </div>
-    </section>
-  )}
+  <section class="section-tight explore-band">
+    <div class="container narrow">
+      <p class="explore-row">
+        <span class="explore-label">
+          <span class="lang-en">Explore</span>
+          <span class="lang-ko">둘러보기</span>
+        </span>
+        {explore.map((e) => (
+          <a class="arrow-link" href={e.href}>{e.label}</a>
+        ))}
+      </p>
+    </div>
+  </section>
 </Base>
 
 <style>
-  .hero { padding-top: clamp(3.5rem, 9vw, 7rem); }
-  .hero h1 em {
-    font-style: italic;
-    color: var(--accent-strong);
+  .narrow { max-width: 780px; }
+  .profile { padding-top: clamp(3rem, 8vw, 5.5rem); padding-bottom: 1.5rem; }
+  .profile-top {
+    display: flex;
+    gap: clamp(1.4rem, 4vw, 2.6rem);
+    align-items: flex-start;
   }
-  .hero-actions {
+  .portrait {
+    width: 168px;
+    height: 168px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 1px solid var(--line);
+    flex-shrink: 0;
+    box-shadow: var(--shadow-card);
+  }
+  .portrait.monogram {
     display: flex;
     align-items: center;
-    gap: 0.8rem;
-    margin-top: 2.2rem;
-    flex-wrap: wrap;
+    justify-content: center;
+    background: var(--surface-dark);
+    color: var(--accent);
+    font-family: var(--font-serif);
+    font-size: 3.2rem;
+    font-weight: 600;
   }
-  .lede { margin-top: 1.6rem; }
-  .row-head {
+  .id-block h1 {
+    font-size: clamp(1.9rem, 4vw, 2.6rem);
+    margin-bottom: 0.35rem;
+  }
+  .name-ko {
+    font-size: 0.62em;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-left: 0.25em;
+  }
+  .role { margin: 0 0 0.55rem; font-size: 1rem; color: var(--text-secondary); }
+  .role a { color: var(--accent-strong); }
+  .role a:hover { text-decoration: underline; }
+  .interests { margin: 0 0 0.8rem; font-size: 0.96rem; color: var(--text-secondary); line-height: 1.6; }
+  .interests strong { color: var(--text); font-weight: 600; }
+  .id-links { margin: 0 0 0.9rem; font-size: 0.92rem; }
+  .id-links a { color: var(--accent-strong); }
+  .id-links a:hover { text-decoration: underline; }
+  .sep { color: var(--line-strong); margin: 0 0.45em; }
+
+  .news-h {
+    font-size: 1.45rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 1rem;
+  }
+  .news-list { list-style: none; margin: 0; padding: 0; }
+  .news-list li {
     display: flex;
-    justify-content: space-between;
-    align-items: flex-end;
-    gap: 1rem;
-    margin-bottom: 2rem;
-    flex-wrap: wrap;
+    gap: 0.7em;
+    padding: 0.42rem 0;
+    font-size: 0.97rem;
+    line-height: 1.55;
   }
-  .pillars .card h3 { font-size: 1.35rem; }
+  .news-when {
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    color: var(--text-tertiary);
+    white-space: nowrap;
+    padding-top: 0.15em;
+    min-width: 4.6em;
+  }
+  .news-sep { color: var(--line-strong); }
+  .news-text { color: var(--text); }
+  .news-link {
+    margin-left: 0.5em;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--accent-strong);
+  }
+  .news-link:hover { text-decoration: underline; }
+
+  .explore-band { padding-bottom: clamp(3rem, 7vw, 5rem); }
+  .explore-row {
+    display: flex;
+    align-items: center;
+    gap: 1.3rem;
+    flex-wrap: wrap;
+    margin: 0;
+    padding-top: 1.4rem;
+    border-top: 1px solid var(--line);
+  }
+  .explore-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+  }
+
+  @media (max-width: 620px) {
+    .profile-top { flex-direction: column; align-items: center; text-align: center; }
+    .id-block h1 { font-size: 1.8rem; }
+    .id-toggle { display: flex; justify-content: center; }
+    .news-list li { flex-wrap: wrap; }
+  }
 </style>

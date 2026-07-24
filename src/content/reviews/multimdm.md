@@ -66,7 +66,7 @@ thread:
 sparks:
   - ko: "논문은 초록·서론·방법 수준에서 지정 마스크 개수 M을 어떻게 정했는지, 결과가 M에 얼마나 민감한지 명시하지 않는다 — M을 체계적으로 스윕하며 사전학습 규모·데이터 복잡도와의 상호작용을 측정하면 이 설계 선택의 근거를 더 분명히 할 수 있을 것이다."
     en: "The paper doesn't specify, at the abstract/intro/method level, how the number of designated masks M was chosen or how sensitive results are to it -- systematically sweeping M and measuring its interaction with pretraining scale and data complexity would sharpen the justification for this design choice."
-  - ko: "역방향 과정이 부산물로 얻는 "어느 마스크로 귀결될지" 예측(드래프팅) 능력은 정성적으로만 언급되고 별도로 벤치마크되지 않는다 — 이 신호를 디코딩 순서나 확신도 기반 개입에 직접 활용해보는 것은 자연스러운 후속 실험이다."
+  - ko: "역방향 과정이 부산물로 얻는 '어느 마스크로 귀결될지' 예측(드래프팅) 능력은 정성적으로만 언급되고 별도로 벤치마크되지 않는다 — 이 신호를 디코딩 순서나 확신도 기반 개입에 직접 활용해보는 것은 자연스러운 후속 실험이다."
     en: "The drafting capability the backward process gains as a side effect -- predicting which mask a position will resolve to -- is mentioned only qualitatively and not separately benchmarked -- directly exploiting this signal for decoding order or confidence-based interventions is a natural follow-up experiment."
 source: "autosweep"
 ---

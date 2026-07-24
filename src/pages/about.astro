@@ -31,12 +31,15 @@ import Base from '../layouts/Base.astro';
     <div class="container hero-grid">
       <div>
         <p class="eyebrow">About me</p>
-        <h1>Hi, I'm Junwon.<br /><em>I make big models run cheap.</em></h1>
+        <h1>Hi, I'm Junwon.</h1>
         <p class="lede">
-          MS student at IRIS Lab, Sungkyunkwan University (SKKU), working on
-          efficient inference for large models — diffusion LLMs, KV caches,
-          quantization, and the stubborn gap between peak FLOPs and the bytes
-          a GPU can actually move.
+          <span class="lang-en">
+            M.S. student at IRIS Lab, Sungkyunkwan University, working on
+            efficient inference for large models.
+          </span>
+          <span class="lang-ko">
+            성균관대학교 IRIS Lab 석사과정. 대형 모델의 효율적인 추론을 연구합니다.
+          </span>
         </p>
       </div>
 
@@ -63,68 +66,28 @@ import Base from '../layouts/Base.astro';
     <div class="container">
       <div class="prose">
         <p>
-          My research interest is <strong>training-free acceleration</strong>:
-          making inference faster and lighter without touching the weights.
-          Right now that means diffusion LLMs — an architecture whose serving
-          story is still being written — and the KV-cache machinery around
-          them: compression, quantization, and deciding which bytes deserve
-          to live in HBM at all.
-        </p>
-        <p>
-          I try to be a measurement-first researcher. Before proposing a
-          method I want a profile, a roofline sketch, and a mechanism I can
-          point at — otherwise the "speedup" is usually just a benchmark
-          artifact wearing a nice name. The best days in the lab are the ones
-          where a plot disagrees with my intuition
+          <span class="lang-en">
+            I'm interested in the intersection of AI and hardware —
+            <strong>training-free acceleration</strong> of diffusion LLMs,
+            KV-cache compression and quantization, and hardware-software
+            co-optimization. I try to measure first and propose methods second.
+          </span>
+          <span class="lang-ko">
+            AI와 hardware의 교차점에 관심이 있습니다 — diffusion LLM의
+            <strong>training-free 가속</strong>, KV-cache 압축·quantization,
+            그리고 hardware-software co-optimization. 측정을 먼저 하고 method는
+            그다음에 제안하려 합니다.
+          </span>
         </p>
       </div>
-    </div>
-  </section>
-
-  <!-- what I care about -->
-  <section class="section band-warm">
-    <div class="container">
-      <p class="eyebrow">Principles</p>
-      <h2>What I care about</h2>
-      <div class="card-grid values">
-        <div class="card">
-          <span class="card-kicker">Bottlenecks</span>
-          <h3>The memory wall, not the FLOP count</h3>
-          <p>
-            Modern accelerators rarely starve for arithmetic — they starve for
-            bytes. I read systems through a roofline lens: find where the
-            workload actually sits, then attack that ceiling, not the one in
-            the marketing slide.
-          </p>
-        </div>
-        <div class="card">
-          <span class="card-kicker">Constraint</span>
-          <h3>Training-free by default</h3>
-          <p>
-            The most useful acceleration is the kind you can apply to a
-            checkpoint this afternoon. No retraining runs, no distillation
-            budget — just a sharper use of what the model already computes.
-          </p>
-        </div>
-        <div class="card">
-          <span class="card-kicker">Discipline</span>
-          <h3>Measurement before method</h3>
-          <p>
-            A method should be the corollary of a mechanism you have actually
-            observed. Profile first, form a hypothesis, design the experiment
-            that could kill it — then, and only then, write the method section.
-          </p>
-        </div>
-        <div class="card">
-          <span class="card-kicker">Taste</span>
-          <h3>End-to-end honesty</h3>
-          <p>
-            Speedups are reported wall-clock, end-to-end, at matched quality —
-            not in the flattering microbenchmark. If a trick only wins in a
-            corner case, the paper should say which corner.
-          </p>
-        </div>
-      </div>
+      <p class="interest-tags">
+        <span class="tag">Diffusion LLMs</span>
+        <span class="tag">KV-cache compression</span>
+        <span class="tag">Quantization</span>
+        <span class="tag">Hybrid attention</span>
+        <span class="tag">GPU systems</span>
+        <span class="tag">HW-SW co-optimization</span>
+      </p>
     </div>
   </section>
 
@@ -139,11 +102,7 @@ import Base from '../layouts/Base.astro';
           <div class="tl-body">
             <span class="tl-when">2026–Present</span>
             <h3>M.S. student — IRIS Lab, Sungkyunkwan University</h3>
-            <p>
-              Efficient inference for large models: diffusion-LLM acceleration,
-              KV-cache compression and quantization, GPU memory systems.
-              Advised by Prof. Jong Hwan Ko.
-            </p>
+            <p>Advised by Prof. Jong Hwan Ko.</p>
           </div>
         </li>
         <li>
@@ -154,6 +113,33 @@ import Base from '../layouts/Base.astro';
           </div>
         </li>
       </ol>
+    </div>
+  </section>
+
+  <!-- awards -->
+  <section class="section-tight">
+    <div class="container">
+      <p class="eyebrow">Awards</p>
+      <h2>
+        <span class="lang-en">Honors &amp; awards</span>
+        <span class="lang-ko">수상</span>
+      </h2>
+      <ul class="awards-list">
+        <li>
+          <span class="aw-when">2024</span>
+          <span class="aw-body">
+            <span class="lang-en">Dean's List — College of Information and Communication Engineering, SKKU (Fall 2024)</span>
+            <span class="lang-ko">Dean's List — 성균관대학교 정보통신대학 (2024-2학기)</span>
+          </span>
+        </li>
+        <li>
+          <span class="aw-when">2023</span>
+          <span class="aw-body">
+            <span class="lang-en">Dean's List — College of Information and Communication Engineering, SKKU (Fall 2023)</span>
+            <span class="lang-ko">Dean's List — 성균관대학교 정보통신대학 (2023-2학기)</span>
+          </span>
+        </li>
+      </ul>
     </div>
   </section>
 
@@ -182,6 +168,11 @@ import Base from '../layouts/Base.astro';
 </Base>
 
 <style>
+
+  .interest-tags { display: flex; flex-wrap: wrap; gap: 0.45rem; margin: 1.1rem 0 0; }
+  .awards-list { list-style: none; margin: 1.2rem 0 0; padding: 0; }
+  .awards-list li { display: flex; gap: 0.9em; padding: 0.4rem 0; font-size: 0.97rem; }
+  .aw-when { font-family: var(--font-mono); font-size: 0.82rem; color: var(--text-tertiary); padding-top: 0.15em; min-width: 3em; }
   .hero { padding-top: clamp(3.5rem, 9vw, 7rem); }
   .hero h1 em {
     font-style: italic;
