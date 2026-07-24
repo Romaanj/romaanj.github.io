@@ -3,8 +3,10 @@ import fs from 'node:fs';
 import Base from '../layouts/Base.astro';
 import LangToggle from '../components/LangToggle.astro';
 
-// Drop a square photo at public/profile.jpg and rebuild — it replaces the monogram.
-const hasPhoto = fs.existsSync(new URL('../../public/profile.jpg', import.meta.url));
+// Drop a square photo at public/profile.{jpg,jpeg,png,webp} and rebuild — it replaces the monogram.
+const photoFile = ['profile.jpg', 'profile.jpeg', 'profile.png', 'profile.webp'].find((f) =>
+  fs.existsSync(new URL('../../public/' + f, import.meta.url))
+);
 
 const news: { when: string; en: string; ko: string; href?: string }[] = [
   {
@@ -69,8 +71,8 @@ const explore = [
   <section class="section profile">
     <div class="container narrow">
       <div class="profile-top">
-        {hasPhoto ? (
-          <img class="portrait" src="/profile.jpg" alt="Junwon Lee" width="168" height="168" />
+        {photoFile ? (
+          <img class="portrait" src={'/' + photoFile} alt="Junwon Lee" width="168" height="168" />
         ) : (
           <div class="portrait monogram" aria-hidden="true">JL</div>
         )}
