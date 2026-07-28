@@ -1,0 +1,1969 @@
+1
+00:00:00,080 --> 00:00:03,920
+1971년, 미국 정부 기관
+ARPA(미 고등연구계획국)는
+In 1971, the US government agency ARPA launched a program to push the frontiers of speech recognition.
+
+2
+00:00:03,920 --> 00:00:07,759
+음성 인식의 최전선을 넓히기
+위한 프로그램을 시작했습니다.
+
+3
+00:00:07,759 --> 00:00:11,599
+ARPA는 야심 찬 5년
+목표를 세웠습니다. 90%
+ARPA set an ambitious 5-year goal: a system that could recognize a thousand different words with 90% accuracy.
+
+4
+00:00:11,599 --> 00:00:15,440
+정확도로 1,000단어를
+인식하는 시스템이었습니다.
+
+5
+00:00:15,440 --> 00:00:20,331
+5년 후, 카네기멜런 대학교
+연구팀이 1,011단어를 95%
+5 years later, a team from Carnegie Mellon demonstrated Harpy, an AI system capable of recognizing 1,011 different words with 95% accuracy.
+
+6
+00:00:20,331 --> 00:00:25,519
+정확도로 인식하는 AI 시스템
+하피(Harpy)를 선보였습니다.
+
+7
+00:00:25,519 --> 00:00:31,156
+ARPA 프로그램은 성공적이었지만,
+이후 10년에 걸쳐 하피 지능의
+The ARPA program was a success, but over the next decade, the core of Harpy's intelligence, an enormous knowledge graph, would be replaced by something completely different.
+
+8
+00:00:31,156 --> 00:00:36,640
+핵심이었던 거대한 지식 그래프는
+완전히 다른 무언가로 대체됩니다.
+
+9
+00:00:36,640 --> 00:00:39,336
+하피의 지식 그래프에 있는
+14,000개가 넘는
+Each of the over 14,000 nodes in Harpy's knowledge graph represents a single phone.
+
+10
+00:00:39,336 --> 00:00:42,239
+노드 각각은 하나의
+음소(phone)를 나타냅니다.
+
+11
+00:00:42,239 --> 00:00:44,912
+연구팀이 구어 미국 영어를 분해하는 데
+One of the 98 basic sounds the team used to break apart spoken American English.
+
+12
+00:00:44,912 --> 00:00:47,840
+사용한 98가지 기본
+소리 중 하나입니다.
+
+13
+00:00:47,840 --> 00:00:51,840
+그래프 자체는 이 음소들이
+결합해 하피가 유효하다고
+The graph itself captures all the different ways these phones can be strung together to create sentences considered valid by Harpy.
+
+14
+00:00:51,840 --> 00:00:55,840
+판단하는 문장을 만드는 모든
+방식을 담고 있습니다.
+
+15
+00:00:55,840 --> 00:00:58,262
+그래프의 이 부분에서는 'tell
+me about China(중국에
+In this part of the graph, we can see the pathway for the phrases 'tell me about China,' 'tell me about Nixon,' and 'give me the headlines.'
+
+16
+00:00:58,262 --> 00:01:00,552
+대해 알려 줘)', 'tell
+me about Nixon(닉슨에
+
+17
+00:01:00,552 --> 00:01:02,057
+대해 알려 줘)',
+'give me the
+
+18
+00:01:02,057 --> 00:01:04,479
+headlines(헤드라인을 알려
+줘)'의 경로를 볼 수 있습니다.
+
+19
+00:01:04,479 --> 00:01:07,783
+하피 그래프의 각
+음소에는 그 소리에 대한
+Each phone in Harpy's graph includes an expected frequency curve for the sound of the phone.
+
+20
+00:01:07,783 --> 00:01:10,799
+예상 주파수 곡선이 포함되어 있습니다.
+
+21
+00:01:10,799 --> 00:01:15,360
+이 곡선들은 오디오가 입력되는 대로
+현재 화자에 맞춰 조정됩니다.
+These curves are tuned for the current speaker as audio comes in.
+
+22
+00:01:15,360 --> 00:01:18,760
+예를 들어 제가 'tell me
+about China'라고
+For example, if I say 'tell me about China,' a signal processing algorithm chops the waveform into blocks.
+
+23
+00:01:18,760 --> 00:01:22,159
+말하면, 신호 처리 알고리즘이
+파형을 블록으로 잘라냅니다.
+
+24
+00:01:22,159 --> 00:01:25,920
+그리고 각 블록의 주파수
+성분이 계산됩니다.
+And the frequency content of each block is computed.
+
+25
+00:01:25,920 --> 00:01:28,560
+여기서부터 첫 번째 블록의 주파수 성분을
+From here, the frequency content of our first block is compared to the phones at the start of our graph.
+
+26
+00:01:28,560 --> 00:01:31,200
+그래프 시작 지점의 음소들과 비교합니다.
+
+27
+00:01:31,200 --> 00:01:34,240
+'give'의 G와
+'tell'의 T입니다.
+G in 'give' and T in 'tell.'
+
+28
+00:01:34,240 --> 00:01:35,840
+T가 더 잘 맞습니다.
+T is a better match.
+
+29
+00:01:35,840 --> 00:01:38,640
+그래서 트리의 이 부분으로 내려갑니다.
+So we progress down this part of the tree.
+
+30
+00:01:38,640 --> 00:01:41,360
+그다음 파형의 두 번째
+블록으로 넘어갑니다.
+We then move to the second block in our waveform.
+
+31
+00:01:41,360 --> 00:01:45,920
+이것이 'tell'의 L이고, 가장
+가까운 일치 항목을 찾습니다.
+This is the L in 'tell' and find its closest match.
+
+32
+00:01:45,920 --> 00:01:50,939
+이렇게 블록 단위로, 주파수
+일치 점수를 길잡이 삼아
+Block by block, we progress through our knowledge graph using a frequency matching score to guide our search, resulting in a final sentence.
+
+33
+00:01:50,939 --> 00:01:55,439
+지식 그래프를 따라가며
+최종 문장에 도달합니다.
+
+34
+00:01:55,439 --> 00:01:59,640
+하피 팀은 그래프 전체에서 최적의
+경로를 찾기 위해 빔 서치라는
+Note that the Harpy team also used a somewhat more sophisticated search method called beam search to help find the best overall path through the graph.
+
+35
+00:01:59,640 --> 00:02:03,600
+좀 더 정교한 탐색 방법도
+사용했다는 점에 주목할 만합니다.
+
+36
+00:02:03,600 --> 00:02:08,000
+각 단계에서 그저 탐욕적으로 최선의
+일치만 고르는 대신 말입니다.
+Instead of just greedily choosing the best match at each step.
+
+37
+00:02:08,000 --> 00:02:10,480
+하피의 지식 그래프가 만들어지는 과정은
+The way Harpy's knowledge graph is constructed is painstaking and fascinating.
+
+38
+00:02:10,480 --> 00:02:12,959
+공들여 이루어졌고, 무척 흥미롭습니다.
+
+39
+00:02:12,959 --> 00:02:17,120
+먼저, 언어 설계 전문가가
+문법을 직접 명세합니다.
+First, a language design expert specifies a grammar.
+
+40
+00:02:17,120 --> 00:02:20,720
+하피는 임의의 단어 나열을
+받아들일 수 없었습니다.
+Harpy could not accept arbitrary sequences of words.
+
+41
+00:02:20,720 --> 00:02:24,080
+그랬다면 성능이 크게 떨어졠을 것입니다.
+This would have significantly degraded performance.
+
+42
+00:02:24,080 --> 00:02:27,855
+대신 하피가 목표로 한 문서
+검색 용도에 맞는 유효한
+Instead, a formal grammar was used to capture valid sentence structures for Harpy's intended use case of document retrieval.
+
+43
+00:02:27,855 --> 00:02:31,760
+문장 구조를 담아내기 위해
+형식 문법이 사용되었습니다.
+
+44
+00:02:31,760 --> 00:02:35,846
+이 작은 하피 문법 예시를 보면
+'tell' 다음에는 'me'나
+This small example Harpy grammar tells us that the word 'tell' can be followed by 'me' or 'us' and then by 'all' or 'about.'
+
+45
+00:02:35,846 --> 00:02:40,400
+'us'가, 그다음에는 'all'이나
+'about'이 올 수 있습니다.
+
+46
+00:02:40,400 --> 00:02:45,440
+여기서부터 하피 어휘의 각 단어는
+개별 음소(phone)로 분해됩니다.
+From here, each word in Harpy's vocabulary is broken into individual phones.
+
+47
+00:02:45,440 --> 00:02:48,239
+이 분해 결과 자체도 작은 그래프입니다.
+These breakdowns are themselves little graphs.
+
+48
+00:02:48,239 --> 00:02:52,720
+이것이 하피 팀이 'tell'이라는
+단어에 사용한 발음 그래프입니다.
+Here's the pronunciation graph the Harpy team used for the word 'tell.'
+
+49
+00:02:52,720 --> 00:02:55,377
+'tell'을 여러 방식으로 발음할 수
+Note that the graph branches due to the possibility of pronouncing 'tell' in different ways.
+
+50
+00:02:55,377 --> 00:02:58,160
+있어 그래프가 갈라지는 점에 주목하세요.
+
+51
+00:02:58,160 --> 00:02:59,993
+'tell'은 중간에 모음 소리가 하나
+'Tell' can be pronounced with an extra vowel sound in the middle.
+
+52
+00:02:59,993 --> 00:03:02,000
+더 들어간 방식으로도
+발음될 수 있습니다.
+
+53
+00:03:02,000 --> 00:03:04,440
+단어 그래프의 각 단어를 음소 분해로
+Replacing each word in our word graph with its phone breakdown, we get a larger graph.
+
+54
+00:03:04,440 --> 00:03:06,879
+바꾸면 더 큰 그래프가 만들어집니다.
+
+55
+00:03:06,879 --> 00:03:09,280
+하지만 아직 끝난 것이 아닙니다.
+But we aren't done yet.
+
+56
+00:03:09,280 --> 00:03:14,000
+말을 할 때는 주변 단어에 따라
+단어의 소리가 자주 바뀝니다.
+When we speak, we often change the way words sound depending on the words around them.
+
+57
+00:03:14,000 --> 00:03:16,000
+이를 연접(juncture)이라고
+합니다.
+This is known as a juncture.
+
+58
+00:03:16,000 --> 00:03:20,504
+'about China'라고
+말할 때 'about'의
+When saying a phrase like 'about China,' the T in 'about' is often dropped, leaving 'about China.'
+
+59
+00:03:20,504 --> 00:03:23,920
+T는 흔히 탈락되어 T 없이 발음됩니다.
+
+60
+00:03:23,920 --> 00:03:28,809
+'me all'과 같은 전환에서는
+일부 화자가 모음 사이를 이어주려고
+And in transitions like 'me all,' a subtle extra Y sound known as a glide is added by some speakers to transition between vowels.
+
+61
+00:03:28,809 --> 00:03:33,440
+활음(glide)이라 불리는 미세한
+Y 소리를 덧붙이기도 합니다.
+
+62
+00:03:33,440 --> 00:03:38,034
+하피 팀은 음소 간 다양한
+연접을 반영하도록 음소
+The Harpy team accounted for this by creating rules to manipulate the phone graph to allow for various junctures between phones.
+
+63
+00:03:38,034 --> 00:03:42,799
+그래프를 조정하는 규칙을
+만들어 이를 처리했습니다.
+
+64
+00:03:42,799 --> 00:03:47,930
+하피는 1,000단어 어휘에서
+정확도 90%라는 ARPA의 야심 찬
+Now, although Harpy achieved ARPA's ambitious goal of 90% accuracy on a thousand-word vocabulary, further scaling Harpy's performance proved difficult.
+
+65
+00:03:47,930 --> 00:03:53,200
+목표를 달성했지만, 성능을 더
+확장하기는 어려운 것으로 드러났습니다.
+
+66
+00:03:53,200 --> 00:03:56,218
+그리고 이후 10년에 걸쳐
+하피의 지식 그래프는
+And over the next decade, Harpy's knowledge graph was replaced by hidden Markov models.
+
+67
+00:03:56,218 --> 00:03:59,120
+은닉 마르코프 모델(HMM)로
+대체되었습니다.
+
+68
+00:03:59,120 --> 00:04:01,775
+이 모델들도 여전히 음소
+노드 사이의 그래프
+These models can still be understood as implementing a graph structure between phone nodes.
+
+69
+00:04:01,775 --> 00:04:04,319
+구조를 구현한 것으로
+이해할 수 있습니다.
+
+70
+00:04:04,319 --> 00:04:09,040
+하지만 이제 그래프의 엣지는
+데이터로부터 학습된 확률입니다.
+But the edges of the graph are now probabilities that are learned from data.
+
+71
+00:04:09,040 --> 00:04:12,100
+언어 전문가가 문법을 명세하지도, 언어학
+No language expert specified grammar, and no linguistic expert specified juncture rules.
+
+72
+00:04:12,100 --> 00:04:15,439
+전문가가 연접 규칙을
+명세하지도 않았습니다.
+
+73
+00:04:15,439 --> 00:04:18,400
+이는 당시로서는 논쟁적인 전환이었습니다.
+This was a controversial shift at the time.
+
+74
+00:04:18,400 --> 00:04:21,515
+많은 연구자들은 인간의
+지식을 AI 시스템에
+Building our knowledge into AI systems was considered critical by many researchers.
+
+75
+00:04:21,515 --> 00:04:24,240
+담아내는 것이 필수적이라고 여겼습니다.
+
+76
+00:04:24,240 --> 00:04:28,440
+하지만 1980년대 후반에서
+1990년대 초에 이르러 사실상
+However, by the late 1980s and early 1990s, virtually all speech recognition systems had moved to hidden Markov models.
+
+77
+00:04:28,440 --> 00:04:32,639
+모든 음성 인식 시스템이 은닉
+마르코프 모델로 옮겨갔습니다.
+
+78
+00:04:32,639 --> 00:04:35,622
+그리고 이 시스템들은
+5,000단어, 이어서
+And these systems were able to scale to much larger vocabularies of 5,000 and then 20,000 words.
+
+79
+00:04:35,622 --> 00:04:39,600
+20,000단어라는 훨씬 큰
+어휘로 확장될 수 있었습니다.
+
+80
+00:04:39,600 --> 00:04:42,279
+수십 년 뒤인 2019년,
+컴퓨터 과학자 리처드 서턴은
+Decades later, in 2019, the computer scientist Richard Sutton published a highly cited essay that he called the bitter lesson.
+
+81
+00:04:42,279 --> 00:04:45,226
+자신이 '쓰라린 교훈(The
+Bitter Lesson)'이라
+
+82
+00:04:45,226 --> 00:04:47,280
+부른, 널리 인용된
+에세이를 발표했습니다.
+
+83
+00:04:47,280 --> 00:04:51,197
+이 에세이에서 서턴은 하피가
+은닉 마르코프 모델 기반
+In his essay, Sutton points out that Harpy's replacement with hidden Markov model based approaches is part of a broader trend.
+
+84
+00:04:51,197 --> 00:04:55,520
+접근법으로 대체된 것이 더 큰
+흐름의 일부라고 지적합니다.
+
+85
+00:04:55,520 --> 00:04:58,780
+서턴은 이 흐름을 지난
+70년 AI 연구에서
+A trend that Sutton calls the biggest lesson from 70 years of AI research.
+
+86
+00:04:58,780 --> 00:05:01,360
+얻은 가장 큰 교훈이라고 부릅니다.
+
+87
+00:05:01,360 --> 00:05:05,347
+구체적으로, 연산을 활용하는
+일반적인 방법이 결국
+Specifically, that general methods that leverage computation are ultimately the most effective, and by a large margin.
+
+88
+00:05:05,347 --> 00:05:09,039
+가장 효과적이며, 그
+격차도 크다는 것입니다.
+
+89
+00:05:09,039 --> 00:05:13,315
+그리고 하피 팀이 그랬듯이 시스템에
+인간 지식을 넣으려는 시도는
+And that trying to build human knowledge into our systems, as the Harpy team did, helps initially but then becomes highly counterproductive.
+
+90
+00:05:13,315 --> 00:05:18,080
+처음엔 도움이 되지만, 이후 오히려
+심각한 역효과를 낳는다는 것입니다.
+
+91
+00:05:18,080 --> 00:05:21,600
+서턴의 에세이는 시점이 더할
+나위 없이 절묘했습니다.
+The timing of Sutton's essay could not have been better.
+
+92
+00:05:21,600 --> 00:05:25,507
+불과 몇 주 전 OpenAI가
+GPT-2를 공개했고,
+OpenAI had just released GPT-2 a few weeks prior, and a new paradigm was just beginning to emerge.
+
+93
+00:05:25,507 --> 00:05:29,280
+새로운 패러다임이 막 등장하기
+시작한 참이었습니다.
+
+94
+00:05:29,280 --> 00:05:33,788
+트랜스포머라는 범용 아키텍처가
+다음 토큰 예측이라는 단순한
+A general architecture, the transformer, focused on a simple learning objective, next token prediction, and trained with massive amounts of compute, could produce shockingly intelligent language models.
+
+95
+00:05:33,788 --> 00:05:38,155
+학습 목표에 집중하고 막대한
+연산량으로 학습하면, 놀라울
+
+96
+00:05:38,155 --> 00:05:42,240
+만큼 지능적인 언어 모델을
+만들어 낼 수 있었습니다.
+
+97
+00:05:42,240 --> 00:05:44,720
+저를 포함한 많은 사람들에게는, 우리가
+For myself and many others, it seemed like we had learned the bitter lesson.
+
+98
+00:05:44,720 --> 00:05:47,199
+쓰라린 교훈을 배운 것처럼 보였습니다.
+
+99
+00:05:47,199 --> 00:05:49,624
+우리는 막대한 연산량을 활용해 AI
+We had found a method of creating AI systems that leveraged massive amounts of compute
+
+100
+00:05:49,624 --> 00:05:52,560
+시스템을 만드는 방법을
+찾아낸 것 같았고,
+
+101
+00:05:52,560 --> 00:05:55,777
+AI 시스템이 어떻게 작동해야
+하는지에 대한 인간의
+and appeared to rely only minimally on human assumptions about how AI systems should work.
+
+102
+00:05:55,777 --> 00:05:58,880
+가정에는 최소한으로만
+의존하는 것처럼 보였습니다.
+
+103
+00:05:58,880 --> 00:06:03,280
+하지만 2025년, 정말
+놀라운 일이 벌어졌습니다.
+But then in 2025, something really surprising happened.
+
+104
+00:06:03,280 --> 00:06:06,080
+서턴이 한 팟캐스트에 출연했습니다.
+Richard Sutton went on a podcast.
+
+105
+00:06:06,080 --> 00:06:09,600
+서턴이 드와케시 파텔과 나눈
+인터뷰의 첫 10분 만에,
+In the first 10 minutes of Sutton's interview with Dwarkesh Patel,
+
+106
+00:06:09,600 --> 00:06:12,569
+서턴이 대규모 언어 모델(LLM)과
+쓰라린 교훈에 대해
+it became clear that Sutton had a completely different take on large language models and the bitter lesson.
+
+107
+00:06:12,569 --> 00:06:15,440
+완전히 다른 견해를 갖고
+있다는 것이 분명해졌습니다.
+
+108
+00:06:15,440 --> 00:06:17,809
+-그러니까, 2019년에 '쓰라린
+교훈(The Bitter
+So, I mean, it's interesting because you wrote this essay in 2019, titled 'The Bitter Lesson.'
+
+109
+00:06:17,809 --> 00:06:20,400
+Lesson)'이라는 에세이를
+쓰셨는데, 그 점이 흥미롭습니다.
+
+110
+00:06:20,400 --> 00:06:24,720
+그리고 이건 아마 AI 역사상 가장
+영향력 있는 에세이일 겁니다.
+And this is the most influential essay, perhaps, in the history of AI.
+
+111
+00:06:24,720 --> 00:06:33,039
+하지만 사람들은 이걸 LLM을
+확장하는 근거로 사용해 왔습니다.
+But people have used that as a justification for scaling up LLMs,
+
+112
+00:06:33,039 --> 00:06:37,480
+그들 입장에서는, 세상에 대해
+학습하는 데 엄청난 연산량을 쏟아부을
+because in their view, this is the one scalable way we have found to pour ungodly amounts of compute into learning about the world.
+
+113
+00:06:37,480 --> 00:06:41,680
+수 있는 유일하게 확장 가능한
+방법이 바로 이것이기 때문입니다.
+
+114
+00:06:41,680 --> 00:06:47,120
+그래서 정작 LLM이 쓰라린 교훈이
+아니라고 보시는 게 흥미롭습니다.
+And so it's interesting that your perspective is that the LLMs are actually not the bitter lesson.
+
+115
+00:06:47,120 --> 00:06:55,039
+-LLM이 쓰라린 교훈의
+사례인지는 흥미로운 질문입니다.
+It's an interesting question whether large language models are a case of the bitter lesson.
+
+116
+00:06:55,039 --> 00:06:55,360
+-네.
+Yeah.
+
+117
+00:06:55,360 --> 00:07:01,333
+-LLM은 분명 막대한 연산을
+활용하는 방법이고, 인터넷의
+Because they are clearly a way of using massive computation, things that will scale with computation up to the limits of the internet.
+
+118
+00:07:01,333 --> 00:07:06,560
+한계까지는 연산량에 따라
+확장될 것이기 때문입니다.
+
+119
+00:07:06,560 --> 00:07:08,000
+-네.
+Yeah.
+
+120
+00:07:08,000 --> 00:07:15,039
+-하지만 동시에 LLM은 많은 인간
+지식을 집어넣는 방법이기도 합니다.
+But they're also a way of putting in lots of human knowledge.
+
+121
+00:07:15,039 --> 00:07:24,400
+그래서 이건 흥미로운 질문인데,
+사회학적이거나 산업적인 질문입니다.
+And so, this is an interesting question — it's a sociological or industry question.
+
+122
+00:07:24,400 --> 00:07:32,920
+LLM이 데이터의 한계에
+다다라서, 사람이 아니라 경험만으로
+Will they reach the limits of the data and be superseded by things that can get more data just from experience rather than from people?
+
+123
+00:07:32,920 --> 00:07:41,440
+더 많은 데이터를 얻을 수 있는
+것들에 의해 대체되겠습니까?
+
+124
+00:07:41,440 --> 00:07:46,319
+어떤 면에서는 쓰라린
+교훈의 전형적인 사례입니다.
+In some ways, it's a classic case of the bitter lesson.
+
+125
+00:07:46,319 --> 00:07:49,965
+LLM에 인간의 지식을 더 많이 넣을수록
+With the more human knowledge we put into the large language models, the better they can do, and so it feels good.
+
+126
+00:07:49,965 --> 00:07:53,280
+성능이 좋아지니, 기분이 좋아집니다.
+
+127
+00:07:53,280 --> 00:08:00,100
+하지만 저는 특히, 경험으로부터
+학습하는 시스템이 등장해 훨씬
+And yet, I, in particular, expect there to be systems that can learn from experience which could well perform much, much better and be much more scalable.
+
+128
+00:08:00,100 --> 00:08:07,120
+더 뛰어난 성능과 확장성을 보일
+가능성이 충분하다고 생각합니다.
+
+129
+00:08:07,120 --> 00:08:11,440
+그렇게 되면 이는 또 하나의
+쓰라린 교훈 사례가 되는 것입니다.
+In which case, it will be another instance of the bitter lesson.
+
+130
+00:08:11,440 --> 00:08:16,982
+인간의 지식을 활용한 것들이 결국 경험과
+That the things that used human knowledge were eventually superseded by things that just trained from experience and computation.
+
+131
+00:08:16,982 --> 00:08:23,280
+연산만으로 학습한 것들로
+대체되는 사례입니다.
+
+132
+00:08:23,280 --> 00:08:26,080
+정말 놀라운 순간입니다.
+This is such a remarkable moment.
+
+133
+00:08:26,080 --> 00:08:29,144
+서턴은 사실상, 학계
+대부분이 자신의 에세이를
+Sutton is basically telling us that much of the field has interpreted his essay in exactly the wrong way.
+
+134
+00:08:29,144 --> 00:08:31,840
+정반대로 해석해 왔다고 말하는 셈입니다.
+
+135
+00:08:31,840 --> 00:08:37,120
+LLM은 쓰라린 교훈의 사례이지만,
+부정적인 사례라는 것입니다.
+That large language models are an example of the bitter lesson, but a negative example,
+
+136
+00:08:37,120 --> 00:08:41,534
+하피처럼 인간의 지식에 지나치게
+의존하는 사례라는 것입니다.
+one that, like Harpy, relies far too much on human knowledge, since LLMs are trained on human-generated text.
+
+137
+00:08:41,534 --> 00:08:45,279
+LLM이 인간이 만든 텍스트로
+학습되기 때문입니다.
+
+138
+00:08:45,279 --> 00:08:47,200
+그렇다면 서턴이 옳을까요?
+So, is Sutton right?
+
+139
+00:08:47,200 --> 00:08:52,096
+LLM은 인간의 지식에 의존하기
+때문에 성능 한계에 부딪혀,
+Will LLMs hit a performance barrier due to their reliance on human knowledge and need to be replaced with very different types of AI systems?
+
+140
+00:08:52,096 --> 00:08:56,399
+전혀 다른 유형의 AI
+시스템으로 대체되어야 할까요?
+
+141
+00:08:56,399 --> 00:08:59,839
+서턴은 쓰라린 교훈을 이런
+문장으로 마무리합니다.
+Sutton ends the bitter lesson with these lines.
+
+142
+00:08:59,839 --> 00:09:03,146
+"우리가 원하는 것은 우리처럼
+스스로 발견할 수 있는 AI
+We want AI agents that can discover like we can, not which contain what we have discovered.
+
+143
+00:09:03,146 --> 00:09:07,279
+에이전트이지, 우리가 발견한 것을 담고
+있는 AI 에이전트가 아닙니다."
+
+144
+00:09:07,279 --> 00:09:11,071
+"우리의 발견을 미리
+담아 두는 것은, 발견의
+Building in our discoveries only makes it harder to see how the discovering process can be done.
+
+145
+00:09:11,071 --> 00:09:14,560
+과정 자체를 보기
+어렵게 만들 뿐입니다."
+
+146
+00:09:14,560 --> 00:09:19,200
+그렇다면 우리처럼 스스로 발견할 수
+있는 AI 시스템은 어떤 모습일까요?
+So what would an AI system look like that can discover like we can?
+
+147
+00:09:19,200 --> 00:09:23,839
+오늘날 LLM을 학습시키는
+주된 방식은 지도 학습입니다.
+The primary way large language models are trained today is through supervised learning.
+
+148
+00:09:23,839 --> 00:09:28,000
+예를 들어 해리 포터 첫 문장
+같은 학습 텍스트가 주어지면,
+Given some training text, for example, the first line of Harry Potter,
+
+149
+00:09:28,000 --> 00:09:31,279
+그 텍스트는 토큰이라는
+작은 조각들로 나뉘고,
+the text is broken into little pieces known as tokens,
+
+150
+00:09:31,279 --> 00:09:36,560
+모델은 앞에 오는 모든 토큰을 보고
+다음 토큰을 예측하도록 학습됩니다.
+and the model is trained to predict the next token given all the tokens that come before.
+
+151
+00:09:36,560 --> 00:09:39,972
+"Mr. and Mrs. Dursley
+of"라는 입력이 주어지면,
+So given the input Mr. and Mrs. Dursley of, the model is trained to predict the token for the word number.
+
+152
+00:09:39,972 --> 00:09:43,200
+모델은 "number"에 해당하는
+토큰을 예측하도록 학습됩니다.
+
+153
+00:09:43,200 --> 00:09:45,463
+"Mr. and Mrs.
+Dursley of
+And given the input Mr. and Mrs. Dursley of number, the model is trained to predict the token for the word four, and so on.
+
+154
+00:09:45,463 --> 00:09:48,386
+number"가 입력되면,
+모델은 "four"에 해당하는
+
+155
+00:09:48,386 --> 00:09:51,120
+토큰을 예측하도록 학습되고,
+이런 식으로 계속됩니다.
+
+156
+00:09:51,120 --> 00:09:54,880
+토큰 하나하나씩, 우리는 모델에게
+무엇을 말할지 가르치는 셈입니다.
+Token by token, we're teaching the model what to say.
+
+157
+00:09:54,880 --> 00:09:59,195
+서턴의 비판은, 이 과정도
+하피처럼 인간의 지식에 지나치게
+And Sutton's criticism here is that, like HARPY, this process relies too much on human knowledge, since we're training our model to imitate humans.
+
+158
+00:09:59,195 --> 00:10:04,320
+의존한다는 것입니다. 모델이 인간을
+모방하도록 학습시키기 때문입니다.
+
+159
+00:10:04,320 --> 00:10:08,320
+그렇다면 AI 시스템을 다른
+방식으로 학습시킬 방법은 없을까요?
+So, how else might we train AI systems?
+
+160
+00:10:08,320 --> 00:10:12,160
+서턴은 흔히 강화 학습의
+아버지로 알려져 있습니다.
+Sutton is generally known as the father of reinforcement learning.
+
+161
+00:10:12,160 --> 00:10:15,200
+지도 학습이 아닌 강화
+학습으로 훈련된 AI
+One of the most compelling modern examples of AI systems trained using reinforcement learning instead of supervised learning
+
+162
+00:10:15,200 --> 00:10:18,240
+시스템의 가장 흥미로운
+현대 사례 중 하나는
+
+163
+00:10:18,240 --> 00:10:22,959
+바로 구글 딥마인드의 알파고와
+알파고 제로 에이전트입니다.
+are Google DeepMind's AlphaGo and AlphaGo Zero agents.
+
+164
+00:10:22,959 --> 00:10:27,422
+알파고와 알파고 제로는 대규모
+언어 모델이 아니라 게임
+Now, AlphaGo and AlphaGo Zero are game-playing agents, not large language models, but there are some really interesting parallels here.
+
+165
+00:10:27,422 --> 00:10:32,480
+플레이 에이전트지만, 여기엔 정말
+흥미로운 유사점이 있습니다.
+
+166
+00:10:32,480 --> 00:10:38,160
+강화 학습이 어떻게 인간 지식의
+한계를 뛰어넘게 하는지 살펴보기 전에,
+Now, before we see exactly how reinforcement learning allows us to push beyond the limits of human knowledge,
+
+167
+00:10:38,160 --> 00:10:41,460
+이런 주제에 푹 빠져 있고 다음
+커리어를 고민 중이라면, 이
+if you're someone who's obsessed with this stuff and looking for your next career move, check out this video sponsor, Tufa Labs.
+
+168
+00:10:41,460 --> 00:10:44,959
+영상의 스폰서인 Tufa
+Labs(투파 랩스)를 확인해 보세요.
+
+169
+00:10:44,959 --> 00:10:49,360
+Tufa Labs는 최근 ARC-AGI-3
+프리뷰 대회에서 우승했는데,
+Tufa Labs recently won the ARC-AGI-3 preview competition,
+
+170
+00:10:49,360 --> 00:10:53,040
+이 대회에서 AI 에이전트는
+개발자조차 본 적 없는
+where AI agents must learn to play and win completely novel games that the agents' developers have never seen before.
+
+171
+00:10:53,040 --> 00:10:56,720
+완전히 새로운 게임을 스스로
+익혀 승리해야 합니다.
+
+172
+00:10:56,720 --> 00:11:01,103
+Tufa Labs는 취리히에 기반한
+독립 AI 연구소로, LLM과
+Tufa Labs is an independent AI lab based in Zurich and puts out really interesting research on the frontiers of LLMs and reinforcement learning.
+
+173
+00:11:01,103 --> 00:11:05,120
+강화 학습 최전선에서 정말
+흥미로운 연구를 내놓고 있습니다.
+
+174
+00:11:05,120 --> 00:11:08,942
+최근 발표한 논문에서 이 팀은
+자기 개선 루프를 만들어 MIT
+In this recent paper, the team achieved very impressive performance on the MIT Integration Bee challenge by creating a self-improvement loop,
+
+175
+00:11:08,942 --> 00:11:14,000
+Integration Bee(MIT 적분
+대회)에서 매우 인상적인 성과를 냈는데,
+
+176
+00:11:14,000 --> 00:11:17,686
+이 루프에서 LLM은 스스로
+수학 연습 문제를 만들고,
+where an LLM creates its own math practice problems and learns to solve them via reinforcement learning.
+
+177
+00:11:17,686 --> 00:11:20,880
+강화 학습으로 그 문제를
+푸는 법을 학습합니다.
+
+178
+00:11:20,880 --> 00:11:25,853
+Tufa Labs는 연산량에
+진심이며, 현재 엔비디아 GB300
+Tufa Labs is serious about compute and is currently expanding their infrastructure with two Nvidia GB300 NVL72 racks,
+
+179
+00:11:25,853 --> 00:11:30,399
+NVL72 랙(rack) 2대로
+인프라를 확장하고 있는데,
+
+180
+00:11:30,399 --> 00:11:34,640
+비교적 작은 팀 규모를
+고려하면 상당한 연산량입니다.
+which is a significant amount of compute given the relatively small team size.
+
+181
+00:11:34,640 --> 00:11:37,316
+Tufa Labs는
+머신러닝을 퀀트 금융에
+Tufa Labs is fully self-funded by applying ML to quantitative finance.
+
+182
+00:11:37,316 --> 00:11:39,760
+적용해 전액 자체 자금으로 운영됩니다.
+
+183
+00:11:39,760 --> 00:11:42,720
+이 자금 구조는 딥시크의
+자금 구조와 비슷합니다.
+This funding structure is similar to DeepSeek's.
+
+184
+00:11:42,720 --> 00:11:47,180
+관심이 있다면 tufalabs.ai/join에서
+지원할 수 있습니다.
+If this sounds interesting, you can apply at tufalabs.ai/join.
+
+185
+00:11:47,519 --> 00:11:50,240
+자, 다시 쓰라린 교훈
+이야기로 돌아가겠습니다.
+Now, back to the Bitter Lesson.
+
+186
+00:11:50,240 --> 00:11:55,467
+바둑에서 최초로 인간을 뛰어넘는
+성능을 낸 AI 시스템인 알파고를 만들
+When building AlphaGo, the first AI system that reached superhuman performance on the board game Go, the DeepMind team first trained a supervised policy network.
+
+187
+00:11:55,467 --> 00:12:00,560
+때, 딥마인드 팀은 먼저 지도 학습
+기반 정책 신경망을 훈련했습니다.
+
+188
+00:12:00,560 --> 00:12:04,485
+강화 학습 용어로,
+에이전트의 정책은 주어진
+In the jargon of reinforcement learning, an agent's policy determines what action an agent will take in a given state.
+
+189
+00:12:04,485 --> 00:12:07,920
+상태에서 어떤 행동을 할지 결정합니다.
+
+190
+00:12:07,920 --> 00:12:11,572
+바둑에서 현재 상태는 바둑판 국면이고,
+In the game of Go, the current state is the board position, and the action is where the agent will place its next stone on the board.
+
+191
+00:12:11,572 --> 00:12:15,920
+행동은 에이전트가 다음
+돌을 놓을 위치입니다.
+
+192
+00:12:15,920 --> 00:12:20,480
+딥마인드 팀은 심층 신경망으로
+이 정책을 학습시켰습니다.
+The DeepMind team used a deep neural network to learn this policy.
+
+193
+00:12:20,480 --> 00:12:23,266
+딥마인드 해법의 이 부분은 대규모 언어
+This part of DeepMind's solution is strikingly similar to large language model training.
+
+194
+00:12:23,266 --> 00:12:25,920
+모델 훈련과 놀라울 만큼 비슷합니다.
+
+195
+00:12:25,920 --> 00:12:29,021
+입력 텍스트가 주어지면,
+대규모 언어 모델은
+Given some input text, large language models return a probability for each token the model could say next.
+
+196
+00:12:29,021 --> 00:12:32,639
+다음에 나올 수 있는 각
+토큰의 확률을 반환합니다.
+
+197
+00:12:32,639 --> 00:12:37,543
+마찬가지로 바둑판 국면이
+입력되면, 알파고의 정책 신경망은
+And given an input board position, AlphaGo's policy network returns a probability for each board position where AlphaGo could place a stone.
+
+198
+00:12:37,543 --> 00:12:41,680
+돌을 놓을 수 있는 각
+위치의 확률을 반환합니다.
+
+199
+00:12:41,680 --> 00:12:44,791
+참고로 알파고는 합성곱 구조를 사용했고,
+Note that AlphaGo used a convolutional architecture while LLMs generally use transformers.
+
+200
+00:12:44,791 --> 00:12:47,760
+LLM은 대개 트랜스포머를 사용합니다.
+
+201
+00:12:47,760 --> 00:12:52,079
+하지만 이 차이는 지금 우리의
+비교에서는 크게 중요하지 않습니다.
+But this distinction isn't really significant for our comparison here.
+
+202
+00:12:52,079 --> 00:12:56,130
+LLM 학습과 매우 유사하게,
+알파고의 정책 신경망도
+Very similar to LLM training, AlphaGo's policy network was first trained using supervised learning on human-generated examples,
+
+203
+00:12:56,130 --> 00:13:00,320
+먼저 인간이 만든 예제로 지도
+학습을 통해 학습되었고,
+
+204
+00:13:00,320 --> 00:13:04,800
+기록된 대국에서 전문 기사들의
+수를 따라 하도록 학습했습니다.
+learning to match expert human players' moves in recorded games.
+
+205
+00:13:04,800 --> 00:13:07,866
+이렇게 지도 학습으로
+학습된 정책 신경망은
+The resulting supervised-learning-trained policy network is a fairly competent Go player.
+
+206
+00:13:07,866 --> 00:13:10,399
+바둑을 상당히 잘 두는 수준입니다.
+
+207
+00:13:10,399 --> 00:13:15,387
+다른 바둑 에이전트들과의
+대회에서 평가한 결과, Elo
+Evaluating the model in a tournament against other Go agents resulted in an ELO rating of 1517, putting the network at mid-amateur level.
+
+208
+00:13:15,387 --> 00:13:21,040
+레이팅 1517을 기록해 아마추어
+중급 수준으로 나타났습니다.
+
+209
+00:13:21,040 --> 00:13:25,302
+강화 학습 패러다임에서는
+에이전트가 직접적인
+Now, in the reinforcement learning paradigm, agents learn not from direct supervision but instead through interacting with their environments.
+
+210
+00:13:25,302 --> 00:13:29,920
+지도가 아니라, 환경과
+상호작용하며 학습합니다.
+
+211
+00:13:29,920 --> 00:13:33,600
+알파고의 경우, 이는
+실제로 대국을 두면서
+In the case of AlphaGo, this just means taking the very natural approach of learning from actually playing the game.
+
+212
+00:13:33,600 --> 00:13:37,120
+배우는 매우 자연스러운 접근을 뜻합니다.
+
+213
+00:13:37,120 --> 00:13:40,620
+딥마인드 팀은 지도 학습으로
+훈련된 정책 신경망을
+The DeepMind team took their trained supervised policy network and had it play against various versions of itself.
+
+214
+00:13:40,620 --> 00:13:44,639
+가져와, 자기 자신의 여러
+버전과 대국을 두게 했습니다.
+
+215
+00:13:44,639 --> 00:13:48,404
+매 대국이 끝나면,
+승리한 모델의 수는 정책
+After each game, the moves taken by the winning model were used as positive training examples to train the policy network.
+
+216
+00:13:48,404 --> 00:13:52,639
+신경망을 학습시키는 긍정적
+예제로 사용되었습니다.
+
+217
+00:13:52,639 --> 00:13:56,800
+그리고 패배한 모델의 수는
+부정적 예제로 사용되었습니다.
+And the moves taken by the losing model were used as negative examples.
+
+218
+00:13:56,800 --> 00:14:01,519
+이 학습 과정은 인간 전문가의 수로부터
+배우는 것과 매우 유사합니다.
+This training process is very similar to learning from human expert moves.
+
+219
+00:14:01,519 --> 00:14:04,390
+핵심적인 차이는, 이
+수들이 실제로 바둑을 두는
+The key difference here is that these moves are generated by two policy networks actually playing Go.
+
+220
+00:14:04,390 --> 00:14:07,040
+두 정책 신경망에 의해
+생성된다는 점입니다.
+
+221
+00:14:07,040 --> 00:14:10,692
+그리고 모델이 학습하는
+근본적인 신호는 인간
+And the underlying signal the model learns from is not the opinion of a human expert, but instead the outcome of a real game.
+
+222
+00:14:10,692 --> 00:14:14,800
+전문가의 의견이 아니라,
+실제 대국의 결과입니다.
+
+223
+00:14:14,800 --> 00:14:19,840
+이 접근법은 정책 경사법(policy
+gradient)이라 불리며,
+This approach is known as a policy gradient method, and is a key technique in reinforcement learning initially developed by Sutton and others in the 1990s.
+
+224
+00:14:19,840 --> 00:14:24,880
+1990년대에 서턴 등이 처음
+개발한 강화 학습의 핵심 기법입니다.
+
+225
+00:14:24,880 --> 00:14:28,679
+그런데 강화 학습으로
+훈련된 정책 신경망만으로는,
+Now, it turns out that the reinforcement-learning-trained policy network alone was not enough to deliver superhuman Go performance.
+
+226
+00:14:28,679 --> 00:14:33,040
+인간을 뛰어넘는 바둑 실력을
+내기에 충분하지 않았습니다.
+
+227
+00:14:33,040 --> 00:14:35,967
+딥마인드 팀에게는 강화 학습에서 나온
+The DeepMind team needed one more big idea from reinforcement learning.
+
+228
+00:14:35,967 --> 00:14:39,040
+또 하나의 큰 아이디어가 필요했습니다.
+
+229
+00:14:39,040 --> 00:14:42,480
+여기서 학습 문제를 설정하는
+또 다른 방법이 있습니다.
+It turns out there's another way to set up our learning problem here.
+
+230
+00:14:42,480 --> 00:14:46,790
+사실 이는 앞서 본 정책
+경사법보다 더 오래되었고,
+And it's actually an older, and arguably more central, reinforcement learning idea than the policy gradient method we've seen.
+
+231
+00:14:46,790 --> 00:14:50,639
+어쩌면 더 핵심적인 강화
+학습 아이디어입니다.
+
+232
+00:14:50,639 --> 00:14:54,320
+다음에 둘 수를 예측하도록
+신경망을 학습시키는 대신,
+Instead of training a network to predict the move that should come next,
+
+233
+00:14:54,320 --> 00:14:59,279
+주어진 바둑판 국면의 품질을 측정하도록
+신경망을 학습시키면 어떨까요,
+what if we trained a network to measure the quality of a given board position,
+
+234
+00:14:59,279 --> 00:15:02,145
+좀 더 구체적으로는, 주어진 국면에서
+or more concretely, to estimate the probability of winning starting from a given board position.
+
+235
+00:15:02,145 --> 00:15:05,440
+시작해 승리할 확률을
+추정하도록 말입니다.
+
+236
+00:15:05,440 --> 00:15:10,079
+이 접근법은 강화 학습에서 폭넓게
+가치 함수 추정이라고 불리며,
+This approach is broadly known in reinforcement learning as value function estimation,
+
+237
+00:15:10,079 --> 00:15:13,425
+여기서 가치란 기대
+미래 보상을 뜻하는데,
+where the term value refers to expected future rewards — in this case, winning the game.
+
+238
+00:15:13,425 --> 00:15:16,480
+이 경우에는 게임에서 이기는 것입니다.
+
+239
+00:15:16,480 --> 00:15:22,399
+가치 함수는 서턴의 강화 학습
+교과서에서 핵심적인 역할을 합니다.
+Value functions play a central role in Sutton's canonical text on reinforcement learning.
+
+240
+00:15:22,399 --> 00:15:26,560
+"우리가 다루는 거의 모든
+강화 학습 알고리즘에서 가장
+The most important component of almost all reinforcement learning algorithms we consider is a method for efficiently estimating values.
+
+241
+00:15:26,560 --> 00:15:30,720
+중요한 요소는 가치를 효율적으로
+추정하는 방법입니다."
+
+242
+00:15:30,720 --> 00:15:35,539
+가치 추정의 중심적 역할이야말로,
+지난 60년간 강화 학습에
+The central role of value estimation is arguably the most important thing that has been learned about reinforcement learning over the last six decades.
+
+243
+00:15:35,539 --> 00:15:39,920
+대해 배운 가장 중요한 사실이라
+해도 과언이 아닙니다.
+
+244
+00:15:39,920 --> 00:15:44,169
+이 강화 학습 아이디어를 활용하기
+위해, 구글 딥마인드 팀은
+To make use of this reinforcement learning idea, the Google DeepMind team trained a second neural network that they called a value network.
+
+245
+00:15:44,169 --> 00:15:48,160
+가치 신경망이라 부르는 두
+번째 신경망을 학습시켰습니다.
+
+246
+00:15:48,160 --> 00:15:52,959
+이 신경망은 정책 신경망과 동일한
+바둑판 국면을 입력으로 받았습니다.
+This network took in the same board position inputs as our policy network.
+
+247
+00:15:52,959 --> 00:15:57,323
+하지만 다음 수를 예측하는
+대신, 가치 신경망은
+But instead of predicting what move should come next, the value network predicts the probability of AlphaGo winning the game from that position.
+
+248
+00:15:57,323 --> 00:16:01,519
+그 국면에서 알파고가
+이길 확률을 예측합니다.
+
+249
+00:16:01,519 --> 00:16:06,104
+딥마인드 팀은 서로 다른 버전의
+알파고끼리 둔 대국의 국면으로
+The DeepMind team trained their value network on board positions from games between different versions of AlphaGo, again avoiding learning from human gameplay.
+
+250
+00:16:06,104 --> 00:16:10,959
+가치 신경망을 학습시켰고, 이번에도
+인간 대국 학습은 피했습니다.
+
+251
+00:16:10,959 --> 00:16:15,684
+마지막으로 딥마인드 팀은 정책 신경망과
+가치 신경망을 몬테카를로 트리
+Finally, the DeepMind team brought together their policy and value network with a method called Monte Carlo tree search to create a formidable Go agent.
+
+252
+00:16:15,684 --> 00:16:20,160
+탐색이라는 방법과 결합해 강력한
+바둑 에이전트를 만들어 냈습니다.
+
+253
+00:16:20,160 --> 00:16:23,155
+정책 신경망은 알파고가
+다음에 둘 수 있는
+The policy network allows AlphaGo to narrow down the number of next possible moves,
+
+254
+00:16:23,155 --> 00:16:25,759
+수의 범위를 좁힐 수 있게 해 주고,
+
+255
+00:16:25,759 --> 00:16:30,259
+가치 신경망은 알파고가
+트리의 특정 분기를 계속
+while the value network provides a strong estimate of the probability of winning if AlphaGo continues playing down a given branch of the tree.
+
+256
+00:16:30,259 --> 00:16:35,279
+따라갔을 때 이길 확률을
+믿을 만하게 추정해 줍니다.
+
+257
+00:16:35,279 --> 00:16:38,959
+이후 알파고는 2016년,
+당시 세계 랭킹
+AlphaGo famously went on to defeat Lee Sedol in 2016, the second-ranked Go player in the world at the time.
+
+258
+00:16:38,959 --> 00:16:42,639
+2위였던 이세돌을 꺾은
+것으로 유명합니다.
+
+259
+00:16:42,639 --> 00:16:47,515
+이듬해 딥마인드 팀은
+알파고보다 더 강력하면서도 인간
+The following year, the DeepMind team revealed AlphaGo Zero, an even stronger player than AlphaGo that remarkably did not learn from any human games.
+
+260
+00:16:47,515 --> 00:16:52,560
+기보를 전혀 학습하지 않은
+알파고 제로를 공개했습니다.
+
+261
+00:16:52,560 --> 00:16:57,360
+대신 실제 대국을 통한 강화
+학습에만 의존했습니다.
+Instead, relying only on reinforcement learning from real gameplay.
+
+262
+00:16:57,360 --> 00:17:02,909
+환경과의 실제 상호작용으로부터
+학습함으로써, 알파고와 알파고 제로는 지도
+By learning from real interactions with their environments, AlphaGo and AlphaGo Zero dramatically outperformed agents trained to imitate human gameplay using supervised learning,
+
+263
+00:17:02,909 --> 00:17:08,319
+학습으로 인간 대국을 모방하도록
+학습된 에이전트를 압도적으로 능가했고,
+
+264
+00:17:08,319 --> 00:17:11,839
+스스로 자신만의 바둑
+방식을 발견해 냈습니다.
+discovering their own ways to play the game.
+
+265
+00:17:11,839 --> 00:17:15,508
+전문가들은 알파고의 기풍을
+두고 마치 외계인과 두는
+AlphaGo's playing style has been described by experts as playing against an alien and is from an alternate dimension.
+
+266
+00:17:15,508 --> 00:17:19,439
+것 같다거나 다른 차원에서
+온 것 같다고 표현했습니다.
+
+267
+00:17:19,439 --> 00:17:21,622
+서턴이 다음과 같이
+말할 때 가리키는 것이
+These are the types of AI systems that Sutton is referring to when he says,
+
+268
+00:17:21,622 --> 00:17:23,520
+바로 이런 유형의 AI 시스템입니다.
+
+269
+00:17:23,520 --> 00:17:25,600
+"글쎄요, 저는 특히 경험으로부터 학습할
+"Oh, well, I in particular expect there to be systems that can learn from experience,
+
+270
+00:17:25,600 --> 00:17:27,679
+수 있는 시스템이 등장하리라 예상합니다,
+
+271
+00:17:27,679 --> 00:17:30,232
+그리고 그런 시스템이
+훨씬, 훨씬 더 나은 성능을
+and which could well perform much, much better and be much more scalable."
+
+272
+00:17:30,232 --> 00:17:32,880
+내고 확장성도 훨씬 더 좋을
+가능성이 충분합니다."
+
+273
+00:17:32,880 --> 00:17:36,557
+그래서 문득 이런 생각이
+듭니다. 지금의 언어 모델들도
+This really makes me wonder if our current generation of language models are constrained in the same way as the AlphaGo policy network,
+
+274
+00:17:36,557 --> 00:17:40,480
+알파고의 정책 신경망과 같은
+방식으로 제약된 건 아닐까 —
+
+275
+00:17:40,480 --> 00:17:45,069
+지도 학습으로 훈련되어 스스로
+발견하지 못하고, 인간의
+that was trained with supervised learning, was unable to discover on their own — limited to imitating human language and intelligence.
+
+276
+00:17:45,069 --> 00:17:49,200
+언어와 지능을 모방하는
+데 그친 것처럼 말입니다.
+
+277
+00:17:49,200 --> 00:17:52,854
+다만 여기서 짚고 넘어갈 점은,
+강화 학습이 이미 대규모 언어
+Now, it's important to note here that reinforcement learning does already play an important role in large language model training.
+
+278
+00:17:52,854 --> 00:17:56,400
+모델(LLM) 학습에서 중요한
+역할을 하고 있다는 것입니다.
+
+279
+00:17:56,400 --> 00:18:00,559
+LLM이 지도 학습으로 다음
+토큰 예측을 학습한 뒤,
+After LLMs are trained on next-token prediction using supervised learning,
+
+280
+00:18:00,559 --> 00:18:05,160
+인간 피드백 기반 강화 학습,
+즉 RLHF를 통해 강화 학습
+reinforcement learning through human feedback, or RLHF, is used to align models to human preferences using reinforcement learning techniques.
+
+281
+00:18:05,160 --> 00:18:09,760
+기법으로 모델을 인간의 선호에
+맞춰 정렬(align)합니다.
+
+282
+00:18:09,760 --> 00:18:14,850
+그리고 최근 LLM의 발전 상당
+부분은 검증 가능한 보상 기반
+And a great deal of recent LLM progress has been driven by reasoning models that make use of reinforcement learning with verifiable rewards, or RLVR,
+
+283
+00:18:14,850 --> 00:18:20,240
+강화 학습, 즉 RLVR을 활용하는
+추론 모델이 이끌어 왔습니다.
+
+284
+00:18:20,240 --> 00:18:24,655
+RLVR에서는 LLM이 강화
+학습을 통해 수학 문제나 코딩처럼
+where LLMs are trained with reinforcement learning to find their own paths to solving problems with known answers, such as math problems and coding.
+
+285
+00:18:24,655 --> 00:18:29,200
+정답이 정해진 문제를 스스로
+풀어내는 방법을 찾도록 학습됩니다.
+
+286
+00:18:29,200 --> 00:18:33,217
+인간이 만든 텍스트로 사전
+학습한 뒤 강화 학습으로
+Pre-training on human-generated text and then using reinforcement learning to allow models to discover on their own is an exciting direction,
+
+287
+00:18:33,217 --> 00:18:37,520
+모델이 스스로 발견하게 하는
+것은 흥미로운 방향이지만,
+
+288
+00:18:37,520 --> 00:18:40,053
+이 접근법이 우리를 얼마나 멀리 데려다줄
+but it remains to be seen how far this approach can take us.
+
+289
+00:18:40,053 --> 00:18:42,240
+수 있을지는 아직 지켜봐야 합니다.
+
+290
+00:18:42,240 --> 00:18:45,959
+2025년, 알파고 프로젝트의 수석
+연구자였던 데이비드 실버는 리처드
+In 2025, David Silver, the lead researcher of the AlphaGo project, teamed up with Richard Sutton to write an essay called Welcome to the Era of Experience.
+
+291
+00:18:45,959 --> 00:18:49,677
+서턴과 함께 「경험의 시대에 오신
+것을 환영합니다(Welcome to
+
+292
+00:18:49,677 --> 00:18:53,200
+the Era of Experience)」라는
+에세이를 썼습니다.
+
+293
+00:18:53,200 --> 00:18:56,800
+실버와 서턴은 LLM이 현재
+인간 지식에 의해 제한되어
+Silver and Sutton argue that LLMs are currently limited by human knowledge, giving an interesting thought experiment.
+
+294
+00:18:56,800 --> 00:19:00,160
+있다고 주장하며, 흥미로운
+사고 실험을 제시합니다.
+
+295
+00:19:00,160 --> 00:19:04,220
+5,000년 전 인간 지식으로
+LLM을 학습시켰다면,
+If we trained an LLM on human knowledge from 5,000 years ago, it would reason about the physical world in terms of animism.
+
+296
+00:19:04,220 --> 00:19:08,000
+물리 세계를 애니미즘
+관점에서 추론했을 것입니다.
+
+297
+00:19:08,000 --> 00:19:10,663
+1,000년 전 지식으로 학습시켰다면,
+If we trained on human knowledge from a thousand years ago, it would reason in theistic terms.
+
+298
+00:19:10,663 --> 00:19:13,200
+유신론적 관점에서 추론했을 것입니다.
+
+299
+00:19:13,200 --> 00:19:16,968
+300년 전이라면 뉴턴
+물리학 관점에서, 50년
+300 years ago in terms of Newtonian physics, and 50 years ago in terms of quantum physics.
+
+300
+00:19:16,968 --> 00:19:20,880
+전이라면 양자 물리학
+관점에서 추론했을 것입니다.
+
+301
+00:19:20,880 --> 00:19:26,600
+실버와 서턴에 따르면, 하나의
+패러다임에서 다음 패러다임으로 넘어가려면
+Moving from one paradigm to the next requires actually interacting with the physical world, as Silver and Sutton say, in order to overturn fallacious methods of thought.
+
+302
+00:19:26,600 --> 00:19:32,320
+잘못된 사고방식을 뒤집기 위해 실제로
+물리 세계와 상호작용해야 합니다.
+
+303
+00:19:32,320 --> 00:19:37,680
+이로부터 서턴과 실버는, 에이전트가
+인간 지식 대신 현실 세계의 보상
+From here, Sutton and Silver argue that we're on the threshold of a new era of AI, where agents will learn from real-world reward signals instead of human knowledge.
+
+304
+00:19:37,680 --> 00:19:43,039
+신호로부터 학습하는 새로운 AI
+시대의 문턱에 와 있다고 주장합니다.
+
+305
+00:19:43,039 --> 00:19:47,912
+비용, 건강 지표, 기후 지표,
+수익, 매출, 에너지 소비
+Discovering new ways to optimize measures like cost, health metrics, climate metrics, profits, sales, and energy consumption.
+
+306
+00:19:47,912 --> 00:19:52,480
+같은 척도를 최적화할 새로운
+방법을 발견하는 것입니다.
+
+307
+00:19:52,480 --> 00:19:56,175
+서턴과 실버는 딥마인드의
+알파프루프(AlphaProof)
+Sutton and Silver give the example of DeepMind's AlphaProof agent, which combines LLMs and reinforcement learning to discover its own very impressive methods of mathematical reasoning.
+
+308
+00:19:56,175 --> 00:20:00,227
+에이전트를 예로 듭니다. LLM과
+강화 학습을 결합해, 대단히
+
+309
+00:20:00,227 --> 00:20:04,160
+인상적인 독자적 수학적 추론
+방법을 스스로 발견해 냈습니다.
+
+310
+00:20:04,160 --> 00:20:06,660
+그렇다면 우리는 쓰라린
+교훈을 배운 걸까요,
+So, have we learned the bitter lesson, or are we just repeating it?
+
+311
+00:20:06,660 --> 00:20:08,640
+아니면 그저 반복하고 있는 걸까요?
+
+312
+00:20:08,640 --> 00:20:12,382
+언젠가 LLM을 돌아보면, 인간 지식에
+When we look back on LLMs one day, will they feel hokey, so clearly limited by human knowledge?
+
+313
+00:20:12,382 --> 00:20:16,480
+그토록 뻔히 제한되어
+촌스럽게 느껴질까요?
+
+314
+00:20:16,480 --> 00:20:20,160
+그렇다면 강화 학습이 답일까요?
+And if so, is reinforcement learning the answer?
+
+315
+00:20:20,160 --> 00:20:24,400
+LLM이 이 다음 개척지를
+여는 발판이 될 수 있을까요?
+And can LLMs serve as the scaffolding that unlocks this next frontier?
+
+316
+00:20:24,400 --> 00:20:27,840
+아니면 완전히 다른
+것을 시도해야 할까요?
+Or do we need to try something totally different?
+
+317
+00:20:27,840 --> 00:20:34,175
+제 생각에는, 쓰라린 교훈과
+서턴·실버의 강화 학습적 관점은 현재
+My take here is that the bitter lesson in Sutton and Silver's reinforcement learning perspectives form a really helpful lens onto the limitations of our current generation of AI.
+
+318
+00:20:34,175 --> 00:20:40,159
+세대 AI의 한계를 보는 데 정말
+유용한 렌즈가 되어 줍니다.
+
+319
+00:20:40,159 --> 00:20:42,919
+다만 저는 강화 학습의 부흥이 코앞에
+I'm more skeptical about a reinforcement learning renaissance being around the corner.
+
+320
+00:20:42,919 --> 00:20:45,679
+와 있다는 데는 좀 더 회의적입니다.
+
+321
+00:20:45,679 --> 00:20:49,345
+강화 학습이 정말 뛰어난
+성과를 낸 분야들,
+Mostly because the domains we've seen reinforcement learning perform really well in, like playing games, mathematical proofs, and coding,
+
+322
+00:20:49,345 --> 00:20:52,400
+이를테면 게임, 수학적 증명, 코딩은
+
+323
+00:20:52,400 --> 00:20:55,213
+우리가 신경 쓰는 여러 현실 문제들과는
+still feel very removed to me from many of the real-world problems that we care about.
+
+324
+00:20:55,213 --> 00:20:58,159
+여전히 거리가 멀게 느껴지기 때문입니다.
+
+325
+00:20:58,159 --> 00:21:00,933
+어느 쪽이든, 앞으로 어떤 일이 벌어질지
+Either way, it will be fascinating to see what happens next.
+
+326
+00:21:00,933 --> 00:21:03,580
+지켜보는 것은 정말 흥미로울 것입니다.
+
+327
+00:21:05,840 --> 00:21:09,760
+Welch Labs 팀과 저는 AI를
+다룬 완전히 새로운 책을 썼습니다.
+The Welch Labs team and I have written a whole new book on AI.
+
+328
+00:21:09,760 --> 00:21:12,673
+아름다운 삽화가 담겨
+있고, 이 영상들에서
+It's beautifully illustrated and is a great way to dig deeper into the topics we cover in these videos.
+
+329
+00:21:12,673 --> 00:21:15,840
+다룬 주제를 더 깊이
+파고들기 좋은 책입니다.
+
+330
+00:21:15,840 --> 00:21:18,799
+제가 늘 쓰고 싶었던 바로 그 책입니다.
+This is the book I've always wanted to write.
+
+331
+00:21:18,799 --> 00:21:20,960
+저희는 시각 자료에
+정말 공을 들였습니다.
+We've really leaned into the visuals.
+
+332
+00:21:20,960 --> 00:21:23,280
+이 책에는 수백 개의
+그림이 실려 있습니다.
+The book has hundreds of figures.
+
+333
+00:21:23,280 --> 00:21:26,559
+특히 이 전면 펼침면들이 마음에 듭니다.
+I especially like these full-page spreads.
+
+334
+00:21:26,559 --> 00:21:30,159
+이 그림은 손실 지형이
+어떻게 계산되는지 보여줍니다.
+This one shows how loss landscapes are computed.
+
+335
+00:21:30,159 --> 00:21:33,470
+다음 페이지에서는 지형을 위에서 내려다본
+On the next page, we jump into this super high-quality overhead contour plot view of our landscape.
+
+336
+00:21:33,470 --> 00:21:36,480
+초고화질 등고선 그래프로 넘어갑니다.
+
+337
+00:21:36,480 --> 00:21:41,679
+모델이 계곡을 따라 전역 최솟값에
+도달하리라 예상되는 모습을 보여주는데,
+And we show how we might expect our model to work its way through valleys to reach its global minimum,
+
+338
+00:21:41,679 --> 00:21:46,480
+실제로는 손실 지형 위에 웜홀처럼
+보이는 것을 만들어냅니다.
+but it instead creates what looks like a wormhole on our loss landscape.
+
+339
+00:21:46,480 --> 00:21:49,402
+각 장마다 이런 시각 자료와 깊이 있는
+We're putting a huge amount of effort into each chapter to create these kinds of visuals and deep explanations,
+
+340
+00:21:49,402 --> 00:21:52,880
+설명을 만드는 데 엄청난
+노력을 쏟고 있는데,
+
+341
+00:21:52,880 --> 00:21:58,080
+이 모든 원리를 최대한 생생하게
+와닿게 전달하려는 것입니다.
+trying to give the most visceral feel we can for how this stuff really works.
+
+342
+00:21:58,080 --> 00:22:00,827
+각 장에는 핵심 결과를 단계별로 보여주는
+Each chapter includes supporting Python code that walks through the key results from that chapter.
+
+343
+00:22:00,827 --> 00:22:03,200
+파이썬 코드가 함께 실려 있습니다.
+
+344
+00:22:03,200 --> 00:22:05,860
+그리고 좀 더 포괄적인 내용을 담은
+And there's also a supporting GitHub repo as well that's a bit more comprehensive.
+
+345
+00:22:05,860 --> 00:22:08,799
+GitHub 저장소도 함께 제공됩니다.
+
+346
+00:22:08,799 --> 00:22:12,159
+각 장 끝에는 연습
+문제도 실려 있습니다.
+At the end of each chapter, you'll also find exercises.
+
+347
+00:22:12,159 --> 00:22:15,039
+이 연습 문제들에는 정말
+많은 고민을 담았습니다.
+We've put a ton of thought into these.
+
+348
+00:22:15,039 --> 00:22:19,753
+역전파를 다루는 장의 연습
+문제를 예로 들면, 작지만 완결된
+Here's an exercise from the chapter on back-propagation where you're given a small, complete neural network and asked to move some data through the network using a few equations.
+
+349
+00:22:19,753 --> 00:22:25,039
+신경망이 주어지고 몇 가지 수식으로
+데이터를 통과시켜 보게 됩니다.
+
+350
+00:22:25,039 --> 00:22:28,953
+그다음에는 신경망의
+그래디언트(기울기)를 직접 계산하고,
+Then you're asked to compute the network's gradients, and use your computed gradients to fill in steps in the model's real learning process.
+
+351
+00:22:28,953 --> 00:22:33,120
+그 값으로 모델의 실제 학습
+과정 단계를 채워 넣게 됩니다.
+
+352
+00:22:33,120 --> 00:22:36,640
+이 연습 문제들은 현대
+AI를 최대한 직접 다뤄볼 수
+These exercises are designed to get you as hands-on as possible with modern AI, and solutions are in the back of the book.
+
+353
+00:22:36,640 --> 00:22:40,159
+있도록 설계되었고, 정답은
+책 뒤편에 실려 있습니다.
+
+354
+00:22:40,159 --> 00:22:44,741
+연습 문제 대부분은 서술형이나
+프로그래밍이지만, 제가 가장 좋아하는 건
+Most of the exercises are written or programming, but my favorite is probably this spread that gives you instructions for building your own perceptron machine.
+
+355
+00:22:44,741 --> 00:22:49,440
+아마 직접 퍼셉트론 기계를 만드는
+방법을 안내하는 이 페이지일 것입니다.
+
+356
+00:22:49,440 --> 00:22:52,647
+이 책은 퍼셉트론, 경사
+하강법, 역전파, 딥러닝 모델,
+The book starts with a fresh take on the fundamentals — the perceptron, gradient descent, back-propagation, deep models, and AlexNet.
+
+357
+00:22:52,647 --> 00:22:57,200
+알렉스넷(AlexNet) 같은 기본기를
+새로운 시각으로 다루는 데서 시작합니다.
+
+358
+00:22:57,200 --> 00:23:03,033
+그리고 이 토대를 발판 삼아 신경망
+스케일링 법칙, 기계적 해석 가능성,
+...and then uses this foundation to dive into cutting-edge topics, including neural scaling laws, mechanistic interpretability, and AI image and video generation models like Sora.
+
+359
+00:23:03,033 --> 00:23:08,720
+Sora 같은 AI 이미지·영상 생성
+모델 등 최신 주제로 들어갑니다.
+
+360
+00:23:08,720 --> 00:23:11,143
+각 장은 지난 18개월 동안 나온
+Each chapter goes along with a Welch Labs video that came out over the last 18 months.
+
+361
+00:23:11,143 --> 00:23:14,240
+Welch Labs
+영상과 짝을 이룹니다.
+
+362
+00:23:14,240 --> 00:23:17,157
+각 영상의 주제를 더
+깊이 파고들기에 이 책이
+I really think that the book is the best way to get deeper into each video's topic.
+
+363
+00:23:17,157 --> 00:23:19,840
+최고의 방법이라고 저는
+정말로 생각합니다.
+
+364
+00:23:19,840 --> 00:23:23,363
+이 책은 독학에도, AI
+강의용으로도 좋고,
+The book is great for self-study, AI courses, or just looks great on your coffee table.
+
+365
+00:23:23,363 --> 00:23:27,180
+그냥 커피 테이블 위에
+놓아두기에도 근사합니다.
