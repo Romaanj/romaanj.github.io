@@ -1,1 +1,1 @@
-last-weekly: 2026-07-30 exit=0
+last-weekly: 2026-08-03 exit=0
