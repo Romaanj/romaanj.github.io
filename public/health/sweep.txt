@@ -1,1 +1,1 @@
-last-sweep: 2026-08-18 exit=0
+last-sweep: 2026-08-19 exit=2 digest=no
