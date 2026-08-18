@@ -21,6 +21,50 @@ const analysisBlock = z.object({
   resources: z.string(),
 });
 
+/**
+ * Build gate: reject an unfilled `publish_review.py` stub.
+ *
+ * The stub emits every frontmatter value as the literal 'TODO' (and `topic: ''`), all of
+ * which are valid strings — so without this check a stub that lands in src/content/reviews/
+ * builds green and publishes a page of placeholders. This walks the parsed frontmatter and
+ * fails the build on any leftover placeholder. Frontmatter only: the body template's
+ * `<!-- TODO: optional free-form notes -->` comment is invisible to the schema and stays legal.
+ */
+const PLACEHOLDER = /^\s*TODO\b/i;
+
+const rejectUnfilledStub = (data: Record<string, unknown>, ctx: z.RefinementCtx) => {
+  const walk = (value: unknown, path: (string | number)[]) => {
+    if (typeof value === 'string') {
+      if (PLACEHOLDER.test(value)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path,
+          message: `unfilled stub placeholder ${JSON.stringify(value.trim().slice(0, 40))} — fill it in or delete the stub before publishing`,
+        });
+      }
+      return;
+    }
+    if (Array.isArray(value)) {
+      value.forEach((item, i) => walk(item, [...path, i]));
+      return;
+    }
+    if (value && typeof value === 'object' && !(value instanceof Date)) {
+      for (const [k, v] of Object.entries(value)) walk(v, [...path, k]);
+    }
+  };
+  walk(data, []);
+
+  if (typeof data.topic === 'string' && data.topic.trim() === '') {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['topic'],
+      message:
+        'empty topic — set one of diffusion-llm | kv-cache | hybrid-architecture | ' +
+        'post-training | on-device | architecture | compression | serving',
+    });
+  }
+};
+
 /** Paper reviews — auto-published by the daily sweep or written by hand. */
 const reviews = defineCollection({
   loader: glob({ pattern: '**/*.{md,mdx}', base: './src/content/reviews' }),
@@ -63,7 +107,7 @@ const reviews = defineCollection({
     sparks: z.array(z.object({ ko: z.string(), en: z.string() })).default([]),
     source: z.enum(['autosweep', 'manual']).default('manual'),
     rating: z.number().min(1).max(5).optional(),
-  }),
+  }).superRefine(rejectUnfilledStub),
 });
 
 /** Study notes — deep dives into models, quantization, GPU internals. */
