@@ -137,6 +137,8 @@ const projects = defineCollection({
     date: z.coerce.date(),
     tags: z.array(z.string()).default([]),
     repo: z.string().optional(),
+    /** internal page the card links to (e.g. "/scaling-book/") */
+    link: z.string().optional(),
   }),
 });
 

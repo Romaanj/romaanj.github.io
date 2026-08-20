@@ -51,7 +51,9 @@ const fmtDate = (d: Date) =>
                 </span>
                 <span class="date">{fmtDate(p.data.date)}</span>
               </div>
-              <h3>{p.data.title}</h3>
+              <h3>
+                {p.data.link ? <a href={p.data.link}>{p.data.title}</a> : p.data.title}
+              </h3>
               <p>{p.data.summary}</p>
               <span class="card-meta project-foot">
                 <span class="pill-row">
@@ -59,6 +61,11 @@ const fmtDate = (d: Date) =>
                     <span class="tag">{t}</span>
                   ))}
                 </span>
+                {p.data.link && (
+                  <a class="arrow-link" href={p.data.link}>
+                    Read
+                  </a>
+                )}
                 {p.data.repo && (
                   <a
                     class="arrow-link"

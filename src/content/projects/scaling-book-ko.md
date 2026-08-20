@@ -5,6 +5,7 @@ status: active
 date: 2026-08-20
 tags: ["translation", "TPU", "LLM scaling", "systems"]
 repo: "https://github.com/jax-ml/scaling-book"
+link: "/scaling-book/"
 ---
 
 Google DeepMind의 [How to Scale Your Model](https://jax-ml.github.io/scaling-book/)을
