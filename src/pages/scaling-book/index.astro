@@ -1,0 +1,119 @@
+---
+import Base from '../../layouts/Base.astro';
+import { getCollection } from 'astro:content';
+
+/** Full chapter map of the original book — entries appear as links once the
+ *  matching translation lands in src/content/scaling-book/<slug>.md. */
+const chapters = [
+  { part: 0, slug: 'intro', en: 'How to Scale Your Model', ko: '소개' },
+  { part: 1, slug: 'roofline', en: 'All About Rooflines', ko: 'Roofline의 모든 것' },
+  { part: 2, slug: 'tpus', en: 'How to Think About TPUs', ko: 'TPU를 이해하는 법' },
+  { part: 3, slug: 'sharding', en: 'Sharded Matrices and How to Multiply Them', ko: 'Sharded 행렬과 곱셈 방법' },
+  { part: 4, slug: 'transformers', en: 'All the Transformer Math You Need to Know', ko: '알아야 할 모든 Transformer 수학' },
+  { part: 5, slug: 'training', en: 'How to Parallelize a Transformer for Training', ko: '학습을 위한 Transformer 병렬화' },
+  { part: 6, slug: 'applied-training', en: 'Training LLaMA 3 on TPUs', ko: 'TPU에서 LLaMA 3 학습하기' },
+  { part: 7, slug: 'inference', en: 'All About Transformer Inference', ko: 'Transformer 추론의 모든 것' },
+  { part: 8, slug: 'applied-inference', en: 'Serving LLaMA 3-70B on TPUs', ko: 'TPU에서 LLaMA 3 서빙하기' },
+  { part: 9, slug: 'profiling', en: 'How to Profile TPU Programs', ko: 'TPU 코드 프로파일링' },
+  { part: 10, slug: 'jax-stuff', en: 'Programming TPUs in JAX', ko: 'JAX로 TPU 프로그래밍하기' },
+  { part: 11, slug: 'conclusion', en: 'Conclusions and Further Reading', ko: '결론과 더 읽을거리' },
+  { part: 12, slug: 'gpus', en: 'How to Think About GPUs', ko: 'GPU를 이해하는 법' },
+];
+
+const published = new Set(
+  (await getCollection('scalingBook')).filter((e) => e.data.published).map((e) => e.id),
+);
+const doneCount = chapters.filter((c) => published.has(c.slug)).length;
+---
+
+<Base
+  title="How to Scale Your Model 한국어판 — Junwon Lee"
+  description="Google DeepMind의 'How to Scale Your Model'(TPU에서 LLM 스케일링하기) 전체 한국어 번역 프로젝트."
+>
+  <section class="section">
+    <div class="container">
+      <div class="note-head">
+        <a class="back-link" href="/projects/">&larr; Projects</a>
+        <p class="eyebrow">Translation Project</p>
+        <h1>How to Scale Your Model — 한국어판</h1>
+      </div>
+
+      <div class="prose intro">
+        <p>
+          Google DeepMind의 <a href="https://jax-ml.github.io/scaling-book/" target="_blank"
+          rel="noopener"><em>How to Scale Your Model</em></a>(Jacob Austin 외, 2025)을
+          한국어로 옮기는 프로젝트입니다. 원서는 &ldquo;TPU에서 LLM을 스케일링하는 기술을
+          탈신비화한다&rdquo;는 목표로, roofline 분석부터 하드웨어 구조, sharding과 병렬화,
+          Transformer 수학, 학습·추론·서빙, 프로파일링까지를 다루는 블로그 형식의 교과서입니다.
+        </p>
+        <p>
+          번역 원칙: <strong>전문 용어는 영어 표기를 유지</strong>하고(예: sharding, roofline,
+          arithmetic intensity), 그림·수식·표는 원본을 그대로 사용하며, 문장은 한국 독자가
+          자연스럽게 읽을 수 있도록 옮깁니다. 각 챕터 상단에 원문 링크를 명시합니다.
+        </p>
+      </div>
+
+      <aside class="license-note">
+        원저작물: <a href="https://github.com/jax-ml/scaling-book" target="_blank" rel="noopener">
+        jax-ml/scaling-book</a> — © 2025 Google LLC,
+        <a href="https://github.com/jax-ml/scaling-book/blob/main/LICENSE" target="_blank"
+        rel="noopener">MIT License</a>. 인용 시: Austin et al., &ldquo;How to Scale Your
+        Model&rdquo;, Google DeepMind, online, 2025.
+      </aside>
+
+      <h2 class="toc-heading">목차 <span class="progress">({doneCount}/{chapters.length} 번역 완료)</span></h2>
+      <ol class="toc" start="0">
+        {chapters.map((c) =>
+          published.has(c.slug) ? (
+            <li>
+              <a class="toc-link" href={`/scaling-book/${c.slug}/`}>
+                <span class="toc-ko">{c.ko}</span>
+                <span class="toc-en">{c.en}</span>
+              </a>
+            </li>
+          ) : (
+            <li class="pending">
+              <span class="toc-link">
+                <span class="toc-ko">{c.ko} <em class="soon">번역 예정</em></span>
+                <span class="toc-en">
+                  {c.en} —
+                  <a href={`https://jax-ml.github.io/scaling-book/${c.slug === 'intro' ? '' : c.slug}`}
+                    target="_blank" rel="noopener">원문</a>
+                </span>
+              </span>
+            </li>
+          ),
+        )}
+      </ol>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .intro { margin-bottom: 1.6rem; }
+  .license-note {
+    font-size: 0.85rem;
+    color: var(--text-muted, #666);
+    background: var(--surface-alt, #f6f6f4);
+    border-radius: var(--radius-m, 8px);
+    padding: 0.8rem 1.1rem;
+    margin-bottom: 2.4rem;
+  }
+  .toc-heading { margin-bottom: 1rem; }
+  .progress { font-size: 0.85rem; font-weight: 400; color: var(--text-muted, #777); }
+  .toc { padding-left: 1.4rem; display: flex; flex-direction: column; gap: 0.75rem; }
+  .toc-link { display: flex; flex-direction: column; text-decoration: none; }
+  a.toc-link:hover .toc-ko { text-decoration: underline; }
+  .toc-ko { font-weight: 600; }
+  .toc-en { font-size: 0.85rem; color: var(--text-muted, #777); }
+  .pending .toc-ko { color: var(--text-muted, #999); font-weight: 500; }
+  .soon {
+    font-style: normal;
+    font-size: 0.75rem;
+    border: 1px solid var(--border, #ddd);
+    border-radius: 999px;
+    padding: 0.05rem 0.5rem;
+    margin-left: 0.4rem;
+    color: var(--text-muted, #999);
+  }
+</style>

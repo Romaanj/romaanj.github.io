@@ -163,4 +163,25 @@ const talks = defineCollection({
   }),
 });
 
-export const collections = { reviews, study, projects, talks };
+/** Korean translation of "How to Scale Your Model" (jax-ml/scaling-book, MIT).
+ *  Full-text translation, chapter per entry. Figures are hot-linked from the
+ *  original site; every page must link back to its original chapter URL and
+ *  keep the MIT attribution block. */
+const scalingBook = defineCollection({
+  loader: glob({ pattern: '**/*.{md,mdx}', base: './src/content/scaling-book' }),
+  schema: z.object({
+    /** chapter number as in the original book (0 = intro/index) */
+    part: z.number(),
+    title: z.string(),
+    /** original English chapter title, shown as subtitle */
+    title_en: z.string(),
+    /** original chapter URL on jax-ml.github.io */
+    original: z.string().url(),
+    summary: z.string(),
+    date: z.coerce.date(),
+    /** translation status — drafted chapters only appear when true */
+    published: z.boolean().default(true),
+  }),
+});
+
+export const collections = { reviews, study, projects, talks, scalingBook };

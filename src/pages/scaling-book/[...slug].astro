@@ -1,0 +1,146 @@
+---
+import 'katex/dist/katex.min.css';
+import Base from '../../layouts/Base.astro';
+import { getCollection, render } from 'astro:content';
+
+export async function getStaticPaths() {
+  const entries = (await getCollection('scalingBook')).filter((e) => e.data.published);
+  return entries.map((e) => ({ params: { slug: e.id }, props: { entry: e } }));
+}
+
+const { entry } = Astro.props;
+const { Content } = await render(entry);
+
+// prev/next among published chapters, ordered by part number
+const all = (await getCollection('scalingBook'))
+  .filter((e) => e.data.published)
+  .sort((a, b) => a.data.part - b.data.part);
+const idx = all.findIndex((e) => e.id === entry.id);
+const prev = idx > 0 ? all[idx - 1] : null;
+const next = idx < all.length - 1 ? all[idx + 1] : null;
+
+const dateStr = entry.data.date.toISOString().slice(0, 10);
+---
+
+<Base
+  title={`${entry.data.title} — How to Scale Your Model 한국어판`}
+  description={entry.data.summary}
+  type="article"
+  publishedTime={dateStr}
+>
+  <section class="section">
+    <div class="container">
+      <div class="note-head">
+        <a class="back-link" href="/scaling-book/">&larr; 전체 목차</a>
+        <p class="eyebrow">How to Scale Your Model · Part {entry.data.part}</p>
+        <h1>{entry.data.title}</h1>
+        <p class="title-en">{entry.data.title_en}</p>
+      </div>
+
+      <aside class="origin-note">
+        이 글은 Google DeepMind의
+        <a href="https://jax-ml.github.io/scaling-book/" target="_blank" rel="noopener">
+          <em>How to Scale Your Model</em></a>
+        (Jacob Austin 외, 2025) 중
+        <a href={entry.data.original} target="_blank" rel="noopener">원문 챕터</a>를
+        한국어로 번역한 것입니다. 그림은 원본 사이트의 이미지를 그대로 사용하며,
+        전문 용어는 영어 표기를 유지했습니다. 원저작물은
+        <a href="https://github.com/jax-ml/scaling-book/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a>
+        (© 2025 Google LLC)를 따릅니다. 번역 오류는 번역자의 몫입니다.
+      </aside>
+
+      <div class="prose sb-prose">
+        <Content />
+      </div>
+
+      <nav class="chapter-nav">
+        {prev
+          ? <a class="nav-card" href={`/scaling-book/${prev.id}/`}>
+              <span class="nav-dir">&larr; 이전</span>
+              <span class="nav-title">{prev.data.title}</span>
+            </a>
+          : <span />}
+        {next
+          ? <a class="nav-card nav-next" href={`/scaling-book/${next.id}/`}>
+              <span class="nav-dir">다음 &rarr;</span>
+              <span class="nav-title">{next.data.title}</span>
+            </a>
+          : <span />}
+      </nav>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .note-head { margin-bottom: 1.2rem; }
+  .title-en {
+    color: var(--text-muted, #666);
+    font-size: 1.05rem;
+    margin-top: 0.2rem;
+  }
+  .origin-note {
+    font-size: 0.88rem;
+    line-height: 1.6;
+    color: var(--text-muted, #555);
+    background: var(--surface-alt, #f6f6f4);
+    border-left: 3px solid var(--accent, #b86f52);
+    border-radius: var(--radius-m, 8px);
+    padding: 0.85rem 1.1rem;
+    margin-bottom: 2.2rem;
+  }
+  .chapter-nav {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-top: 3.5rem;
+    border-top: 1px solid var(--border, #e5e5e0);
+    padding-top: 1.5rem;
+  }
+  .nav-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    text-decoration: none;
+    max-width: 46%;
+  }
+  .nav-next { text-align: right; align-items: flex-end; }
+  .nav-dir { font-size: 0.8rem; color: var(--text-muted, #777); }
+  .nav-title { font-weight: 600; }
+
+  /* book-specific prose tweaks */
+  .sb-prose :global(figure) { margin: 1.8em 0; text-align: center; }
+  .sb-prose :global(figcaption) {
+    font-size: 0.85rem;
+    color: var(--text-muted, #666);
+    margin-top: 0.6em;
+    text-align: left;
+    line-height: 1.55;
+  }
+  .sb-prose :global(.img-small) { max-width: 480px; width: 100%; }
+  .sb-prose :global(.takeaway) {
+    background: var(--surface-alt, #f6f6f4);
+    border-left: 3px solid var(--accent-strong, #8a4b33);
+    border-radius: var(--radius-m, 8px);
+    padding: 0.9rem 1.1rem;
+  }
+  .sb-prose :global(.algorithm) {
+    background: var(--surface-alt, #fafaf8);
+    border: 1px solid var(--border, #e5e5e0);
+    border-radius: var(--radius-m, 8px);
+    padding: 0.9rem 1.2rem;
+    margin: 1.2em 0;
+  }
+  .sb-prose :global(details) {
+    background: var(--surface-alt, #fafaf8);
+    border: 1px solid var(--border, #e5e5e0);
+    border-radius: var(--radius-m, 8px);
+    padding: 0.6rem 1rem;
+    margin: 1em 0;
+  }
+  .sb-prose :global(details summary) {
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--accent-strong, #8a4b33);
+  }
+  .sb-prose :global(.katex-display) { overflow-x: auto; overflow-y: hidden; padding: 0.2em 0; }
+</style>
