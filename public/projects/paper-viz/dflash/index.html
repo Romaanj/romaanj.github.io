@@ -1,0 +1,1140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="DFlash (ICML 2026) read through the 13 questions — τ made physical, the accept/reject rule on a real recorded cycle, probed on one A100.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<title>DFlash, Reproduced — Junwon Lee</title>
+</head>
+<body>
+<div class="site-bar">
+  <a href="/projects/paper-viz/">&larr; Paper Visualizations</a>
+  <span class="site-bar-sep">/</span>
+  <a href="/">Junwon Lee</a>
+</div>
+<style>
+.site-bar{position:sticky;top:0;z-index:40;display:flex;align-items:center;gap:10px;
+  padding:9px 20px;font:600 .78rem Inter,system-ui,sans-serif;
+  background:var(--surface);border-bottom:1px solid var(--line);
+  backdrop-filter:saturate(1.1) blur(6px)}
+.site-bar a{color:var(--ink-2);text-decoration:none}
+.site-bar a:hover{color:var(--draft)}
+.site-bar-sep{color:var(--ink-3)}
+body .langtog{top:56px}
+body>.wrap{padding-top:0}
+body>.wrap>header{padding-top:44px}
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<script id="viz-data" type="application/json">{"draft_cost": {"gpu": "NVIDIA A100-PCIE-40GB", "context_len": 104, "gammas": [2, 4, 8, 16], "draft_ms": [5.222, 5.241, 5.286, 5.322], "verify_ms": [30.024, 30.479, 29.885, 30.193], "t_step_ms": 27.270211838185787}, "traces": {"model": "Qwen/Qwen3-8B", "block_size": 16, "dataset": "gsm8k", "requests": [{"idx": 0, "prompt_tail": " 47 words per minute (WPM). After some lessons the next time he tests his typing speed it has increased to 52 WPM. If he continues to increase his typing speed once more by 5 words, what will be the average of the three measurements?\nPlease reason step by step, and put your final answer within \\boxed{}.\nassistant\n<think>\n\n<\/think>\n\n", "first_token": "Let", "cycles": [{"anchor": "Let", "draft": ["'s", " break", " this", " the", " step", " by", " by", " step", " to", "###", " the", " ", ":", ":", ":"], "accepted": 3, "bonus": " down", "produced": 4}, {"anchor": " down", "draft": [" step", " by", " step", " to", " find", " Step", " **", "average", ":", "**", " the", " three", " three", " three", "-"], "accepted": 3, "bonus": ".\n\n", "produced": 4}, {"anchor": ".\n\n", "draft": ["###", " Step", " ", "1", ":", " Write", " the", " first", "\n", "\n", "\n", "4", "4", "4", "4"], "accepted": 5, "bonus": " Identify", "produced": 6}, {"anchor": " Identify", "draft": [" the", " three", " speed", "\n", " Jared", " Jared", " starts", " **", " **", " **", "4", " words", " words", " words", " words"], "accepted": 2, "bonus": " typing", "produced": 3}, {"anchor": " typing", "draft": [" speeds", "\n", "J", " starts", " starts", " with", " **", "4", "7", " words", " words", " words", "-", "-", "-"], "accepted": 2, "bonus": "-", "produced": 3}, {"anchor": "-", "draft": [" **", "First", ":", "**:", "4", "7", " W", " words", " words", "**\n", "-", "-", " **", " ", ":"], "accepted": 2, "bonus": " measurement", "produced": 3}, {"anchor": " measurement", "draft": [":**", " ", "4", "7", " W", "PM", "  \n", "-", " **", "Second", " **", "**:", "**:", " ", "5"], "accepted": 10, "bonus": " measurement", "produced": 11}, {"anchor": " measurement", "draft": [":**", " ", "5", "2", " W", "PM", "  \n", "-", " **", "Third", " measurement", ":**", " ", "5", "5"], "accepted": 12, "bonus": " He", "produced": 13}, {"anchor": " He", "draft": [" increases", " by", " by", " by", " by", " by", " more", "5", "5", ".", " ", " ", " ", " ", " "], "accepted": 2, "bonus": " ", "produced": 3}, {"anchor": " ", "draft": ["5", " words", ",", " the", " the", " the", " ", " ", " ", " ", " $", " ", " ", " ", " "], "accepted": 3, "bonus": " so", "produced": 4}, {"anchor": " so", "draft": [" the", " ", " $", "$\n", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " "], "accepted": 0, "bonus": ":", "produced": 1}, {"anchor": ":", "draft": ["  \n", " ", " $", "$\n", " ", " ", "5", "2", " +", " ", "5", " =", " =", " ", "2"], "accepted": 12, "bonus": " ", "produced": 13}, {"anchor": " ", "draft": ["5", "7", " \\", "text", "{", " W", "PM", "}\n", " ", " $$", "\n\n", "###", " Step", "###", " Step"], "accepted": 13, "bonus": " ", "produced": 14}, {"anchor": " ", "draft": ["2", ":", " Add", " the", " average", " of", " the", " three", "\n", " the", "\n", " the", "Average", " three", " three"], "accepted": 4, "bonus": " three", "produced": 5}, {"anchor": " three", "draft": [" speeds", "\n", "Now", " find", " the", " average", " average", " of", " three", " three", " three", "$$", "$$", "4", " +"], "accepted": 2, "bonus": "$$", "produced": 3}, {"anchor": "$$", "draft": ["\n", "4", "7", " +", " ", "5", "2", " +", " ", "5", "7", " =", " ", "1", "2"], "accepted": 14, "bonus": "5", "produced": 15}, {"anchor": "5", "draft": ["4", "\n", "$$", "\n\n", "###", " Step", " ", "3", ":", " Find", " the", " average", "\n", " the", " number"], "accepted": 0, "bonus": "6", "produced": 1}, {"anchor": "6", "draft": ["\n", "$$", "\n\n", "###", " Step", " ", "3", ":", " Find", " the", " average", "\n", " the", " the", "\n"], "accepted": 12, "bonus": "$$", "produced": 13}, {"anchor": "$$", "draft": ["\n", "\\", "text", "{", "Average", "}", " =", " \\", "frac", "{", "text", "{", "6", " of", "6"], "accepted": 10, "bonus": "1", "produced": 11}, {"anchor": "1", "draft": ["5", "6", "}{", "3", "}", " =", " ", "3", "5", "\n", "$$", "\n\n", "\n\n", "###", " \ufffd"], "accepted": 7, "bonus": "5", "produced": 8}, {"anchor": "5", "draft": ["2", "\n", "$$", "\n\n", "###", " \ufffd", "\ufffd", " Final", " Answer", ":\n", "$$", "\n", "\\", "boxed", "{"], "accepted": 15, "bonus": "5", "produced": 16}, {"anchor": "5", "draft": ["2", "}\n", "$$", "<|im_end|>", "\n\n", "<|im_end|>", " the", " will", " speed", " of", " the", " three", " three", " three", "<|im_end|>"], "accepted": 5, "bonus": "J", "produced": 4}], "truncated": false}, {"idx": 1, "prompt_tail": "user\nJordan has 2 children who wear diapers.  Each child requires 5 diaper changes per day.  Jordan's wife changes half of the diapers.  How many diapers does Jordan change per day?\nPlease reason step by step, and put your final answer within \\boxed{}.\nassistant\n<think>\n\n<\/think>\n\n", "first_token": "Let", "cycles": [{"anchor": "Let", "draft": ["'s", " break", " this", " down", " step", " step", " by", ".\n\n", ":\n\n", "###", ".", " ", " of", ":", " of"], "accepted": 5, "bonus": " by", "produced": 6}, {"anchor": " by", "draft": [" step", ":\n\n", "1", ".", " **", "Total", " number", " of", " of", " of", " of", " Jordan", " has", " has", " **"], "accepted": 5, "bonus": "Number", "produced": 6}, {"anchor": "Number", "draft": [" of", " children", "**", " Jordan", " has", " has", " has", "2", "2", "2", "2", "2", "**", "2", "2"], "accepted": 2, "bonus": "**:", "produced": 3}, {"anchor": "**:", "draft": ["  \n", "  ", " Each", "2", " has", "2", "2", "2", "**", ".", " **", " **", " **", " **", " per"], "accepted": 0, "bonus": " Jordan", "produced": 1}, {"anchor": " Jordan", "draft": [" has", " ", "2", " children", ".\n\n", "2", "2", ".", "Total", " changes", " per", " per", " per", "**:", "**:"], "accepted": 1, "bonus": " **", "produced": 2}, {"anchor": " **", "draft": ["2", " children", "**", ".\n\n", "2", ".", " **", "Total", " of", " of", " per", " day", "**:", "**:", "5"], "accepted": 3, "bonus": ".\n", "produced": 4}, {"anchor": ".\n", "draft": ["2", ".", " **", "Total", " of", " changes", " per", "**:", "**:", " **", "5", " per", " per", " per", " day"], "accepted": 3, "bonus": "Di", "produced": 4}, {"anchor": "Di", "draft": ["aper", " changes", " per", " day", "**:", " Each", " child", " requires", " **", "5", " diaper", " changes", " per", ".\n", "3"], "accepted": 3, "bonus": " child", "produced": 4}, {"anchor": " child", "draft": ["**:", " Each", "**:", " requires", "5", "5", " diaper", " per", " day", " day", ".\n", "3", ".", " **", "Total"], "accepted": 0, "bonus": " per", "produced": 1}, {"anchor": " per", "draft": [" day", "**:", " Each", " child", " requires", " **", "5", " changes", " per", " day", "**", ".\n", "3", ".", " **"], "accepted": 7, "bonus": " diaper", "produced": 8}, {"anchor": " diaper", "draft": [" changes", "**", " day", "**", ".\n", "3", ".", " **", "Total", " number", " of", " changes", "**:", "**:", " $"], "accepted": 1, "bonus": " per", "produced": 2}, {"anchor": " per", "draft": [" day", "**", ".\n", "3", ".", " **", "Total", " number", " of", " changes", "**:", "**:", " $", " $", " $"], "accepted": 7, "bonus": " diaper", "produced": 8}, {"anchor": " diaper", "draft": [" changes", " per", " day", "**", ":\n", "  ", " $", "$\n", "  ", " ", "2", " \\", " \\", "{", " changes"], "accepted": 12, "bonus": "text", "produced": 13}, {"anchor": "text", "draft": ["{", " children", "}", " \\", "times", " ", "5", " \\", "text", "{", " changes", "di", "aper", " per", "}"], "accepted": 10, "bonus": " diaper", "produced": 11}, {"anchor": " diaper", "draft": [" changes", " per", "}", "}", " =", " ", "1", "0", " \\", "text", "{", " diaper", " changes", "}\n", "}\n"], "accepted": 2, "bonus": " child", "produced": 3}, {"anchor": " child", "draft": ["}", " =", " ", "1", "0", " \\", "text", "{", " diaper", " changes", "}\n", "  ", " $$", "\n\n", "4"], "accepted": 10, "bonus": " per", "produced": 11}, {"anchor": " per", "draft": [" day", "}\n", "  ", " $$", "\n\n", "4", ".", " **", "Total", " of", " changes", " changes", " changes", " changes", "  "], "accepted": 3, "bonus": " $", "produced": 4}, {"anchor": " $", "draft": ["$\n", "4", ".", " **", "Total", " changes", " changes", " changes", " changes", ":\n", "  ", "  ", "  ", "'s", " changes"], "accepted": 4, "bonus": "Jordan", "produced": 5}, {"anchor": "Jordan", "draft": ["'s", " wife", " changes", " half", " the", " the", " changes", ":\n", ":\n", "  ", ".", ".", " changes", " changes", " changes"], "accepted": 4, "bonus": " of", "produced": 5}, {"anchor": " of", "draft": [" the", " diapers", "**", ":\n", "  ", " So", ",", "  ", " changes", " changes", "  ", "  ", "  ", "}{", "2"], "accepted": 5, "bonus": " $", "produced": 6}, {"anchor": " $", "draft": ["$\n", "  ", " \\", "frac", "{", "1", "}{", "2", "}", " \\", "times", " ", "2", "0", " ="], "accepted": 12, "bonus": "1", "produced": 13}, {"anchor": "1", "draft": ["0", " =", " ", "5", " \\", "text", "{", " diaper", " changes", "}\n", "  ", "}\n", "  ", "  ", "5"], "accepted": 11, "bonus": " $", "produced": 12}, {"anchor": " $", "draft": ["$\n", "5", ".", " **", "Therefore", " of", " changes", " changes", "**", "**", "  ", " $", "  ", "  ", "  "], "accepted": 5, "bonus": ",", "produced": 6}, {"anchor": ",", "draft": [" the", "'s", " changes", " changes", "**", "**", "**", ":\n", "  ", "  ", "  ", " ", "1", "0", "0"], "accepted": 0, "bonus": " Jordan", "produced": 1}, {"anchor": " Jordan", "draft": [" changes", " the", " the", "  ", "**", "  ", "  ", "  ", "  ", " ", " ", " ", " ", " ", "text"], "accepted": 2, "bonus": " other", "produced": 3}, {"anchor": " other", "draft": [" half", "**", ":\n", "  ", " $", "$\n", "  ", "  ", "1", "0", " -", " ", "5", " =", " ="], "accepted": 7, "bonus": " ", "produced": 8}, {"anchor": " ", "draft": ["1", "0", " -", " ", "5", " =", " ", "boxed", "{", "5", "}\n", "  ", "text", "{", " day"], "accepted": 7, "bonus": "5", "produced": 8}, {"anchor": "5", "draft": [" \\", "text", "{", " diapers", " changes", "}\n", "  ", " $$", "\n\n", "###", " Final", "\ufffd", ":\n", ":\n", "\n"], "accepted": 3, "bonus": " diaper", "produced": 4}, {"anchor": " diaper", "draft": [" changes", "}\n", "  ", " $$", "\n\n", "###", " Final", " Answer", ":\n", "$$", "\n", "\\", "boxed", "boxed", "{"], "accepted": 13, "bonus": "{", "produced": 14}, {"anchor": "{", "draft": ["5", "}\n", "$$", "<|im_end|>", "\n\n", " changes", " **", "5", "5", " day", " day", "**", "<|im_end|>", "<|im_end|>", "\n\n"], "accepted": 5, "bonus": "Jordan", "produced": 4}], "truncated": false}, {"idx": 2, "prompt_tail": " boxes, each weighing 15 pounds, will pass over the bridge. The combined weight of the driver and the empty truck is 3755 pounds. What is the maximum number of boxes which can be loaded onto the truck while not exceeding the bridge's weight limit?\nPlease reason step by step, and put your final answer within \\boxed{}.\nassistant\n<think>\n\n<\/think>\n\n", "first_token": "We", "cycles": [{"anchor": "We", "draft": [" are", " given", ":\n\n", "-", " The", " **", "maximum", " weight", " weight", "**", " bridge", " bridge", " **", " **", " **"], "accepted": 2, "bonus": " the", "produced": 3}, {"anchor": " the", "draft": [" following", " information", ":\n\n", "-", " **", " **", " weight", " weight", "**", "**", " can", " can", " **", " **", "0"], "accepted": 5, "bonus": "Bridge", "produced": 6}, {"anchor": "Bridge", "draft": ["'s", " weight", "**:", "5", "5", "0", "0", "0", "0", "0", "-", " **", " **", " of", " weight"], "accepted": 0, "bonus": " weight", "produced": 1}, {"anchor": " weight", "draft": [" limit", "**:", " ", "5", "0", "0", "0", " pounds", "  \n", "-", " **", "Box", " weight", " box", " box"], "accepted": 1, "bonus": ":**", "produced": 2}, {"anchor": ":**", "draft": [" ", "5", "0", "0", "0", " pounds", "  \n", "-", " **", "Box", " of", " box", " box", ":**", "1"], "accepted": 9, "bonus": "Weight", "produced": 10}, {"anchor": "Weight", "draft": [" of", " each", " box", " and", " ", "1", "5", " ", "5", "5", " **", "  \n", " **", " weight", " driver"], "accepted": 3, "bonus": ":**", "produced": 4}, {"anchor": ":**", "draft": [" ", "1", "5", " pounds", "  \n", "-", " **", "Weight", " of", " and", " driver", " and", " empty", " truck", " "], "accepted": 9, "bonus": " the", "produced": 10}, {"anchor": " the", "draft": [" driver", " and", " empty", " truck", ":**", " ", "3", "7", "5", "5", "5", "  \n", "-", " **", "Goal"], "accepted": 10, "bonus": " pounds", "produced": 11}, {"anchor": " pounds", "draft": ["  \n\n", "We", " are", " to", " find", " the", " **", "maximum", " number", " of", " boxes", "**", " that", " can", " be"], "accepted": 15, "bonus": " loaded", "produced": 16}, {"anchor": " loaded", "draft": [" onto", " the", " truck", " **", "without", " exceeding", " exceeding", " bridge", " weight", " does", " the", "**", ".\n\n", "---\n\n", "###"], "accepted": 6, "bonus": " the", "produced": 7}, {"anchor": " the", "draft": [" bridge", "'s", " weight", " limit", "**", ".\n\n", "---\n\n", "###", " Step", " ", "1", ":", " Add", " the", " total"], "accepted": 12, "bonus": " Determine", "produced": 13}, {"anchor": " Determine", "draft": [" the", " total", " weight", " of", " the", " bridge", " can", " can", " truck", "\n\n", "The", " the", " the", " the", " the"], "accepted": 1, "bonus": " remaining", "produced": 2}, {"anchor": " remaining", "draft": [" weight", " on", " the", " bridge", " bridge", "The", "The", " truck", " the", " the", " the", " the", " the", " the", "0"], "accepted": 1, "bonus": " capacity", "produced": 2}, {"anchor": " capacity", "draft": ["\n\n", "The", " bridge", "\n\n", "The", " truck", " truck", " the", " the", " the", "0", "0", "0", "0", "0"], "accepted": 0, "bonus": " of", "produced": 1}, {"anchor": " of", "draft": [" the", " bridge", "\n\n", "The", " truck", " weight", " the", " truck", " truck", " the", " the", "5", "0", "0", "0"], "accepted": 4, "bonus": " bridge", "produced": 5}, {"anchor": " bridge", "draft": [" can", " carry", " up", " to", " **", "5", "5", "0", "0", "0", " pounds", "**", ".", " the", " the"], "accepted": 6, "bonus": "0", "produced": 7}, {"anchor": "0", "draft": ["0", "0", " pounds", "**,", " and", " the", " truck", "weight", " the", " truck", " the", " truck", " truck", " is", "3"], "accepted": 6, "bonus": " **", "produced": 7}, {"anchor": " **", "draft": ["driver", " and", " empty", " truck", " already", " already", "3", "3", "5", "5", " pounds", "**", "**", ".\n\n", ","], "accepted": 4, "bonus": "**", "produced": 5}, {"anchor": "**", "draft": [" already", " **", "3", "3", "5", "5", "5", "**", "**", ".\n\n", "So", ",", " **", " **", "remaining"], "accepted": 1, "bonus": " weigh", "produced": 2}, {"anchor": " weigh", "draft": [" **", "3", "7", "5", "5", " pounds", "**", ".\n\n", "So", ",", " the", " **", "maximum", " weight", " weight"], "accepted": 12, "bonus": "remaining", "produced": 13}, {"anchor": "remaining", "draft": [" weight", "**", "**", " the", " the", " loaded", " is", ":\n\n", "$$", "\n", "5", "0", "0", "0", "0"], "accepted": 1, "bonus": " capacity", "produced": 2}, {"anchor": " capacity", "draft": ["**", " is", " the", "$$", "\n", ":\n\n", "0", "\n", "5", "0", " ", "0", " -", " ", " "], "accepted": 1, "bonus": " for", "produced": 2}, {"anchor": " for", "draft": [" the", " boxes", " is", ":\n\n", "$$", "\n", "5", "0", "0", "0", " -", " ", "3", "7", "5"], "accepted": 15, "bonus": "5", "produced": 16}, {"anchor": "5", "draft": [" =", " ", "1", "2", "5", "5", " \\", "text", "{", " pounds", "}\n", "$$", "\n\n", "---\n\n", "###"], "accepted": 4, "bonus": "4", "produced": 5}, {"anchor": "4", "draft": ["5", " \\", "text", "{", " pounds", "}\n", "$$", "\n\n", "---\n\n", "###", " Step", " ", "2", ":", " Find"], "accepted": 14, "bonus": " Determine", "produced": 15}, {"anchor": " Determine", "draft": [" how", " many", " boxes", " of", " be", "\n\n", "Each", "Each", "\n\n", "Each", " weighs", "1", "5", "5", "**"], "accepted": 3, "bonus": " can", "produced": 4}, {"anchor": " can", "draft": [" be", " loaded", "\n\n", " bridge", "\n\n", "\n\n", "Each", " weighs", " weighs", "5", "5", "**", "**", "5", " the"], "accepted": 3, "bonus": "Each", "produced": 4}, {"anchor": "Each", "draft": [" box", " weighs", " **", "1", "5", " pounds", "**", ".\n\n", " the", " the", " **", " number", " of", " of", " boxes"], "accepted": 6, "bonus": "**,", "produced": 7}, {"anchor": "**,", "draft": [" so", " the", " **", " number", " of", " boxes", " boxes", "**", " is", ":\n\n", " be", "\n", "\n", "\\", "\\"], "accepted": 2, "bonus": " number", "produced": 3}, {"anchor": " number", "draft": [" of", " boxes", " that", " can", " be", " loaded", " is", ":\n\n", "$$", "\n", "\\", "\\", "\\", "\\", " \\"], "accepted": 11, "bonus": "left", "produced": 12}, {"anchor": "left", "draft": ["\\", "lf", "loor", " \\", "frac", "{", "1", "2", "4", "5", "}{", "1", "5", "}", " \\"], "accepted": 15, "bonus": "right", "produced": 16}, {"anchor": "right", "draft": ["\\", "rf", "loor", " =", "$$", "left", "\\", "lf", "loor", " ", "7", "7", "\\", "5", "right"], "accepted": 3, "bonus": "\n", "produced": 4}, {"anchor": "\n", "draft": ["$$", "\n\n", "$$", " the", " division", ":\n\n", "$$", "$$", "\\", "\\", "{", "1", "2", "5", "}{"], "accepted": 3, "bonus": "\n", "produced": 4}, {"anchor": "\n", "draft": ["\\", "frac", "\\", "lf", "loor", "4", "5", "}{", "1", "5", "}", "}", " ", " ", "$$"], "accepted": 2, "bonus": "{", "produced": 3}, {"anchor": "{", "draft": ["1", "2", "4", "5", "}{", "1", "5", "}", " =", " ", "8", "1", "3", "\n", "$$"], "accepted": 11, "bonus": "3", "produced": 12}, {"anchor": "3", "draft": ["\n", "$$", "\n\n", "So", ",", " **", " can", "maximum", " number", " of", "$$", "**", " can", " can", " can"], "accepted": 5, "bonus": " the", "produced": 6}, {"anchor": " the", "draft": [" **", "maximum", " number", " of", " boxes", "**", " that", " can", " be", " loaded", " on", " the", " exceeding", " exceeding", " exceeding"], "accepted": 10, "bonus": " is", "produced": 11}, {"anchor": " is", "draft": [":\n\n", "$$", "\n", "\\", "boxed", "{", "8", "3", "}\n", "$$", "\n\n", "---\n\n", "###", " \ufffd", "\ufffd"], "accepted": 15, "bonus": " Final", "produced": 16}, {"anchor": " Final", "draft": [" Answer", ":\n\n", "$$", "\n", "\\", "boxed", "{", "8", "3", "}\n", "$$", "<|im_end|>", "\n\n", " loaded", " be"], "accepted": 13, "bonus": "To", "produced": 12}], "truncated": false}, {"idx": 3, "prompt_tail": "user\nTim has a box with 7 blue shoe boxes and 9 red shoe boxes. If he uses 3 blue shoeboxes and 1/3 red of his shoeboxes to go fishing, how many red and blue shoe boxes are left in Tim's box?\nPlease reason step by step, and put your final answer within \\boxed{}.\nassistant\n<think>\n\n<\/think>\n\n", "first_token": "Let", "cycles": [{"anchor": "Let", "draft": ["'s", " break", " this", " down", " problem", " step", " step", " step", " to", "###", " how", " ", ":", "1", ":"], "accepted": 2, "bonus": " the", "produced": 3}, {"anchor": " the", "draft": [" problem", " down", " by", " step", ".\n\n", "###", " Step", " ", "1", ":", "-", ":", ":", " blue", " blue"], "accepted": 2, "bonus": " step", "produced": 3}, {"anchor": " step", "draft": [" by", " step", ".\n\n", "###", " Step", " ", "1", ":", "-", " the", " the", " blue", " of", "-", "-"], "accepted": 3, "bonus": "---\n\n", "produced": 4}, {"anchor": "---\n\n", "draft": ["###", " **", "Step", " ", "1", ":", " Total", " the", " of", " of", "-", "-", " **", " **", " **"], "accepted": 6, "bonus": " Understand", "produced": 7}, {"anchor": " Understand", "draft": [" the", " total", " number", " of", " shoe", " boxes", " boxes", "**\n\n", "-", " box", " box", " **", " ", "7", " shoe"], "accepted": 1, "bonus": " initial", "produced": 2}, {"anchor": " initial", "draft": [" number", " of", " blue", " and", " boxes", "**\n\n", "-", "-", "-", " **", "7", "7", " shoe", " shoe", " shoe"], "accepted": 0, "bonus": " counts", "produced": 1}, {"anchor": " counts", "draft": ["**\n\n", "-", " Tim", " has", " has", "-", " ", " blue", " shoe", " shoe", " shoe", " shoe", " shoe", " shoe", " shoe"], "accepted": 2, "bonus": " **", "produced": 3}, {"anchor": " **", "draft": ["Blue", " shoe", " boxes", "**:", " ", "7", "  \n", "  \n", "-", " **", "Red", " shoe", " shoe", "**:", " "], "accepted": 7, "bonus": "-", "produced": 8}, {"anchor": "-", "draft": [" **", "Red", " shoe", " boxes", "**:", " ", "9", "\n\n", "---\n\n", "###", " **", "Step", " ", "2", ":"], "accepted": 15, "bonus": " Determine", "produced": 16}, {"anchor": " Determine", "draft": [" how", " many", " boxes", " boxes", " boxes", " are", " used", " boxes", "**\n\n", "**\n\n", "-", " **", "3", "3", " shoe"], "accepted": 3, "bonus": " are", "produced": 4}, {"anchor": " are", "draft": [" used", "**\n\n", "-", " uses", " **", " **", "-", " **", "3", " shoe", " shoe", "**", " and", " ", "1"], "accepted": 3, "bonus": " **", "produced": 4}, {"anchor": " **", "draft": ["Blue", " shoe", " boxes", "**:", " ", "3", "  \n", "-", "-", " **", " **", "1", " boxes", " boxes", "**:"], "accepted": 3, "bonus": " used", "produced": 4}, {"anchor": " used", "draft": ["**:", " ", "3", "  \n", "-", "-", " **", "1", " shoe", " boxes", "**:", " ", " \\", "frac", "{"], "accepted": 5, "bonus": " **", "produced": 6}, {"anchor": " **", "draft": ["Red", " shoe", " boxes", " used", "**:", " $", " \\", "frac", "{", "1", "}{", "3", "}", " \\", "times"], "accepted": 13, "bonus": " $", "produced": 14}, {"anchor": " $", "draft": [" of", " the", " red", " shoe", " boxes", " boxes", " ", " ", "\n", "frac", "{", "{", "{", "}{", "3"], "accepted": 5, "bonus": "\n\n", "produced": 6}, {"anchor": "\n\n", "draft": ["$$", "\n", "\\", "frac", "{", "1", "}{", "}{", "}{", "3", "3", "3", " =", " ", "{"], "accepted": 0, "bonus": "So", "produced": 1}, {"anchor": "So", "draft": [",", " calculate", " calculate", " red", " red", " shoe", "{", "\n", "\n", "\n", "\n", "frac", "frac", "{", "{"], "accepted": 1, "bonus": " we", "produced": 2}, {"anchor": " we", "draft": [" calculate", " the", "$$", "\n", "\\", " shoe", "{", "1", "}{", "3", "}", "}", "{", "{", "{"], "accepted": 1, "bonus": ":\n\n", "produced": 2}, {"anchor": ":\n\n", "draft": ["$$", "\n", "\\", "frac", "{", "1", "}{", "3", "}", " \\", "times", " ", "9", " =", " \\"], "accepted": 14, "bonus": " ", "produced": 15}, {"anchor": " ", "draft": ["3", " \\", "text", "{", " red", ",", " boxes", "}\n", "$$", " used", "\n\n", "###", " **", "Step", " "], "accepted": 1, "bonus": "\n", "produced": 2}, {"anchor": "\n", "draft": ["$$", "\n\n", "So", ",", " **", "3", " shoe", " shoe", " boxes", "**", " are", ".\n\n", ".\n\n", "---\n\n", "###"], "accepted": 6, "bonus": " red", "produced": 7}, {"anchor": " red", "draft": [" shoe", " boxes", "**", " are", " used", ".\n\n", "---\n\n", "###", " **", "Step", " ", "3", "3", ":", ":"], "accepted": 12, "bonus": ":", "produced": 13}, {"anchor": ":", "draft": [" Subtract", " the", " remaining", " boxes", " boxes", " boxes", " boxes", " boxes", "-", " **", " **", " boxes", "7", " ", " "], "accepted": 2, "bonus": " used", "produced": 3}, {"anchor": " used", "draft": [" boxes", " from", " the", " remaining", " boxes", "-", " **", " **", "Blue", " boxes", "**:", "**:", " ", " ", " "], "accepted": 3, "bonus": " original", "produced": 4}, {"anchor": " original", "draft": [" counts", "**\n\n", "-", " **", "Blue", " shoe", " boxes", "**:", " ", "7", " -", " ", "3", " =", " "], "accepted": 7, "bonus": " left", "produced": 8}, {"anchor": " left", "draft": ["**:", "  \n", " ", " $", " ", " ", " ", "3", " =", " ", " ", " ", " ", " **", "Red"], "accepted": 0, "bonus": "**", "produced": 1}, {"anchor": "**", "draft": [" =", " ", " ", "7", " ", " ", "3", " -", " ", "3", " ", " ", " ", " ", " "], "accepted": 0, "bonus": ":\n", "produced": 1}, {"anchor": ":\n", "draft": [" ", " $", "$\n", " ", " ", "7", " -", " ", "3", " =", " ", "4", "\n", " ", " $$"], "accepted": 15, "bonus": "\n\n", "produced": 16}, {"anchor": "\n\n", "draft": ["-", " **", "Red", " shoe", " boxes", " left", "**", ":\n", " ", " $", "$\n", " ", " ", "9", " -"], "accepted": 15, "bonus": " ", "produced": 16}, {"anchor": " ", "draft": ["3", " =", " ", "6", "\n", " ", " $$", "\n\n", "---\n\n", "###", " **", "Step", " ", "4", ":"], "accepted": 15, "bonus": " Find", "produced": 16}, {"anchor": " Find", "draft": [" the", " total", " of", " of", " shoe", " and", " boxes", " boxes", "**\n\n", "$$", "4", "4", " ", " =", " ="], "accepted": 2, "bonus": " number", "produced": 3}, {"anchor": " number", "draft": [" of", " boxes", " boxes", " left", " left", " boxes", "**\n\n", "$$", "\n", "4", " +", " ", "6", " =", " "], "accepted": 1, "bonus": " shoe", "produced": 2}, {"anchor": " shoe", "draft": [" boxes", " left", "**\n\n", "$$", "\n", "4", " +", "4", " +", " ", " =", " ", " ", "{", "{"], "accepted": 6, "bonus": " \\", "produced": 7}, {"anchor": " \\", "draft": ["text", "{", " (", "blue", ")}", " +", " ", "6", " \\", "text", "{", " (", "red", ")}", " ="], "accepted": 15, "bonus": " ", "produced": 16}, {"anchor": " ", "draft": ["1", "0", "\n", "$$", "\n\n", "---\n\n", "###", " \ufffd", "\ufffd", " **", " Answer", ":\n\n", "$$", "\n", "\\"], "accepted": 10, "bonus": "Final", "produced": 11}, {"anchor": "Final", "draft": [" Answer", ":", "**\n\n", "$$", "\n", "\\", "boxed", "{", "1", "0", "}\n", "text", "{", "{", " boxes"], "accepted": 1, "bonus": "**", "produced": 2}, {"anchor": "**", "draft": [":\n\n", "$$", "\n", "\\", "boxed", "{", "1", "0", "}\n", "$$", "\n\n", "\n\n", " boxes", " and", "}\n"], "accepted": 6, "bonus": "4", "produced": 7}, {"anchor": "4", "draft": [" \\", "text", "{", "{", " blue", " boxes", " and", " ", " ", " \\", " \\", "{", "{", "}}\n", "<|im_end|>"], "accepted": 3, "bonus": " blue", "produced": 4}, {"anchor": " blue", "draft": [" shoe", " boxes", " and", " ", " ", "6", " \\", "text", "{", " boxes", "}}\n", "$$", "$$", "<|im_end|>", "<|im_end|>"], "accepted": 3, "bonus": " }", "produced": 4}, {"anchor": " }", "draft": [" ", "6", " \\", "text", "{", " red", " shoe", " boxes", "}}\n", "$$", "<|im_end|>", "\n\n", "\n\n", "\n\n", "$$"], "accepted": 8, "bonus": " left", "produced": 9}, {"anchor": " left", "draft": ["}}\n", "$$", "<|im_end|>", "\n\n", ",", " in", ":\n\n", "$$", "$$", "\n", "\\", "{", "4", "4", "4"], "accepted": 4, "bonus": "**", "produced": 3}], "truncated": false}]}, "scorecard": {"paper_hardware": "H200 (Table 1/8/10), B200 (serving)", "our_hardware": "A100-PCIE-40GB single GPU", "claims": [{"id": "C2", "name": "Draft cost flat in gamma", "paper": "1/3/5-layer DFlash draft latency ~flat over 4/8/16 draft tokens on H200; 5-layer @16 below 1-layer EAGLE-3 @8 sequential steps", "ours": "draft 5.22->5.32 ms over gamma 2->16 (+1.9%); t_step 27.3 ms", "verdict": "MATCH", "artifact": "artifacts/r2_draft_cost.json"}, {"id": "C1", "name": "GSM8K speedup/tau", "paper": {"speedup": 5.15, "tau": 6.54, "hw": "H200"}, "ours": {"speedup": 4.9, "tau": 6.39, "baseline_tok_s": 35.3, "spec_tok_s": 172.9, "histogram": [0.0, 0.1222, 0.1381, 0.1222, 0.1001, 0.08, 0.0671, 0.0589, 0.0443, 0.0344, 0.033, 0.0279, 0.0257, 0.0224, 0.0199, 0.0159, 0.0877], "num_cycles": 6023, "gpu": "NVIDIA A100-PCIE-40GB", "block_size": 16}, "verdict": "MATCH", "artifact": "artifacts/r3_gsm8k_b16.json"}, {"id": "C1", "name": "MATH-500 speedup/tau", "paper": {"speedup": 6.08, "tau": 7.87, "hw": "H200"}, "ours": {"speedup": 5.84, "tau": 7.78, "baseline_tok_s": 35.9, "spec_tok_s": 209.8, "histogram": [0.0, 0.0959, 0.1255, 0.1032, 0.0854, 0.0649, 0.0516, 0.0469, 0.041, 0.0335, 0.0328, 0.0302, 0.028, 0.0248, 0.0222, 0.0209, 0.1931], "num_cycles": 13270, "gpu": "NVIDIA A100-PCIE-40GB", "block_size": 16}, "verdict": "MATCH", "artifact": "artifacts/r4_math500_b16.json"}, {"id": "C4", "name": "Block-size b16->b8 graceful degradation (pattern)", "paper": {"tau_b16": 6.33, "tau_b8": 5.09, "note": "8-layer ablation model"}, "ours": {"tau_b16": 7.78, "tau_b8": 5.66, "spec_tok_s_b16": 209.8, "spec_tok_s_b8": 149.3}, "verdict": "MATCH", "detail": "our tau ratio 0.73 vs paper 0.80", "artifact": "artifacts/r5_math500_b8.json"}, {"id": "C5", "name": "Conditioning ablations (KV injection, no-feature drafter)", "paper": {"gsm8k": {"speedup": 2.83, "tau": 3.38}, "math500": {"speedup": 3.73, "tau": 4.61}}, "ours": null, "verdict": "NOT-TESTABLE", "detail": "requires training drafter variants; paper-only in v0"}]}, "paper_reference": {"_source": "DFlash arXiv 2602.06036v2, Qwen3-8B rows, thinking off, temperature 0, Transformers backend, NVIDIA H200 (Table 1); Fig 3 draft-cost; Table 8 block-size ablation (NOTE: 8-layer ablation model, released ckpt is 5-layer)", "table1_qwen3_8b_t0": {"gsm8k": {"eagle3_16": {"speedup": 1.94, "tau": 3.23}, "eagle3_60": {"speedup": 2.23, "tau": 3.71}, "dflash_16": {"speedup": 5.15, "tau": 6.54}}, "math500": {"eagle3_16": {"speedup": 1.81, "tau": 3.02}, "eagle3_60": {"speedup": 2.05, "tau": 3.49}, "dflash_16": {"speedup": 6.08, "tau": 7.87}}, "avg_all7": {"eagle3_16": {"speedup": 1.76, "tau": 2.96}, "eagle3_60": {"speedup": 2.02, "tau": 3.4}, "dflash_16": {"speedup": 4.86, "tau": 6.49}}}, "table8_blocksize_8layer_model": {"math500": {"b16_b16": {"speedup": 4.64, "tau": 6.33}, "b16_b8": {"speedup": 3.87, "tau": 5.09}, "b8_b8": {"speedup": 3.97, "tau": 5.21}, "b8_b16": {"speedup": 3.78, "tau": 5.02}}}, "table10_no_target_feature": {"gsm8k": {"speedup": 2.83, "tau": 3.38}, "math500": {"speedup": 3.73, "tau": 4.61}}, "fig3_note": "1/3/5-layer DFlash draft latency ~flat over 4/8/16 draft tokens on H200; 5-layer @16 below 1-layer EAGLE-3 @8 sequential steps", "hardware": {"paper": "H200 (Table 1/8/10), B200 (serving)", "ours": "A100-PCIE-40GB single GPU"}}, "summaries": {"gsm8k": {"speedup": 4.9, "tau": 6.39, "histogram": [0.0, 0.1221982400796945, 0.13813714095965465, 0.1221982400796945, 0.1001162211522497, 0.08002656483479993, 0.06707620786983232, 0.05894072721235265, 0.04433006807238918, 0.03436825502241408, 0.0330400132824174, 0.027893076539930266, 0.025734683712435664, 0.022414079362443964, 0.01992362609995019, 0.015938900879960152, 0.08766395483978084], "num_cycles": 6023}, "math500": {"speedup": 5.84, "tau": 7.78, "histogram": [0.0, 0.09593067068575735, 0.1255463451394122, 0.10324039186134137, 0.08538055764883196, 0.06488319517709118, 0.05162019593067069, 0.04694800301431801, 0.04099472494348154, 0.03345892991710626, 0.03278070836473248, 0.030218538055764882, 0.027957799547852297, 0.02479276563677468, 0.02215523737754333, 0.020949510173323287, 0.1931424265259985], "num_cycles": 13270}, "math500_b8": {"speedup": null, "tau": 5.66, "histogram": [0.0, 0.09800242798808079, 0.09706434168414083, 0.08619357686789537, 0.07449508884229114, 0.05904425560092705, 0.053526100871868446, 0.04789758304822867, 0.4837766250965677], "num_cycles": 18122}}}</script>
+<style>
+:root{
+  --bg:#F7F9F8; --surface:#FFFFFF; --ink:#1C2422; --ink-2:#4C5A56; --ink-3:#7A8783;
+  --line:#DCE3E0; --line-soft:#E9EEEC;
+  --draft:#0D9488; --draft-soft:#D9EFEC; --target:#B45309; --target-soft:#F5E6D4;
+  --code-bg:#EFF3F1;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#111917; --surface:#18211F; --ink:#E8EDEB; --ink-2:#A7B4B0; --ink-3:#7C8A85;
+    --line:#2C3835; --line-soft:#222D2A;
+    --draft:#17A697; --draft-soft:#12332F; --target:#CC6F1A; --target-soft:#38281A;
+    --code-bg:#1D2825;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#111917; --surface:#18211F; --ink:#E8EDEB; --ink-2:#A7B4B0; --ink-3:#7C8A85;
+  --line:#2C3835; --line-soft:#222D2A;
+  --draft:#17A697; --draft-soft:#12332F; --target:#CC6F1A; --target-soft:#38281A;
+  --code-bg:#1D2825;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:"Source Serif 4",Georgia,serif;font-size:1.06rem;line-height:1.65;}
+.wrap{max-width:860px;margin:0 auto;padding:0 20px 96px}
+.prose{max-width:66ch}
+h1,h2,h3{font-family:"Source Serif 4",Georgia,serif;line-height:1.15;text-wrap:balance}
+h1{font-size:2.7rem;font-weight:700;margin:.2em 0 .25em}
+h2{font-size:1.55rem;font-weight:700;margin:.5em 0 .5em}
+p{margin:.85em 0}
+a{color:var(--draft)}
+.eyebrow,.badge,button,.ctrlrow,.axis,.qbox-label,.hm-label,.tklegend{font-family:Inter,system-ui,sans-serif}
+.eyebrow{font-size:.72rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3)}
+header{padding-top:64px}
+.byline{color:var(--ink-2);font-size:.95rem;max-width:66ch}
+code{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:.86em;
+  background:var(--code-bg);padding:.08em .35em;border-radius:4px}
+.badge{display:inline-block;font-size:.68rem;font-weight:600;letter-spacing:.06em;
+  padding:2px 8px;border-radius:4px;vertical-align:middle}
+.badge.ours{background:var(--draft-soft);color:var(--draft)}
+.badge.paper{background:var(--target-soft);color:var(--target)}
+.ck{display:inline-block;width:.78em;height:.78em;border-radius:2px;
+  vertical-align:-.06em;margin-right:.3em;border:1px solid rgba(128,128,128,.35)}
+.ck-d{background:var(--draft)} .ck-t{background:var(--target)}
+.qeye{display:flex;align-items:center;gap:14px;margin-top:3.2em;
+  font-size:1.02rem;font-weight:700;letter-spacing:.08em;color:var(--draft);
+  text-transform:uppercase}
+.qeye::after{content:"";flex:1;height:1.5px;background:var(--line)}
+.qeye+h2{margin-top:.35em}
+header .eyebrow{font-size:.72rem}
+.qans{font-size:1.13rem;font-weight:600;line-height:1.55;max-width:66ch;
+  border-left:3px solid var(--draft);padding-left:14px;margin:.6em 0 1em}
+.fig{background:var(--surface);border:1px solid var(--line);border-radius:10px;
+  padding:20px 22px 16px;margin:26px 0}
+.fig h3{font-family:Inter,system-ui,sans-serif;font-size:.95rem;font-weight:600;margin:0 0 4px}
+.fig .sub{font-family:Inter,system-ui,sans-serif;font-size:.82rem;color:var(--ink-3);margin:0 0 14px}
+.fig .cap{font-family:Inter,system-ui,sans-serif;font-size:.82rem;color:var(--ink-3);
+  margin-top:10px;line-height:1.5}
+.hm-label{font-size:.74rem;font-weight:600;color:var(--ink-3);letter-spacing:.06em;
+  text-transform:uppercase;margin:12px 0 4px}
+button{cursor:pointer;border:1px solid var(--line);background:var(--surface);
+  color:var(--ink-2);font-size:.78rem;font-weight:600;padding:5px 11px;border-radius:6px}
+button:hover{border-color:var(--draft);color:var(--draft)}
+button:focus-visible{outline:2px solid var(--draft);outline-offset:2px}
+button.on{border-color:var(--draft);color:var(--draft);background:var(--draft-soft)}
+.ctrlrow{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:14px;
+  font-size:.8rem;color:var(--ink-2)}
+.ctrlrow .spacer{flex:1}
+.ctrlrow input[type=range]{accent-color:var(--draft)}
+.readout{font-family:"JetBrains Mono",monospace;font-size:.82rem;color:var(--ink-2)}
+.readout b{font-weight:500;color:var(--draft)}
+#tau-math{margin:0 0 12px;padding:8px 12px;background:var(--code-bg);border-radius:7px;
+  font-size:.82rem;line-height:1.7}
+svg{display:block;max-width:100%}
+svg text{font-family:Inter,system-ui,sans-serif;fill:var(--ink-2)}
+.axis{font-size:11px;fill:var(--ink-3)}
+.gridline{stroke:var(--line-soft)}
+.overflow{overflow-x:auto}
+.qbox{border-top:1px solid var(--line);margin-top:26px;padding-top:10px;max-width:66ch}
+.qbox-label{font-size:.7rem;font-weight:600;letter-spacing:.12em;color:var(--ink-3);text-transform:uppercase}
+.qbox p{margin:.3em 0 0;font-style:italic;color:var(--ink-2)}
+.langtog{position:fixed;top:14px;right:16px;z-index:30;display:inline-flex;
+  border:1px solid var(--line);border-radius:999px;overflow:hidden;background:var(--surface);
+  box-shadow:0 1px 6px rgba(0,0,0,.08)}
+.langtog button{border:0;border-radius:0;padding:5px 12px;font-size:.75rem}
+.langtog button.on{background:var(--draft-soft);color:var(--draft)}
+.tooltip{position:fixed;pointer-events:none;background:var(--surface);border:1px solid var(--line);
+  border-radius:6px;padding:6px 10px;font:500 .75rem Inter,sans-serif;color:var(--ink);
+  box-shadow:0 2px 10px rgba(0,0,0,.12);opacity:0;transition:opacity .12s;z-index:10}
+.stream{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:.82rem;line-height:2.05;
+  background:var(--code-bg);border-radius:8px;padding:14px 16px;min-height:110px;
+  max-height:220px;overflow-y:auto;white-space:pre-wrap;word-break:break-word}
+.stream span{border-radius:3px;padding:1px 0}
+.stream .new{background:var(--draft-soft);color:var(--ink)}
+.blockrow{display:flex;flex-wrap:wrap;gap:5px;margin:14px 0 4px;min-height:34px}
+.tk{font-family:"JetBrains Mono",monospace;font-size:.8rem;padding:3px 7px;border-radius:5px;
+  border:1px solid var(--line);white-space:pre}
+.tk.anchor{border-color:var(--ink-3);color:var(--ink);font-weight:500}
+.tk.acc{background:var(--draft-soft);border-color:var(--draft);color:var(--ink)}
+.tk.rej{color:var(--ink-3);text-decoration:line-through;opacity:.62}
+.tk.bonus{background:var(--target-soft);border-color:var(--target)}
+.tklegend{font-size:.75rem;color:var(--ink-3);display:flex;gap:14px;flex-wrap:wrap;margin-top:10px}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+
+<div class="langtog" role="group" aria-label="language">
+  <button id="lang-en" class="on">EN</button><button id="lang-ko">한국어</button>
+</div>
+<div class="wrap">
+<header>
+  <div class="eyebrow">replica · reproduction Nº 01</div>
+  <h1>DFlash, Reproduced</h1>
+  <p class="byline" id="byline"><em>DFlash: Block Diffusion for Flash Speculative Decoding</em>
+  — Chen, Liang &amp; Liu, ICML 2026 (<a href="https://arxiv.org/abs/2602.06036">arXiv:2602.06036</a>).
+  Read top to bottom: the 13 reading questions, answered in one bold sentence each, with the
+  mechanism drawn — and probed on one A100 — in between.</p>
+</header>
+
+<section class="prose">
+<div class="eyebrow qeye" id="e-q1">Q1 · Background</div>
+<h2 id="h-q1">One forward pass, one token</h2>
+<p class="qans" id="a-q1">An autoregressive LLM must push its entire stack of weights through
+the GPU to produce a <em>single</em> token, and cannot start the next one until this one
+exists — so latency is token count × one pass, and that pass is spent mostly moving weights,
+not computing.</p>
+<p id="p-q1">That last part is the opening the whole field walks through. At batch size 1 the
+GPU reads ~16 GB of weights to do a handful of multiplications per weight; the arithmetic
+units idle. If you could <em>check</em> several candidate tokens in one pass instead of
+producing one, the extra ones would come nearly free.</p>
+<div class="fig">
+  <h3 id="f1-title">The clock everything is measured against <span class="badge ours">probe · A100</span></h3>
+  <p class="sub" id="f1-sub">Eight tokens of ordinary decoding from Qwen3-8B, drawn to scale in
+  time. Every box is one full forward pass through the model.</p>
+  <div class="overflow" id="v-clock"></div>
+  <p class="cap" id="f1-cap">We measured one pass at 27.3 ms on our A100. Nothing in this
+  paper makes that box narrower — the entire method is about getting more than one token out
+  of a box like it.</p>
+</div>
+</section>
+
+<section class="prose">
+<div class="eyebrow qeye" id="e-q2">Q2 · Problem</div>
+<h2 id="h-q2">The sequential bottleneck, now worse</h2>
+<p class="qans" id="a-q2">Cut generation latency without changing a single output token — a
+constraint that turned urgent once reasoning models began emitting thousands of
+chain-of-thought tokens before answering.</p>
+<p id="p-q2">"Without changing a single output token" is the strict part. Sampling a smaller
+model is fast and wrong; distillation changes the model. Speculative decoding is the one
+family that promises the <em>identical</em> distribution: guess ahead, then let the real model
+audit the guesses in a single pass and discard whatever it disagrees with.</p>
+</section>
+
+<section>
+<div class="eyebrow qeye" id="e-q3">Q3 · Existing limitations</div>
+<h2 id="h-q3">The drafter is itself autoregressive</h2>
+<p class="qans" id="a-q3">Every strong speculative method before this one drafts with a small
+<em>autoregressive</em> model, so producing γ guesses costs γ sequential passes — which forces
+the drafter to be tiny (EAGLE-3 uses one transformer layer), which caps how many guesses
+survive, which caps speedup at 2–3×.</p>
+<p class="prose" id="p-q3">It is a trap with three walls. A deeper drafter guesses better but
+costs linearly more time. Longer guesses raise the ceiling but cost linearly more time. A
+shallower drafter is cheap but its guesses stop surviving. The measurement below is that trap
+drawn to scale.</p>
+<div class="fig">
+  <h3 id="f2-title">Guessing 16 tokens: serial vs. one shot <span class="badge ours">probe · A100</span></h3>
+  <p class="sub" id="f2-sub">Same time axis as the clock above. Top: what autoregressive
+  drafting has to do. Bottom: what a block-diffusion drafter does.</p>
+  <div class="overflow" id="v-serial"></div>
+  <p class="cap" id="f2-cap">An autoregressive drafter pays per token, so its cost is a
+  staircase; a diffusion drafter fills the whole block in one pass, so its cost is a single
+  step. The consequence is not "somewhat cheaper" — it is that <em>guess length stops being a
+  cost at all</em>.</p>
+</div>
+<div class="fig">
+  <h3 id="f3-title">Draft cost vs. guess length γ <span class="badge ours">probe · A100</span></h3>
+  <p class="sub" id="f3-sub"></p>
+  <div class="overflow" id="v-draftcost"></div>
+  <p class="cap" id="f3-cap">Measured in steady-state decoding, 50 timed repetitions after 10
+  warmups (σ &lt; 0.1 ms), log scale. The dashed line is γ × one target pass — what serial
+  drafting with a target-sized model would cost. EAGLE-3's real 1-layer drafter sits far below
+  that line but keeps its slope; the diffusion drafter's line is flat.</p>
+</div>
+</section>
+
+<section class="prose">
+<div class="eyebrow qeye" id="e-q4">Q4 · Goal</div>
+<h2 id="h-q4">A drafter that is both cheap and good</h2>
+<p class="qans" id="a-q4">Break the 2–3× ceiling by making drafting cost independent of guess
+length, then spend the freed budget on drafter depth and on conditioning it with the target's
+own hidden states — while verification keeps the output provably unchanged.</p>
+</section>
+
+<section>
+<div class="eyebrow qeye" id="e-q5a">Q5 · Method — 1/4 · the cycle, and what τ means</div>
+<h2 id="h-cycle">One cycle, τ tokens</h2>
+<p class="qans" id="a-q5">Each cycle costs one drafter pass plus one target pass — a fixed
+~35 ms on our A100, no matter how many tokens are involved — and yields τ committed tokens, so
+every idea in the paper is an attempt to raise τ without widening that box.</p>
+<p class="prose" id="p-cycle">τ (tau) is the number this method lives on, and it is easy to
+state and hard to feel: <em>the average number of tokens that survive one cycle</em>. The
+figure makes it physical. Both strips cover the same 300 ms of wall-clock. The top strip is
+ordinary decoding. The bottom is DFlash — the same fixed cycle repeated, τ tokens falling out
+of each. Drag τ and watch the bottom strip fill.</p>
+<div class="fig">
+  <h3 id="f4-title">What τ actually buys, inside 300 ms <span class="badge ours">measured timings · A100</span></h3>
+  <p class="sub" id="f4-sub">Drafting 5.3 ms + verification 30.2 ms = a 35.5 ms cycle. The
+  cycle never changes width; only how many tokens come out of it does.</p>
+  <div class="ctrlrow">
+    <span id="tau-lab">τ — tokens committed per cycle</span>
+    <input type="range" id="s-tau" min="1" max="16" step="1" value="6" style="width:210px" aria-label="tau">
+    <b class="readout" id="v-tau">6</b>
+    <button id="b-tau-ours"><span id="tau-t1">our measured 6.4</span></button>
+    <button id="b-tau-eagle"><span id="tau-t2">EAGLE-3's 3.2</span></button>
+    <span class="spacer"></span>
+  </div>
+  <p class="readout" id="tau-math"></p>
+  <div class="overflow" id="v-tau-strip"></div>
+  <p class="cap" id="f4-cap">Two things this makes obvious. τ = 1 is worse than not
+  speculating at all — you paid for a drafter and still emit one token per cycle. And returns
+  are not linear: 3.2 → 6.4 nearly doubles throughput, while 12 → 16 barely moves it, because
+  the cycle's fixed cost has stopped being the bottleneck.</p>
+</div>
+<div class="fig">
+  <h3 id="f5-title">Where τ actually comes from <span class="badge ours">probe · 6,023 cycles on GSM8K</span></h3>
+  <p class="sub" id="f5-sub">τ is an average, and averages hide their shape. This is every
+  cycle of a 128-problem run, bucketed by how many tokens it committed.</p>
+  <div class="overflow" id="v-tauhist"></div>
+  <p class="cap" id="f5-cap">The spike at the right edge is the whole block surviving; the mass
+  at 1–3 is the drafter being wrong early. τ is the mean of this distribution, so raising it
+  means shifting mass rightward — not making a few lucky cycles luckier.</p>
+</div>
+</section>
+
+<section>
+<div class="eyebrow qeye" id="e-q5b">Q5 · Method — 2/4 · drafting a block in one pass</div>
+<h2 id="h-diff">Block diffusion, in one forward pass</h2>
+<p class="prose" id="p-diff">So the drafter must produce 15 tokens in one pass. An
+autoregressive model structurally cannot: token 3 is a function of token 2. A
+<em>block-diffusion</em> model can, because it was trained on a different task — fill in masked
+positions given everything around them, all at once, the way BERT-style models do, but over a
+block of future tokens.</p>
+<div class="fig">
+  <h3 id="f6-title">The drafter's input and output</h3>
+  <p class="sub" id="f6-sub">One anchor token (the last one the target committed) followed by
+  15 mask slots. One pass. Bidirectional attention inside the block — position 9 may look at
+  position 14 while both are still masks.</p>
+  <div class="overflow" id="v-blockdiff"></div>
+  <p class="cap" id="f6-cap">This is also why the drafter can afford depth: its cost is one
+  pass regardless of block size, so the paper spends the savings on five layers instead of one
+  — and five layers of drafting still cost a fifth of a single target pass.</p>
+</div>
+</section>
+
+<section>
+<div class="eyebrow qeye" id="e-q5c">Q5 · Method — 3/4 · verification, exactly</div>
+<h2 id="h-verify">How a guess is accepted or killed</h2>
+<p class="prose" id="p-verify">Here is the step that makes the output provably unchanged, and
+it is simpler than it sounds. The target model runs <em>once</em> over the whole block. That
+single pass produces, at every position, the token the target itself would have generated.
+Compare position by position; keep the longest prefix that matches; at the first mismatch take
+the target's own token instead and throw the rest away.</p>
+<div class="fig">
+  <h3 id="f7-title">One real cycle, token by token <span class="badge ours">recorded trace · A100</span></h3>
+  <p class="sub" id="f7-sub">An actual cycle from a GSM8K solve on our A100 — the drafter's 15
+  guesses, and what the target's single verification pass did to them.</p>
+  <div class="overflow" id="v-accept"></div>
+  <p class="cap" id="f7-cap">The bonus token is the quiet trick: the verification pass already
+  computed the target's own next token at the mismatch position, so it comes along free. That
+  is why a cycle accepting <em>zero</em> guesses still emits one token, and why τ ≥ 1 always.</p>
+</div>
+<div class="fig">
+  <h3 id="f8-title">The same, cycle after cycle <span class="badge ours">recorded trace · A100</span></h3>
+  <p class="sub" id="f8-sub">Step through a whole solve. Watch where drafts die — and where the
+  drafter runs 16-for-16.</p>
+  <div class="ctrlrow">
+    <span>problem <select id="req-sel" aria-label="choose request"></select></span>
+    <button id="t-prev" aria-label="previous cycle">◀</button>
+    <button id="t-next" aria-label="next cycle">▶</button>
+    <button id="t-play"><span id="t-playlab">play</span></button>
+    <span class="spacer"></span>
+    <span class="readout">cycle <b id="t-cyc">0</b>/<span id="t-max"></span> ·
+      <span id="t-tokl">committed</span> <b id="t-tok">0</b> ·
+      <span id="t-taul">running τ</span> <b id="t-tau">–</b></span>
+  </div>
+  <div class="blockrow" id="blockrow"></div>
+  <div class="tklegend" id="tklegend"></div>
+  <div class="stream" id="stream" aria-live="off"></div>
+  <p class="cap" id="f8-cap"></p>
+</div>
+<div class="qbox"><div class="qbox-label" id="q1-l">Before moving on</div>
+<p id="q1-q">Step until you find a cycle that accepts everything, and one that accepts nothing.
+What kind of text is the drafter good at — and what does that say about what it learned?</p></div>
+</section>
+
+<section>
+<div class="eyebrow qeye" id="e-q5d">Q5 · Method — 4/4 · why the guesses are good</div>
+<h2 id="h-cond">The target's hidden states, injected as K/V</h2>
+<p class="prose" id="p-cond">A five-layer drafter guessing from scratch is not good enough —
+the paper's own ablation puts it at 2.8–3.7×. What makes DFlash's guesses survive is that the
+drafter never guesses from scratch: it is fed the target model's internal representation of the
+context, which already encodes information about tokens the target has not emitted yet. The
+mechanism is <em>where</em> that signal is injected.</p>
+<div class="fig">
+  <h3 id="f9-title">Where the target's knowledge enters</h3>
+  <p class="sub" id="f9-sub">Two conditioning strategies, from the paper's Table 9. Toggle
+  between them.</p>
+  <div style="display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden;margin-bottom:12px"
+       role="group" aria-label="conditioning strategy">
+    <button id="btn-kv" class="on" style="border:0;border-radius:0">K/V injection (DFlash)</button>
+    <button id="btn-input" style="border:0;border-radius:0">input fusion (EAGLE-style)</button>
+  </div>
+  <div class="overflow" id="v-cond"></div>
+  <p class="cap" id="f9-cap"></p>
+</div>
+<p class="prose" id="p-loop">That is the design. The part that only shows up when you follow
+the loop is where those features come from on cycle number two — and the answer closes the
+circle neatly: from the verification pass that just ran.</p>
+<div class="fig">
+  <h3 id="f10-title">One full cycle, and how it feeds the next</h3>
+  <p class="sub" id="f10-sub">Four beats. Follow what is computed, what is reused, and what is
+  thrown away.</p>
+  <div class="ctrlrow" id="loop-phases"></div>
+  <div class="overflow" id="v-loop"></div>
+  <p class="cap" id="loop-cap"></p>
+</div>
+</section>
+
+<section class="prose">
+<div class="eyebrow qeye" id="e-q6">Q6 · Core idea</div>
+<h2 id="h-core">Parallelism buys depth; K/V injection makes depth pay</h2>
+<p class="qans" id="a-q6">Diffusion drafting removes the cost of guessing far ahead, which makes
+a deep drafter affordable; injecting the target's features into every draft layer's K/V keeps
+that depth from being wasted — either half alone lands near 3×.</p>
+<p id="p-core">The paper's ablations are the cleanest statement of this, because each one
+removes exactly one of the two halves.</p>
+</section>
+
+<section>
+<div class="fig">
+  <h3 id="f11-title">Each design choice, priced <span class="badge paper">paper Tables 6, 9, 10</span></h3>
+  <p class="sub" id="f11-sub">GSM8K unless noted. Left bar is acceptance length τ, right bar is
+  end-to-end speedup.</p>
+  <div class="overflow" id="v-ablation"></div>
+  <p class="cap" id="f11-cap">Read the top three rows as the argument: a bare diffusion drafter
+  is ordinary; adding the target's features at the input helps a little; moving that same
+  signal into every layer's K/V is what makes it work. The bottom rows are the depth
+  trade-off — τ keeps climbing with layers, but at 8 layers drafting time finally starts eating
+  the gain, so the paper ships 5.</p>
+</div>
+</section>
+
+<section class="prose">
+<div class="eyebrow qeye" id="e-q7">Q7 · Validation</div>
+<h2 id="h-q7">How the paper checks itself</h2>
+<p class="qans" id="a-q7">Two metrics on eight benchmarks across math, code and chat —
+acceptance length τ and end-to-end speedup over plain autoregressive decoding — for Qwen3 and
+LLaMA-3.1 targets, in both a research backend (Transformers) and a production one (SGLang,
+where concurrency matters).</p>
+<p id="p-q7">Since the output distribution is unchanged by construction, accuracy is not the
+question; speed is. The <span class="badge ours">probe</span> figures on this page are our own
+runs of the same protocol on one A100 — there to put real tokens and real milliseconds into the
+diagrams, not to re-prove the paper.</p>
+</section>
+
+<section>
+<div class="eyebrow qeye" id="e-q8">Q8 · Results</div>
+<h2 id="h-res">What the paper measured</h2>
+<p class="qans" id="a-q8">On Qwen3-8B with greedy decoding, DFlash runs 4.7–6.1× faster than
+autoregressive decoding on math and code and about 2.4× faster than EAGLE-3 at a matched
+drafting budget — with chat (MT-Bench) the notable weak spot at 2.75×.</p>
+<div class="fig">
+  <h3 id="f12-title">Speedup by benchmark, Qwen3-8B <span class="badge paper">paper Table 1</span></h3>
+  <p class="sub" id="f12-sub">Greedy decoding, Transformers backend, H200. Parenthesised numbers
+  are the drafting budget: EAGLE-3 with a 16-token tree matches DFlash's block size; the
+  60-token tree is EAGLE-3's own preferred setting.</p>
+  <div class="overflow" id="v-paper"></div>
+  <p class="cap" id="f12-cap">The gap tracks acceptance length: where DFlash gets τ ≈ 7–8
+  (structured math and code, where the next dozen tokens are predictable) it runs away; on
+  open-ended chat τ falls to 4.2 and so does the speedup. Note also that DFlash at a 16-token
+  budget beats EAGLE-3 at 60 — a bigger search tree costs verification time that acceptance
+  does not repay.</p>
+</div>
+</section>
+
+<section class="prose">
+<div class="eyebrow qeye" id="e-q9">Q9 · Comparison</div>
+<h2 id="h-q9">Against what, exactly</h2>
+<p class="qans" id="a-q9">Against plain autoregressive decoding as the 1.0× floor and EAGLE-3 as
+the state of the art; the other diffusion-drafter papers (DiffuSpec, SpecDiff-2) are argued
+against rather than benchmarked, because they had no public implementation — they buy
+acceptance with 7B drafters and pay it back in drafting latency.</p>
+<p id="p-q9">The comparison that matters conceptually is PARD, which trains small autoregressive
+models to imitate parallel generation. Same goal, opposite direction: PARD keeps the drafter
+architecture and changes its behaviour; DFlash changes the architecture so that parallelism is
+structural.</p>
+</section>
+
+<section class="prose">
+<div class="eyebrow qeye" id="e-q10">Q10 · Significance</div>
+<h2 id="h-q10">What it changes</h2>
+<p class="qans" id="a-q10">It moves speculative decoding from "worth about 2×" to "worth about
+5×" on the workloads people actually pay for — long reasoning traces and code — and it reframes
+diffusion language models as specialist drafters rather than failed generalists.</p>
+<p id="p-q10">That reframing is the part with legs. Diffusion LLMs have struggled to match
+autoregressive quality end to end; as drafters they never have to, because verification supplies
+the quality guarantee. A weak model with a strong auditor is a different product than a weak
+model alone.</p>
+</section>
+
+<section>
+<div class="eyebrow qeye" id="e-q11">Q11 · Limitations</div>
+<h2 id="h-q11">Where it gives the gain back</h2>
+<p class="qans" id="a-q11">The drafter must be trained per target model, open-ended chat gets
+roughly half the speedup that math and code get, and the whole advantage erodes as serving
+concurrency rises — because a busy GPU is no longer waiting on memory.</p>
+<div class="fig">
+  <h3 id="f13-title">Speedup vs. concurrency <span class="badge paper">paper Table 3, SGLang on B200</span></h3>
+  <p class="sub" id="f13-sub">Qwen3-8B. Same method, same model, only more simultaneous
+  requests.</p>
+  <div class="overflow" id="v-conc"></div>
+  <p class="cap" id="f13-cap">The mechanism is Q1 run backwards. Speculation converts idle
+  arithmetic into free verification; with 32 requests in flight the arithmetic units are no
+  longer idle, so there is less to convert. Speculative decoding is a latency-regime
+  optimisation, and this chart is where that shows.</p>
+</div>
+</section>
+
+<section class="prose">
+<div class="eyebrow qeye" id="e-q12">Q12 · Future work</div>
+<h2 id="h-q12">Where it goes next</h2>
+<p class="qans" id="a-q12">The paper's own loose end is adaptive block-size scheduling — its
+ablation shows a drafter trained at block 16 degrades gracefully when run at block 8, so a
+server could shrink the block under load; the authors leave the scheduler unbuilt.</p>
+<p id="p-q12">We probed that generalisation on our A100: running the released block-16
+checkpoint at block 8 on MATH-500 gives τ 5.66 against 7.78 at block 16 — a real cost, but a
+graceful one, matching the pattern the paper reports for its own ablation model. A follow-up,
+DFlash 2, has since appeared.</p>
+</section>
+
+<section class="prose">
+<div class="eyebrow qeye" id="e-q13">Q13 · Open resources</div>
+<h2 id="h-q13">What you can run</h2>
+<p class="qans" id="a-q13">The authors ship code and drafter checkpoints for Qwen3, LLaMA-3.1
+and more (<a href="https://github.com/z-lab/dflash">z-lab/dflash</a>), with SGLang and vLLM
+integrations; our probe runs used the public checkpoint unmodified.</p>
+<p class="byline" id="colophon">Probes on this page: Qwen/Qwen3-8B (bf16) + drafter
+z-lab/Qwen3-8B-DFlash-b16 on one NVIDIA A100-PCIE-40GB, upstream code unmodified — our traced
+fork asserts byte-identical greedy output before any number here is used. Paper-badged figures
+come from the paper's own tables (H200/B200).</p>
+</section>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+const DATA = JSON.parse(document.getElementById('viz-data').textContent);
+const $ = id => document.getElementById(id);
+const NS='http://www.w3.org/2000/svg';
+function el(n,attrs={},parent){const e=document.createElementNS(NS,n);
+  for(const[k,v]of Object.entries(attrs))e.setAttribute(k,v);
+  if(parent)parent.appendChild(e);return e;}
+const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const tip=$('tooltip');
+function showTip(ev,html){tip.innerHTML=html;tip.style.opacity=1;
+  tip.style.left=(ev.clientX+14)+'px';tip.style.top=(ev.clientY-10)+'px';}
+function hideTip(){tip.style.opacity=0;}
+const KOQ=()=> window.__pageLang==='ko';
+function svgIn(box,W,H,label){box.innerHTML='';
+  const s=el('svg',{viewBox:`0 0 ${W} ${H}`,role:'img','aria-label':label||''},null);
+  box.appendChild(s);return s;}
+function T(svg,x,y,s,o={}){const e=el('text',{x,y,'text-anchor':o.a||'middle',
+  style:`font-size:${o.fs||10}px;font-weight:${o.w||400}`,
+  ...(o.mono?{'font-family':'JetBrains Mono,monospace'}:{}),
+  fill:o.fill||css('--ink-3')},svg);e.textContent=s;return e;}
+
+const DC=DATA.draft_cost||{gammas:[2,4,8,16],draft_ms:[5.2,5.2,5.3,5.3],
+  verify_ms:[30,30,30,30],t_step_ms:27.3,context_len:104,gpu:'A100'};
+const G16=DC.gammas.indexOf(16)>=0?DC.gammas.indexOf(16):DC.gammas.length-1;
+const T_DRAFT=DC.draft_ms[G16], T_VER=DC.verify_ms[G16], T_STEP=DC.t_step_ms;
+const CYCLE=T_DRAFT+T_VER;
+const SUM=(DATA.summaries||{});
+const TAU_OURS=SUM.gsm8k?SUM.gsm8k.tau:6.39;
+
+/* ---------- Q1: baseline clock ---------- */
+function drawClock(){
+  const box=$('v-clock');if(!box)return;
+  const W=790,H=124,ML=128,px=(W-ML-30)/300;
+  const svg=svgIn(box,W,H,'autoregressive decoding timeline');
+  const ink2=css('--ink-2'),ink3=css('--ink-3'),t=css('--target'),tS=css('--target-soft');
+  T(svg,ML-12,34,KOQ()?'토큰 하나 = pass 하나':'one token = one pass',{a:'end',fs:10.5,fill:ink2,w:600});
+  let x=ML;
+  while(x+T_STEP*px<=W-30){
+    el('rect',{x,y:20,width:T_STEP*px-3,height:26,rx:4,fill:tS,stroke:t,'stroke-width':1.3},svg);
+    T(svg,x+(T_STEP*px-3)/2,38,'pass',{fs:9,fill:t});
+    el('circle',{cx:x+(T_STEP*px-3)/2,cy:64,r:6,fill:t},svg);
+    T(svg,x+(T_STEP*px-3)/2,84,'tok',{fs:8.5,fill:ink3});
+    x+=T_STEP*px;
+  }
+  T(svg,ML-10,68,`${T_STEP.toFixed(1)} ms ${KOQ()?'마다 1개':'each'}`,{a:'end',fs:10,fill:t,mono:true,w:600});
+  el('line',{x1:ML,x2:W-30,y1:100,y2:100,stroke:ink3,'stroke-width':1},svg);
+  [0,100,200,300].forEach(ms=>{const xx=ML+ms*px;
+    el('line',{x1:xx,x2:xx,y1:96,y2:104,stroke:ink3,'stroke-width':1},svg);
+    T(svg,xx,118,ms+' ms',{fs:9});});
+}
+
+/* ---------- Q3: serial vs one-shot ---------- */
+function drawSerial(){
+  const box=$('v-serial');if(!box)return;
+  const W=790,H=176,ML=170,px=(W-ML-60)/70;
+  const svg=svgIn(box,W,H,'serial versus parallel drafting');
+  const ink2=css('--ink-2'),ink3=css('--ink-3'),d=css('--draft'),dS=css('--draft-soft'),
+        t=css('--target'),tS=css('--target-soft');
+  const tiny=T_STEP/12;
+  T(svg,ML-12,28,'autoregressive drafter',{a:'end',fs:10.5,fill:ink2,w:600});
+  T(svg,ML-12,42,KOQ()?'작은 pass 16번':'16 little passes',{a:'end',fs:9,fill:ink3});
+  for(let i=0;i<16;i++){
+    el('rect',{x:ML+i*tiny*px,y:18,width:Math.max(tiny*px-1.5,2),height:22,rx:2,
+      fill:tS,stroke:t,'stroke-width':.9},svg);}
+  T(svg,ML+16*tiny*px+10,36,`${(16*tiny).toFixed(1)} ms`,{a:'start',fs:9.5,fill:t,mono:true,w:600});
+  T(svg,ML+16*tiny*px/2,62,KOQ()?'각 pass는 앞 pass의 출력이 있어야 시작된다'
+    :'each pass needs the previous one’s output first',{fs:9,fill:ink3});
+  T(svg,ML-12,104,'block-diffusion drafter',{a:'end',fs:10.5,fill:ink2,w:600});
+  T(svg,ML-12,118,KOQ()?'pass 한 번':'one pass',{a:'end',fs:9,fill:ink3});
+  el('rect',{x:ML,y:92,width:T_DRAFT*px,height:22,rx:3,fill:dS,stroke:d,'stroke-width':1.4},svg);
+  T(svg,ML+T_DRAFT*px+10,108,`${T_DRAFT.toFixed(1)} ms — ${KOQ()?'16개 동시':'all 16 at once'}`,
+    {a:'start',fs:9.5,fill:d,mono:true,w:600});
+  el('line',{x1:ML,x2:W-60,y1:146,y2:146,stroke:ink3,'stroke-width':1},svg);
+  [0,20,40,60].forEach(ms=>{const xx=ML+ms*px;
+    el('line',{x1:xx,x2:xx,y1:142,y2:150,stroke:ink3,'stroke-width':1},svg);
+    T(svg,xx,164,ms+' ms',{fs:9});});
+}
+
+/* ---------- Q3: draft cost ---------- */
+function drawDraftCost(){
+  const box=$('v-draftcost');if(!box)return;
+  $('f3-sub').textContent=KOQ()
+    ?`drafter forward pass 한 번 vs. target verify pass 한 번 · context ${DC.context_len} tokens · ${DC.gpu}.`
+    :`One drafter forward pass vs. one target verify pass, context ${DC.context_len} tokens, ${DC.gpu}.`;
+  const W=790,H=300,M={l:56,r:150,t:30,b:42};
+  const svg=svgIn(box,W,H,'draft cost versus gamma');
+  const d=css('--draft'),t=css('--target');
+  const xs=DC.gammas.map((g,i)=>M.l+(W-M.l-M.r)*i/(DC.gammas.length-1));
+  const y=v=>H-M.b-(H-M.t-M.b)*(Math.log10(v)-Math.log10(2))/(Math.log10(600)-Math.log10(2));
+  [2,5,10,25,50,100,250,500].forEach(v=>{
+    el('line',{x1:M.l,x2:W-M.r,y1:y(v),y2:y(v),class:'gridline'},svg);
+    T(svg,M.l-8,y(v)+4,v,{a:'end',fs:11});});
+  DC.gammas.forEach((g,i)=>T(svg,xs[i],H-M.b+22,'γ='+g,{fs:11}));
+  T(svg,M.l-40,18,'ms (log)',{a:'start',fs:11});
+  const series=[
+    {name:KOQ()?'AR 등가 γ × t_step':'AR-equivalent γ × t_step',color:t,dash:'5 4',
+     vals:DC.gammas.map(g=>g*T_STEP),derived:true},
+    {name:KOQ()?'target verify (실측)':'target verify (measured)',color:t,vals:DC.verify_ms},
+    {name:KOQ()?'DFlash draft (실측)':'DFlash draft (measured)',color:d,vals:DC.draft_ms},
+  ];
+  const labs=[];
+  series.forEach(s=>{
+    let dd='';s.vals.forEach((v,i)=>{dd+=(i?' L':'M')+xs[i]+' '+y(v);});
+    el('path',{d:dd,fill:'none',stroke:s.color,'stroke-width':2,
+      ...(s.dash?{'stroke-dasharray':s.dash}:{})},svg);
+    s.vals.forEach((v,i)=>{
+      if(!s.derived)el('circle',{cx:xs[i],cy:y(v),r:4.5,fill:s.color},svg);
+      const hit=el('circle',{cx:xs[i],cy:y(v),r:13,fill:'transparent'},svg);
+      hit.addEventListener('mousemove',ev=>showTip(ev,
+        `<b>${s.name}</b><br>γ=${DC.gammas[i]} · ${v.toFixed(1)} ms`));
+      hit.addEventListener('mouseleave',hideTip);});
+    labs.push({y:y(s.vals[s.vals.length-1]),c:s.color,k:s.name.replace(/ \(.*\)/,'')});});
+  labs.sort((a,b)=>a.y-b.y);
+  for(let i=1;i<labs.length;i++)if(labs[i].y-labs[i-1].y<14)labs[i].y=labs[i-1].y+14;
+  labs.forEach(l=>{const e=el('text',{x:W-M.r+8,y:l.y+4,fill:l.c,
+    style:'font-size:11px;font-weight:600'},svg);e.textContent=l.k;});
+}
+
+/* ---------- Q5.1: tau strip ---------- */
+function drawTau(tau){
+  const box=$('v-tau-strip');if(!box)return;
+  const WIN=300,W=790,H=258,ML=142,px=(W-ML-30)/WIN;
+  const svg=svgIn(box,W,H,'tokens produced in 300 ms');
+  const ink=css('--ink'),ink2=css('--ink-2'),ink3=css('--ink-3'),
+        d=css('--draft'),dS=css('--draft-soft'),t=css('--target'),tS=css('--target-soft');
+  const zx=px*4.6; // the cycle drawn at 4.6x zoom so its parts are readable
+  T(svg,ML-12,26,KOQ()?'한 사이클의 구성 (확대)':'one cycle, magnified',{a:'end',fs:10.5,fill:ink2,w:600});
+  T(svg,ML-12,40,KOQ()?'= 아래 띠의 한 칸':'= one box below',{a:'end',fs:8.5,fill:ink3});
+  el('rect',{x:ML,y:16,width:T_DRAFT*zx,height:24,rx:3,fill:dS,stroke:d,'stroke-width':1.4},svg);
+  el('rect',{x:ML+T_DRAFT*zx,y:16,width:T_VER*zx,height:24,rx:3,fill:tS,stroke:t,'stroke-width':1.4},svg);
+  T(svg,ML+T_DRAFT*zx/2,55,`draft ${T_DRAFT.toFixed(1)}`,{fs:9,fill:d,mono:true});
+  T(svg,ML+T_DRAFT*zx+T_VER*zx/2,55,`verify ${T_VER.toFixed(1)} ms`,{fs:9,fill:t,mono:true});
+  T(svg,ML+CYCLE*zx+14,33,`→ ${tau} ${KOQ()?'토큰':'tokens'}`,{a:'start',fs:11,fill:ink,w:600});
+  const rows=[
+    {lab:KOQ()?'보통의 decoding':'ordinary decoding',y:106,cyc:T_STEP,per:1,color:t,soft:tS},
+    {lab:'DFlash',y:176,cyc:CYCLE,per:tau,color:d,soft:dS},
+  ];
+  rows.forEach(r=>{
+    const nc=Math.floor(WIN/r.cyc), tok=nc*r.per;
+    T(svg,ML-12,r.y+4,r.lab,{a:'end',fs:10.5,fill:ink2,w:600});
+    T(svg,ML-12,r.y+20,`${tok} ${KOQ()?'토큰 / 300 ms':'tokens / 300 ms'}`,{a:'end',fs:9,fill:ink3});
+    for(let c=0;c<nc;c++)
+      el('rect',{x:ML+c*r.cyc*px,y:r.y-14,width:r.cyc*px-2,height:34,rx:4,
+        fill:'none',stroke:r.soft,'stroke-width':1.4},svg);
+    const slot=(r.cyc*px-6)/r.per, chipW=Math.max(slot-2,1.4);
+    for(let c=0;c<nc;c++)for(let i=0;i<r.per;i++)
+      el('rect',{x:ML+c*r.cyc*px+3+i*slot,y:r.y-8,width:chipW,height:22,rx:2.5,
+        fill:r.color,opacity:.88},svg);
+  });
+  el('line',{x1:ML,x2:ML+WIN*px,y1:222,y2:222,stroke:ink3,'stroke-width':1},svg);
+  [0,100,200,300].forEach(ms=>{const xx=ML+ms*px;
+    el('line',{x1:xx,x2:xx,y1:218,y2:226,stroke:ink3,'stroke-width':1},svg);
+    T(svg,xx,240,ms+' ms',{fs:9});});
+  T(svg,ML-12,226,KOQ()?'같은 300 ms':'same 300 ms',{a:'end',fs:9,fill:ink3});
+  const L=CYCLE/tau, eta=T_STEP/L;
+  $('tau-math').innerHTML = KOQ()
+    ? `L = (draft ${T_DRAFT.toFixed(1)} + verify ${T_VER.toFixed(1)}) / τ ${tau} = <b>${L.toFixed(2)} ms/토큰</b> &nbsp;·&nbsp; speedup = ${T_STEP.toFixed(1)} / ${L.toFixed(2)} = <b>${eta.toFixed(2)}×</b>`
+    : `L = (draft ${T_DRAFT.toFixed(1)} + verify ${T_VER.toFixed(1)}) / τ ${tau} = <b>${L.toFixed(2)} ms per token</b> &nbsp;·&nbsp; speedup = ${T_STEP.toFixed(1)} / ${L.toFixed(2)} = <b>${eta.toFixed(2)}×</b>`;
+}
+(function(){
+  const s=$('s-tau');if(!s)return;
+  const upd=()=>{$('v-tau').textContent=s.value;drawTau(+s.value);};
+  s.addEventListener('input',upd);
+  $('b-tau-ours').onclick=()=>{s.value=Math.round(TAU_OURS);upd();};
+  $('b-tau-eagle').onclick=()=>{s.value=3;upd();};
+  window.__tauRefresh=upd;
+})();
+
+/* ---------- Q5.1: tau histogram ---------- */
+function drawTauHist(){
+  const box=$('v-tauhist');if(!box)return;
+  const sm=SUM.gsm8k;
+  if(!sm){box.textContent='(pending probe artifact)';return;}
+  const paperTau=(DATA.paper_reference&&DATA.paper_reference.table1_qwen3_8b_t0)
+    ?DATA.paper_reference.table1_qwen3_8b_t0.gsm8k.dflash_16.tau:6.54;
+  const W=790,H=280,M={l:52,r:20,t:20,b:46};
+  const svg=svgIn(box,W,H,'acceptance length histogram');
+  const d=css('--draft'),t=css('--target');
+  const hist=sm.histogram,n=hist.length,bw=(W-M.l-M.r)/n;
+  const ymax=Math.max(...hist)*1.15, y=v=>H-M.b-(H-M.t-M.b)*v/ymax;
+  [0,.05,.1,.15,.2].filter(v=>v<ymax).forEach(v=>{
+    el('line',{x1:M.l,x2:W-M.r,y1:y(v),y2:y(v),class:'gridline'},svg);
+    T(svg,M.l-8,y(v)+4,(v*100).toFixed(0)+'%',{a:'end',fs:11});});
+  hist.forEach((v,i)=>{
+    if(i===0)return;
+    const x=M.l+i*bw+1;
+    const r=el('rect',{x,y:y(v),width:bw-2,height:H-M.b-y(v),rx:3,fill:d},svg);
+    r.addEventListener('mousemove',ev=>showTip(ev,
+      `<b>${i} ${KOQ()?'토큰/사이클':'tokens per cycle'}</b><br>${(v*100).toFixed(1)}%`));
+    r.addEventListener('mouseleave',hideTip);
+    if(i%2===0||i===1)T(svg,x+bw/2-1,H-M.b+20,i,{fs:11});});
+  T(svg,(M.l+W-M.r)/2,H-8,KOQ()?'사이클당 확정된 토큰 수 (수락 + bonus)'
+    :'tokens committed per cycle (accepted + bonus)',{fs:11});
+  const xt=v=>M.l+v*bw+bw/2;
+  el('line',{x1:xt(sm.tau),x2:xt(sm.tau),y1:M.t,y2:H-M.b,stroke:d,'stroke-width':2},svg);
+  T(svg,xt(sm.tau)+6,M.t+10,`${KOQ()?'우리 실측':'ours'} τ=${sm.tau.toFixed(2)}`,{a:'start',fs:11,fill:d,w:600});
+  el('line',{x1:xt(paperTau),x2:xt(paperTau),y1:M.t,y2:H-M.b,stroke:t,'stroke-width':2,'stroke-dasharray':'5 4'},svg);
+  T(svg,xt(paperTau)+6,M.t+26,`${KOQ()?'논문':'paper'} τ=${paperTau.toFixed(2)}`,{a:'start',fs:11,fill:t,w:600});
+}
+
+/* ---------- Q5.2: block diffusion in/out ---------- */
+function drawBlockDiff(){
+  const box=$('v-blockdiff');if(!box)return;
+  const W=790,H=214,n=16,cw=42,x0=66;
+  const svg=svgIn(box,W,H,'block diffusion drafter input and output');
+  const ink=css('--ink'),ink2=css('--ink-2'),ink3=css('--ink-3'),
+        d=css('--draft'),dS=css('--draft-soft'),t=css('--target'),tS=css('--target-soft');
+  T(svg,x0-14,32,KOQ()?'입력':'in',{a:'end',fs:10.5,fill:ink2,w:600});
+  for(let i=0;i<n;i++){
+    const x=x0+i*cw;
+    el('rect',{x,y:18,width:cw-6,height:26,rx:4,fill:i===0?tS:'none',
+      stroke:i===0?t:ink3,'stroke-width':i===0?1.6:1,
+      ...(i===0?{}:{'stroke-dasharray':'3 3'})},svg);
+    T(svg,x+(cw-6)/2,36,i===0?'anchor':'⬚',{fs:i===0?8.5:12,fill:i===0?t:ink3});}
+  T(svg,x0+n*cw/2,60,KOQ()?'확정된 토큰 1개 + mask 자리 15개'
+    :'1 committed token + 15 mask slots',{fs:9.5,fill:ink3});
+  [[3,9],[9,14],[5,12]].forEach(([a,b])=>{
+    const xa=x0+a*cw+(cw-6)/2, xb=x0+b*cw+(cw-6)/2;
+    el('path',{d:`M ${xa} 76 C ${xa} 94, ${xb} 94, ${xb} 76`,fill:'none',
+      stroke:d,'stroke-width':1.1,opacity:.75},svg);});
+  T(svg,x0+n*cw/2,110,KOQ()?'블록 안에서는 양방향 attention — 아직 mask인 자리끼리도 서로 본다'
+    :'bidirectional attention inside the block — masks attend to masks',{fs:9.5,fill:d});
+  el('rect',{x:x0+n*cw/2-95,y:120,width:190,height:26,rx:6,fill:dS,stroke:d,'stroke-width':1.5},svg);
+  T(svg,x0+n*cw/2,138,`${KOQ()?'5-layer drafter · pass 1번':'5-layer drafter · one pass'} · ${T_DRAFT.toFixed(1)} ms`,
+    {fs:10,fill:ink,w:600});
+  T(svg,x0-14,182,KOQ()?'출력':'out',{a:'end',fs:10.5,fill:ink2,w:600});
+  for(let i=0;i<n;i++){
+    const x=x0+i*cw;
+    if(i===0){T(svg,x+(cw-6)/2,186,'—',{fs:10,fill:ink3});continue;}
+    el('rect',{x,y:168,width:cw-6,height:26,rx:4,fill:dS,stroke:d,'stroke-width':1.2},svg);
+    T(svg,x+(cw-6)/2,186,'guess',{fs:8,fill:d});}
+  T(svg,x0+n*cw/2,208,KOQ()?'추측 15개가 동시에 나온다 — 순서 의존이 없다'
+    :'15 guesses, produced simultaneously — no ordering dependency',{fs:9.5,fill:ink3});
+}
+
+/* ---------- Q5.3: acceptance rule on a real cycle ---------- */
+function drawAccept(){
+  const box=$('v-accept');if(!box)return;
+  const tr=DATA.traces;
+  if(!tr||!tr.requests||!tr.requests.length){box.textContent='(pending trace artifact)';return;}
+  const req=tr.requests[0];
+  const cyc=req.cycles.find(c=>c.accepted>=3&&c.accepted<=8)||req.cycles[0];
+  const W=790,H=258,x0=30,cw=48;
+  const svg=svgIn(box,W,H,'acceptance rule on one recorded cycle');
+  const ink=css('--ink'),ink2=css('--ink-2'),ink3=css('--ink-3'),
+        d=css('--draft'),dS=css('--draft-soft'),t=css('--target'),tS=css('--target-soft'),
+        line=css('--line');
+  const shown=Math.min(cyc.draft.length,9);
+  const esc=s=>s.replace(/\n/g,'⏎').replace(/ /g,'␣');
+  T(svg,x0,20,KOQ()?'① drafter가 pass 한 번에 내놓은 추측'
+    :'① the drafter’s guesses, all from one pass',{a:'start',fs:10.5,fill:ink2,w:600});
+  for(let i=0;i<shown;i++){
+    const x=x0+i*cw;
+    el('rect',{x,y:30,width:cw-6,height:26,rx:4,fill:dS,stroke:d,'stroke-width':1.2},svg);
+    T(svg,x+(cw-6)/2,47,esc(cyc.draft[i]).slice(0,6),{fs:9,fill:ink,mono:true});
+    T(svg,x+(cw-6)/2,68,'pos '+(i+1),{fs:8,fill:ink3});}
+  if(cyc.draft.length>shown)
+    T(svg,x0+shown*cw+8,47,`+${cyc.draft.length-shown}`,{a:'start',fs:9,fill:ink3});
+  T(svg,x0,106,KOQ()?'② target이 pass 한 번으로 각 자리에서 스스로 고른 토큰'
+    :'② what the target itself chose at each position — from one pass',{a:'start',fs:10.5,fill:ink2,w:600});
+  for(let i=0;i<shown;i++){
+    const x=x0+i*cw, acc=i<cyc.accepted, first=(i===cyc.accepted);
+    el('rect',{x,y:116,width:cw-6,height:26,rx:4,
+      fill:acc?dS:(first?tS:'none'),stroke:acc?d:(first?t:line),'stroke-width':acc||first?1.4:1},svg);
+    T(svg,x+(cw-6)/2,133,acc?esc(cyc.draft[i]).slice(0,6):(first?esc(cyc.bonus).slice(0,6):'·'),
+      {fs:9,fill:acc||first?ink:ink3,mono:true});
+    T(svg,x+(cw-6)/2,154,acc?(KOQ()?'✓ 같음':'✓ same')
+      :(first?(KOQ()?'✗ 다름':'✗ differs'):(KOQ()?'무효':'void')),
+      {fs:8,fill:acc?d:(first?t:ink3),w:600});}
+  const cutX=x0+cyc.accepted*cw-3;
+  el('line',{x1:cutX,x2:cutX,y1:24,y2:162,stroke:t,'stroke-width':1.6,'stroke-dasharray':'4 3'},svg);
+  T(svg,cutX+6,176,KOQ()?'여기서 자른다 — 오른쪽 자리들도 target이 계산은 했지만, 전제가 틀린 문맥 위라 무효다'
+    :'cut here — the target computed those positions too, but on a context that just became wrong, so they are void',
+    {a:'start',fs:9.5,fill:t,w:600});
+  T(svg,x0,208,KOQ()?'③ 이 사이클이 확정한 것':'③ what this cycle commits',{a:'start',fs:10.5,fill:ink2,w:600});
+  let cx=x0;
+  for(let i=0;i<cyc.accepted;i++){
+    el('rect',{x:cx,y:218,width:cw-6,height:24,rx:4,fill:dS,stroke:d,'stroke-width':1.2},svg);
+    T(svg,cx+(cw-6)/2,234,esc(cyc.draft[i]).slice(0,6),{fs:9,fill:ink,mono:true});cx+=cw;}
+  el('rect',{x:cx,y:218,width:cw-6,height:24,rx:4,fill:tS,stroke:t,'stroke-width':1.4},svg);
+  T(svg,cx+(cw-6)/2,234,esc(cyc.bonus).slice(0,6),{fs:9,fill:ink,mono:true});
+  T(svg,cx+cw+6,235,KOQ()
+    ?`= τ ${cyc.accepted+1} 토큰 (수락 ${cyc.accepted} + bonus 1)`
+    :`= τ ${cyc.accepted+1} tokens (${cyc.accepted} accepted + 1 bonus)`,
+    {a:'start',fs:10,fill:ink2,w:600});
+}
+
+/* ---------- Q5.3: trace replay ---------- */
+let traceState=null;
+(function(){
+  const tr=DATA.traces;
+  if(!tr||!tr.requests||!tr.requests.length)return;
+  const sel=$('req-sel');
+  tr.requests.forEach((r,i)=>{const o=document.createElement('option');o.value=i;
+    o.textContent='#'+(i+1)+' — '+r.prompt_tail.slice(0,42).trim()+'…';sel.appendChild(o);});
+  traceState={R:tr.requests[0],cyc:0,playing:false,timer:null};
+  function stop(){traceState.playing=false;$('t-playlab').textContent=KOQ()?'재생':'play';
+    clearInterval(traceState.timer);}
+  function step(dv){traceState.cyc=Math.max(0,Math.min(traceState.R.cycles.length,traceState.cyc+dv));
+    drawTrace();}
+  $('t-prev').onclick=()=>{stop();step(-1);};
+  $('t-next').onclick=()=>{stop();step(1);};
+  $('t-play').onclick=()=>{if(traceState.playing){stop();return;}
+    traceState.playing=true;$('t-playlab').textContent=KOQ()?'일시정지':'pause';
+    traceState.timer=setInterval(()=>{
+      if(traceState.cyc>=traceState.R.cycles.length)stop();else step(1);},850);};
+  sel.onchange=()=>{stop();traceState.R=tr.requests[+sel.value];traceState.cyc=0;drawTrace();};
+})();
+function drawTrace(){
+  if(!traceState)return;
+  const tr=DATA.traces,R=traceState.R,cyc=traceState.cyc;
+  const committedUpTo=n=>{let toks=[R.first_token];
+    for(let i=0;i<n;i++){const c=R.cycles[i];
+      toks=toks.concat(c.draft.slice(0,c.accepted).concat([c.bonus]).slice(0,c.produced));}
+    return toks;};
+  $('t-max').textContent=R.cycles.length;$('t-cyc').textContent=cyc;
+  const toks=committedUpTo(cyc);$('t-tok').textContent=toks.length;
+  const taus=R.cycles.slice(0,cyc).map(c=>c.produced);
+  $('t-tau').textContent=taus.length?(taus.reduce((a,b)=>a+b,0)/taus.length).toFixed(2):'–';
+  const st=$('stream'),prev=cyc>0?committedUpTo(cyc-1).length:1;
+  st.innerHTML=toks.map((tk,i)=>`<span class="${i>=prev?'new':''}">${tk.replace(/</g,'&lt;')}</span>`).join('');
+  st.scrollTop=st.scrollHeight;
+  const br=$('blockrow');br.innerHTML='';
+  const cur=cyc<R.cycles.length?R.cycles[cyc]:null;
+  if(cur){
+    const mk=(txt,cls)=>{const s=document.createElement('span');s.className='tk '+cls;
+      s.textContent=txt.replace(/\n/g,'⏎');br.appendChild(s);};
+    mk(toks[toks.length-1],'anchor');
+    cur.draft.forEach((dtk,i)=>mk(dtk,i<cur.accepted?'acc':'rej'));
+    mk(cur.bonus,'bonus');
+  } else br.innerHTML='<span class="tk" style="border-style:dashed;color:var(--ink-3)">end of trace</span>';
+  $('tklegend').innerHTML=KOQ()
+    ?'<span><span class="tk anchor" style="padding:0 6px">a</span> anchor (마지막 확정 토큰)</span>'+
+     '<span><span class="tk acc" style="padding:0 6px">✓</span> 수락된 추측</span>'+
+     '<span><span class="tk rej" style="padding:0 6px">x</span> 거부된 추측</span>'+
+     '<span><span class="tk bonus" style="padding:0 6px">+</span> target의 bonus 토큰</span>'
+    :'<span><span class="tk anchor" style="padding:0 6px">a</span> anchor (last committed token)</span>'+
+     '<span><span class="tk acc" style="padding:0 6px">✓</span> guess, accepted</span>'+
+     '<span><span class="tk rej" style="padding:0 6px">x</span> guess, rejected</span>'+
+     '<span><span class="tk bonus" style="padding:0 6px">+</span> target’s bonus token</span>';
+  $('f8-cap').textContent=KOQ()
+    ?`Greedy decode, block size ${tr.block_size}, ${tr.dataset.toUpperCase()}, 우리 A100에서 기록. 칩 하나가 tokenizer가 보는 토큰 하나다.`
+    :`Greedy decode, block size ${tr.block_size}, ${tr.dataset.toUpperCase()}, recorded on our A100. Each chip is one token as the tokenizer sees it.`;
+}
+
+/* ---------- Q5.4: conditioning toggle ---------- */
+function drawCond(kv){
+  const box=$('v-cond');if(!box)return;
+  const W=780,H=306;
+  const svg=svgIn(box,W,H,'conditioning diagram');
+  const ink=css('--ink'),ink3=css('--ink-3'),d=css('--draft'),dS=css('--draft-soft'),t=css('--target');
+  const tX=30,tW=140,layH=28,gap=11;
+  T(svg,tX+tW/2,20,KOQ()?'TARGET (36 layers · 고정)':'TARGET (36 layers, frozen)',{fs:10.5,fill:t,w:600});
+  for(let i=0;i<5;i++){
+    const yy=34+i*(layH+gap);
+    el('rect',{x:tX,y:yy,width:tW,height:layH,rx:5,fill:'none',stroke:t,'stroke-width':1.4},svg);
+    T(svg,tX+tW/2,yy+18,['layer 2','layer 10','layer 18','layer 26','layer 33'][i],{fs:10});
+    el('circle',{cx:tX+tW,cy:yy+layH/2,r:4,fill:t},svg);
+    el('path',{d:`M ${tX+tW+4} ${yy+layH/2} C ${tX+tW+52} ${yy+layH/2}, ${tX+tW+52} 152, ${tX+tW+88} 152`,
+      fill:'none',stroke:t,'stroke-width':1.3,opacity:.75},svg);}
+  const fX=tX+tW+88;
+  el('rect',{x:fX,y:130,width:116,height:44,rx:7,fill:'none',stroke:t,'stroke-width':1.8},svg);
+  T(svg,fX+58,148,KOQ()?'concat + 사영':'concat + project',{fs:10});
+  T(svg,fX+58,164,'context feature',{fs:10.5,fill:t,w:600});
+  const dX=fX+190,dW=170;
+  T(svg,dX+dW/2,20,KOQ()?'DRAFT (5 layers · 학습됨)':'DRAFT (5 layers, trained)',{fs:10.5,fill:d,w:600});
+  for(let i=0;i<5;i++){
+    const yy=34+i*(layH+gap);
+    el('rect',{x:dX,y:yy,width:dW,height:layH,rx:5,fill:dS,stroke:d,'stroke-width':1.4},svg);
+    T(svg,dX+dW/2,yy+18,'draft layer '+(i+1)+(kv?'  ⟵ K/V':''),{fs:10,fill:ink});
+    const yTarget=kv?yy+layH/2:34+layH/2;
+    if(kv||i===0){
+      el('path',{d:`M ${fX+116} 152 C ${fX+150} 152, ${fX+150} ${yTarget}, ${dX-6} ${yTarget}`,
+        fill:'none',stroke:d,'stroke-width':1.8},svg);
+      el('path',{d:`M ${dX-6} ${yTarget} l -7 -4 v 8 z`,fill:d},svg);}
+    if(i>0)el('path',{d:`M ${dX+dW/2} ${yy-gap+2} L ${dX+dW/2} ${yy-2}`,stroke:ink3,'stroke-width':1.3},svg);}
+  T(svg,dX+dW/2,34+5*(layH+gap)+12,
+    kv?(KOQ()?'모든 layer의 K/V cache에 항목으로 들어간다':'enters every layer as extra K/V cache entries')
+      :(KOQ()?'입력에 한 번 섞인 뒤 층을 지나며 희석된다':'mixed into the input once, then diluted layer by layer'),
+    {fs:9.5,fill:ink3});
+  const nums=kv?{tau:4.2,sp:3.3}:{tau:3.5,sp:2.9};
+  T(svg,dX+dW/2,34+5*(layH+gap)+36,
+    `${KOQ()?'논문 Table 9 · GSM8K':'paper Table 9 · GSM8K'}: τ ${nums.tau} · ${nums.sp}×`,
+    {fs:10.5,fill:kv?d:ink3,w:600,mono:true});
+  $('f9-cap').textContent = kv
+    ? (KOQ()?'K/V injection: 사영된 target feature가 모든 draft layer의 Key/Value cache에 덧붙는다. 어느 깊이에서도 조건화가 원래 세기로 유지되므로 layer를 더할수록 τ가 실제로 늘어난다.'
+           :'K/V injection: the projected target feature is appended to the Key/Value cache of every draft layer, so conditioning stays at full strength at any depth and τ actually grows as layers are added.')
+    : (KOQ()?'Input fusion: feature가 맨 아래에서 한 번만 들어간다. 층을 지날 때마다 변형되어 5층쯤이면 신호가 희석되고, 깊이를 더해도 수락률이 늘지 않는다 — EAGLE-3 패턴이다.'
+           :'Input fusion: the feature enters once at the bottom. Each layer transforms it further, so by layer 5 the signal is diluted and adding depth stops improving acceptance — the EAGLE-3 pattern.');
+}
+(function(){
+  if(!$('btn-kv'))return;
+  $('btn-kv').onclick=()=>{$('btn-kv').classList.add('on');$('btn-input').classList.remove('on');drawCond(true);};
+  $('btn-input').onclick=()=>{$('btn-input').classList.add('on');$('btn-kv').classList.remove('on');drawCond(false);};
+  window.__condRefresh=()=>drawCond($('btn-kv').classList.contains('on'));
+})();
+
+/* ---------- Q5.4: the loop ---------- */
+const LOOP_PH=[
+  {n:'① prefill',
+   en:'The prompt runs through the target once — the pass you would do anyway. It emits the first token, and hidden states from five of its layers come out for free.',
+   ko:'prompt가 target을 한 번 통과한다. 어차피 해야 하는 pass다. 첫 토큰이 나오고, 다섯 layer의 hidden state가 공짜로 함께 나온다.'},
+  {n:'② draft',
+   en:'Those five states are fused into one context feature and written into every draft layer’s K/V cache. The drafter fills 15 masks in one pass, reusing the target’s own embedding and LM head.',
+   ko:'그 다섯 state를 하나의 context feature로 융합해 모든 draft layer의 K/V cache에 써넣는다. drafter는 target의 embedding과 LM head를 그대로 빌려 15개 mask를 pass 한 번에 채운다.'},
+  {n:'③ verify',
+   en:'The 16-token block goes through the target in ONE pass. The longest matching prefix survives; the first mismatch supplies the bonus token and cuts the rest.',
+   ko:'16-토큰 블록이 target을 pass 한 번으로 통과한다. 일치하는 가장 긴 prefix가 살아남고, 첫 불일치 자리가 bonus 토큰을 주면서 나머지를 자른다.'},
+  {n:'④ recycle',
+   en:'Here is the closure: that same verification pass already produced hidden states for the committed tokens, so the next cycle’s context feature is free too. The bonus token becomes the next anchor; the draft K/V cache is cropped back and reused.',
+   ko:'여기서 고리가 닫힌다. 방금 그 verify pass가 확정된 토큰들의 hidden state까지 이미 만들어놨으므로 다음 사이클의 context feature도 공짜다. bonus 토큰이 다음 anchor가 되고, draft K/V cache는 잘려서 재사용된다.'},
+];
+let loopCur=0;
+(function(){
+  const pb=$('loop-phases');if(!pb)return;
+  LOOP_PH.forEach((p,i)=>{const b=document.createElement('button');b.textContent=p.n;
+    b.onclick=()=>{loopCur=i;drawLoop();};pb.appendChild(b);});
+  window.__loopRefresh=()=>drawLoop();
+})();
+function drawLoop(){
+  const box=$('v-loop');if(!box)return;
+  const pb=$('loop-phases');
+  [...pb.children].forEach((c,i)=>c.classList.toggle('on',i===loopCur));
+  const W=790,H=214;
+  const svg=svgIn(box,W,H,'one full DFlash cycle');
+  const ink=css('--ink'),ink2=css('--ink-2'),ink3=css('--ink-3'),
+        d=css('--draft'),dS=css('--draft-soft'),t=css('--target'),tS=css('--target-soft'),
+        line=css('--line');
+  const boxes=[
+    {x:26,lab:'target prefill',sub:KOQ()?'첫 토큰 + hidden states':'first token + hidden states',c:t,cs:tS},
+    {x:216,lab:'context feature',sub:KOQ()?'5개 층 융합 → draft K/V':'5 layers fused → draft K/V',c:t,cs:tS},
+    {x:406,lab:KOQ()?'draft · pass 1번':'draft, one pass',sub:KOQ()?'mask 15개를 채운다':'fills 15 masks',c:d,cs:dS},
+    {x:596,lab:'target verify',sub:KOQ()?'1 pass · 수락 + bonus':'one pass · accept + bonus',c:t,cs:tS},
+  ];
+  const active=[[0],[1,2],[3],[3,1]][loopCur];
+  boxes.forEach((b,i)=>{
+    const on=active.includes(i);
+    el('rect',{x:b.x,y:58,width:150,height:52,rx:8,fill:on?b.cs:'none',
+      stroke:on?b.c:line,'stroke-width':on?2:1.2,opacity:on?1:.5},svg);
+    T(svg,b.x+75,82,b.lab,{fs:10.5,fill:on?ink:ink3,w:600});
+    T(svg,b.x+75,98,b.sub,{fs:8.8,fill:on?ink2:ink3});
+    if(i<3){el('path',{d:`M ${b.x+150} 84 l 30 0`,stroke:ink3,'stroke-width':1.3},svg);
+      el('path',{d:`M ${b.x+182} 84 l -7 -4 v 8 z`,fill:ink3},svg);}});
+  const on4=loopCur===3;
+  el('path',{d:'M 746 110 C 746 160, 300 172, 291 118',fill:'none',
+    stroke:on4?d:line,'stroke-width':on4?2:1.2,'stroke-dasharray':'5 4',opacity:on4?1:.5},svg);
+  el('path',{d:'M 291 118 l -4 -9 l 8 1 z',fill:on4?d:line,opacity:on4?1:.5},svg);
+  T(svg,520,170,KOQ()?'verify pass의 hidden state가 다음 사이클의 조건화가 된다'
+    :'the verify pass’s hidden states become the next cycle’s conditioning',
+    {fs:10,fill:on4?d:ink3,w:on4?600:400});
+  T(svg,W/2,30,KOQ()?'사이클당 target pass는 단 한 번 — 그것이 검증이자 다음 조건화다'
+    :'exactly one target pass per cycle — it is both the audit and the next conditioning',
+    {fs:10.5,fill:ink2,w:600});
+  $('loop-cap').textContent=KOQ()?LOOP_PH[loopCur].ko:LOOP_PH[loopCur].en;
+}
+
+/* ---------- Q6: ablation ladder ---------- */
+function drawAblation(){
+  const box=$('v-ablation');if(!box)return;
+  const rows=[
+    {k:KOQ()?'target feature 없음 (Table 10)':'no target features (Table 10)',tau:3.38,sp:2.83,
+     note:KOQ()?'block diffusion만':'block diffusion only'},
+    {k:KOQ()?'+ input fusion (Table 9)':'+ input fusion (Table 9)',tau:3.5,sp:2.9,note:''},
+    {k:KOQ()?'+ K/V injection (Table 9)':'+ K/V injection (Table 9)',tau:4.2,sp:3.3,note:'DFlash'},
+    {k:KOQ()?'3 layers (Table 6 · MATH-500)':'3 layers (Table 6, MATH-500)',tau:5.64,sp:4.69,note:''},
+    {k:KOQ()?'5 layers — 논문 채택':'5 layers — shipped',tau:5.99,sp:4.71,note:''},
+    {k:'8 layers',tau:6.33,sp:4.64,note:KOQ()?'τ는 오르고 speedup은 꺾인다':'τ up, speedup down'},
+  ];
+  const W=790,H=272,ML=250,BW=190;
+  const svg=svgIn(box,W,H,'ablation ladder');
+  const ink=css('--ink'),ink2=css('--ink-2'),ink3=css('--ink-3'),d=css('--draft'),t=css('--target');
+  T(svg,ML+BW/2,18,KOQ()?'수락 길이 τ':'acceptance length τ',{fs:10.5,fill:d,w:600});
+  T(svg,ML+BW+56+BW/2,18,'speedup',{fs:10.5,fill:t,w:600});
+  rows.forEach((r,i)=>{
+    const y=34+i*38;
+    if(i===3)el('line',{x1:14,x2:W-14,y1:y-9,y2:y-9,stroke:css('--line-soft'),'stroke-width':1},svg);
+    T(svg,ML-12,y+15,r.k,{a:'end',fs:10,fill:ink2});
+    if(r.note)T(svg,ML-12,y+28,r.note,{a:'end',fs:8.5,fill:ink3});
+    el('rect',{x:ML,y:y+2,width:BW*r.tau/7,height:20,rx:4,fill:d,opacity:.85},svg);
+    T(svg,ML+BW*r.tau/7+6,y+17,r.tau.toFixed(2),{a:'start',fs:9.5,fill:ink,mono:true});
+    const x2=ML+BW+56;
+    el('rect',{x:x2,y:y+2,width:BW*r.sp/5.2,height:20,rx:4,fill:t,opacity:.85},svg);
+    T(svg,x2+BW*r.sp/5.2+6,y+17,r.sp.toFixed(2)+'×',{a:'start',fs:9.5,fill:ink,mono:true});});
+}
+
+/* ---------- Q8: paper Table 1 ---------- */
+function drawPaper(){
+  const box=$('v-paper');if(!box)return;
+  const TASK=['GSM8K','MATH-500','AIME25','HumanEval','MBPP','LCB','MT-Bench'];
+  const E16=[1.94,1.81,1.79,1.89,1.69,1.57,1.63];
+  const E60=[2.23,2.05,2.05,2.17,1.93,1.81,1.90];
+  const DF =[5.15,6.08,5.62,5.14,4.65,5.51,2.75];
+  const TAU=[6.54,7.87,7.08,6.50,5.95,7.27,4.24];
+  const W=790,H=336,ML=54,MB=68,MT=30,MR=16;
+  const svg=svgIn(box,W,H,'speedup by benchmark');
+  const ink2=css('--ink-2'),ink3=css('--ink-3'),d=css('--draft'),t=css('--target');
+  const y=v=>H-MB-(H-MT-MB)*v/6.6;
+  [1,2,3,4,5,6].forEach(v=>{el('line',{x1:ML,x2:W-MR,y1:y(v),y2:y(v),class:'gridline'},svg);
+    T(svg,ML-8,y(v)+4,v+'×',{a:'end',fs:11});});
+  el('line',{x1:ML,x2:W-MR,y1:y(1),y2:y(1),stroke:ink3,'stroke-width':1.2},svg);
+  T(svg,W-MR-4,y(1)-6,KOQ()?'1.0× = 보통의 decoding':'1.0× = plain decoding',{a:'end',fs:9,fill:ink3});
+  const gw=(W-ML-MR)/TASK.length, bw=gw/4.4;
+  TASK.forEach((tk,i)=>{
+    const gx=ML+i*gw+gw*0.12;
+    [[E16[i],ink3,'EAGLE-3 (16)'],[E60[i],t,'EAGLE-3 (60)'],[DF[i],d,'DFlash (16)']].forEach((b,j)=>{
+      const x=gx+j*(bw+4);
+      const r=el('rect',{x,y:y(b[0]),width:bw,height:y(0)-y(b[0]),rx:3,fill:b[1],
+        opacity:j===0?.55:1},svg);
+      r.addEventListener('mousemove',ev=>showTip(ev,
+        `<b>${b[2]}</b><br>${tk} · ${b[0].toFixed(2)}×`+(j===2?`<br>τ ${TAU[i]}`:'')));
+      r.addEventListener('mouseleave',hideTip);
+      if(j===2)T(svg,x+bw/2,y(b[0])-5,b[0].toFixed(1)+'×',{fs:9,fill:d,w:600,mono:true});});
+    T(svg,ML+i*gw+gw/2,H-MB+18,tk,{fs:9.5,fill:ink2});
+    T(svg,ML+i*gw+gw/2,H-MB+32,'τ '+TAU[i],{fs:8.5,fill:d,mono:true});});
+  [[ink3,'EAGLE-3, 16-token tree',.55],[t,'EAGLE-3, 60-token tree',1],[d,'DFlash, block 16',1]]
+    .forEach((l,i)=>{const x=ML+i*212;
+      el('rect',{x,y:10,width:12,height:12,rx:2,fill:l[0],opacity:l[2]},svg);
+      T(svg,x+18,20,l[1],{a:'start',fs:9.5,fill:ink2});});
+}
+
+/* ---------- Q11: concurrency ---------- */
+function drawConc(){
+  const box=$('v-conc');if(!box)return;
+  const C=[1,4,8,16,32],M500=[5.1,4.5,4.5,3.9,2.8],HE=[4.2,3.6,3.6,3.0,2.4];
+  const W=790,H=254,ML=54,MB=52,MT=20,MR=126;
+  const svg=svgIn(box,W,H,'speedup versus concurrency');
+  const ink2=css('--ink-2'),d=css('--draft'),t=css('--target');
+  const y=v=>H-MB-(H-MT-MB)*(v-1)/5;
+  [1,2,3,4,5,6].forEach(v=>{el('line',{x1:ML,x2:W-MR,y1:y(v),y2:y(v),class:'gridline'},svg);
+    T(svg,ML-8,y(v)+4,v+'×',{a:'end',fs:11});});
+  const x=i=>ML+(W-ML-MR)*i/(C.length-1);
+  C.forEach((c,i)=>T(svg,x(i),H-MB+20,c,{fs:10.5}));
+  T(svg,(ML+W-MR)/2,H-14,KOQ()?'동시 요청 수':'concurrent requests',{fs:10.5,fill:ink2});
+  [[M500,d,'MATH-500'],[HE,t,'HumanEval']].forEach(([v,c,k])=>{
+    let dd='';v.forEach((val,i)=>{dd+=(i?' L':'M')+x(i)+' '+y(val);});
+    el('path',{d:dd,fill:'none',stroke:c,'stroke-width':2},svg);
+    v.forEach((val,i)=>{el('circle',{cx:x(i),cy:y(val),r:4,fill:c},svg);
+      const hit=el('circle',{cx:x(i),cy:y(val),r:12,fill:'transparent'},svg);
+      hit.addEventListener('mousemove',ev=>showTip(ev,`<b>${k}</b><br>concurrency ${C[i]} · ${val}×`));
+      hit.addEventListener('mouseleave',hideTip);});
+    const e=el('text',{x:W-MR+8,y:y(v[v.length-1])+4,fill:c,
+      style:'font-size:11px;font-weight:600'},svg);e.textContent=k;});
+}
+
+/* ---------- i18n ---------- */
+const KO={
+ 'byline':`<em>DFlash: Block Diffusion for Flash Speculative Decoding</em> — Chen, Liang &amp; Liu, ICML 2026 (<a href="https://arxiv.org/abs/2602.06036">arXiv:2602.06036</a>). 위에서 아래로 읽으면 된다. 13개의 읽기 질문에 각각 볼드 한 문장으로 답하고, 그 사이사이에 동작 원리를 그림으로 그렸다. A100 한 장의 probe가 실제 값을 채운다.`,
+ 'e-q1':'Q1 · 배경','h-q1':'forward pass 한 번에 토큰 하나',
+ 'a-q1':'Autoregressive LLM은 토큰 <em>하나</em>를 만들려고 weight 전체를 GPU에 통과시켜야 하고, 이 토큰이 나오기 전에는 다음 토큰을 시작할 수 없다. 그래서 지연은 토큰 수 × pass 한 번이고, 그 pass의 대부분은 계산이 아니라 weight를 옮기는 데 쓰인다.',
+ 'p-q1':'마지막 대목이 이 분야 전체가 통과하는 문이다. batch가 1이면 GPU는 weight 하나당 곱셈 몇 번을 하려고 16 GB를 읽는다. 연산기는 논다. 토큰 하나를 만드는 대신 후보 토큰 여러 개를 pass 한 번으로 <em>검사</em>할 수 있다면 나머지는 거의 공짜다.',
+ 'f1-title':'모든 것의 기준이 되는 시계 <span class="badge ours">probe · A100</span>',
+ 'f1-sub':'Qwen3-8B의 평범한 decoding 여덟 토큰을 시간 축에 실제 비율로 그렸다. 상자 하나가 모델 전체를 통과하는 forward pass 한 번이다.',
+ 'f1-cap':'우리 A100에서 pass 하나를 27.3 ms로 실측했다. 이 논문은 저 상자를 좁히지 않는다. 저런 상자 하나에서 토큰을 하나보다 많이 꺼내는 것이 전부다.',
+ 'e-q2':'Q2 · 문제','h-q2':'순차 병목, 이제 더 심각해진',
+ 'a-q2':'출력 토큰을 단 하나도 바꾸지 않으면서 생성 지연을 줄인다. reasoning 모델이 답하기 전에 chain-of-thought 토큰을 수천 개씩 뱉기 시작하면서 급해진 제약이다.',
+ 'p-q2':'"단 하나도 바꾸지 않으면서"가 엄격한 부분이다. 더 작은 모델을 쓰면 빠르지만 틀리고, distillation은 모델 자체를 바꾼다. <em>동일한</em> 분포를 약속하는 계열은 speculative decoding 하나뿐이다. 미리 추측한 뒤, 진짜 모델이 pass 한 번으로 그 추측을 감사하고 동의하지 않는 것을 버린다.',
+ 'e-q3':'Q3 · 기존 한계','h-q3':'drafter 자신이 autoregressive다',
+ 'a-q3':'이전의 강한 speculative 방법은 전부 작은 <em>autoregressive</em> 모델로 draft한다. 추측 γ개를 만들려면 순차 pass가 γ번 필요하고, 그래서 drafter는 아주 작아야 하며(EAGLE-3는 transformer 한 층), 그러면 살아남는 추측이 적어지고, speedup은 2–3×에서 막힌다.',
+ 'p-q3':'벽이 셋인 함정이다. drafter를 깊게 하면 추측은 좋아지지만 시간이 선형으로 늘고, 추측을 길게 하면 상방은 커지지만 역시 시간이 선형으로 늘며, 얕게 하면 싸지만 추측이 살아남지 못한다. 아래 실측이 그 함정을 실제 비율로 그린 것이다.',
+ 'f2-title':'16개를 추측하기: 순차 vs. 한 방 <span class="badge ours">probe · A100</span>',
+ 'f2-sub':'위 시계와 같은 시간 축이다. 위는 autoregressive drafting이 해야 하는 일, 아래는 block-diffusion drafter가 하는 일.',
+ 'f2-cap':'autoregressive drafter는 토큰당 값을 치르므로 비용이 계단이 되고, diffusion drafter는 블록 전체를 pass 한 번에 채우므로 비용이 계단 하나다. 결과는 "조금 싸다"가 아니라 <em>추측 길이가 아예 비용이 아니게 된다</em>는 것이다.',
+ 'f3-title':'draft 비용 vs. 추측 길이 γ <span class="badge ours">probe · A100</span>',
+ 'f3-cap':'정상 상태 decoding에서 warmup 10회 뒤 50회 계측(σ &lt; 0.1 ms), log 축이다. 점선은 γ × target pass 한 번으로, target 크기 모델로 직렬 drafting을 하면 드는 비용이다. EAGLE-3의 실제 1-layer drafter는 그 선보다 한참 아래지만 기울기는 같고, diffusion drafter의 선은 평평하다.',
+ 'e-q4':'Q4 · 목표','h-q4':'싸면서 동시에 좋은 drafter',
+ 'a-q4':'drafting 비용을 추측 길이와 무관하게 만들어 2–3× 천장을 깨고, 그렇게 아낀 예산을 drafter의 깊이와 target hidden state를 이용한 조건화에 쓴다. 검증이 출력의 불변을 증명 가능하게 보장하는 채로.',
+ 'e-q5a':'Q5 · 방법 — 1/4 · 사이클과 τ의 의미','h-cycle':'한 사이클, τ개의 토큰',
+ 'a-q5':'사이클마다 drafter pass 한 번 + target pass 한 번이 든다. 우리 A100에서 토큰 수와 무관하게 고정 ~35 ms다. 그리고 τ개의 토큰이 확정된다. 논문의 모든 아이디어는 저 상자를 넓히지 않으면서 τ를 올리려는 시도다.',
+ 'p-cycle':'τ(타우)는 이 방법이 딛고 선 숫자인데, 말하기는 쉽고 실감하기는 어렵다. <em>한 사이클에서 살아남는 토큰의 평균 개수</em>다. 아래 그림이 그걸 물리적으로 만든다. 두 띠 모두 같은 300 ms의 벽시계를 덮는다. 위는 보통의 decoding, 아래는 DFlash다. 같은 고정 사이클이 반복되고 그때마다 τ개가 떨어진다. τ를 끌어보고 아래 띠가 채워지는 걸 보라.',
+ 'f4-title':'τ가 실제로 사오는 것, 300 ms 안에서 <span class="badge ours">실측 타이밍 · A100</span>',
+ 'f4-sub':'drafting 5.3 ms + 검증 30.2 ms = 35.5 ms 사이클. 사이클의 폭은 절대 바뀌지 않는다. 거기서 토큰이 몇 개 나오느냐만 바뀐다.',
+ 'tau-lab':'τ — 사이클당 확정 토큰 수','tau-t1':'우리 실측 6.4','tau-t2':'EAGLE-3의 3.2',
+ 'f4-cap':'두 가지가 분명해진다. τ = 1은 speculation을 아예 안 하느니만 못하다. drafter 값을 치르고도 사이클당 토큰 하나다. 그리고 수익은 선형이 아니다. 3.2 → 6.4는 처리량을 거의 두 배로 만들지만 12 → 16은 거의 움직이지 않는다. 사이클의 고정 비용이 더는 병목이 아니기 때문이다.',
+ 'f5-title':'τ가 실제로 어디서 나오는가 <span class="badge ours">probe · GSM8K 6,023 사이클</span>',
+ 'f5-sub':'τ는 평균이고, 평균은 자기 모양을 숨긴다. 128문제 런의 모든 사이클을 확정 토큰 수로 버킷한 것이다.',
+ 'f5-cap':'오른쪽 끝의 스파이크는 블록 전체가 살아남은 경우이고, 1–3의 덩어리는 drafter가 초반부터 틀린 경우다. τ는 이 분포의 평균이므로, τ를 올린다는 건 운 좋은 사이클을 더 운 좋게 만드는 게 아니라 질량을 오른쪽으로 옮기는 일이다.',
+ 'e-q5b':'Q5 · 방법 — 2/4 · 블록을 pass 한 번에','h-diff':'Block diffusion, forward pass 한 번',
+ 'p-diff':'그래서 drafter는 pass 한 번에 15개 토큰을 만들어야 한다. autoregressive 모델은 구조적으로 못 한다. 토큰 3이 토큰 2의 함수이기 때문이다. <em>block diffusion</em> 모델은 할 수 있다. 다른 과제로 학습됐기 때문이다. 주변을 다 보고 masked 자리를 한꺼번에 채우는 것, BERT 계열이 하던 일을 미래 토큰 블록 위에서 하는 것이다.',
+ 'f6-title':'drafter의 입력과 출력',
+ 'f6-sub':'anchor 토큰 하나(target이 마지막으로 확정한 것)와 mask 자리 15개. pass 한 번. 블록 안에서는 양방향 attention이라 9번 자리가 아직 mask인 14번 자리를 볼 수 있다.',
+ 'f6-cap':'drafter가 깊이를 감당할 수 있는 이유이기도 하다. 비용이 블록 크기와 무관하게 pass 한 번이라 논문은 그 절약을 한 층 대신 다섯 층에 쓴다. 다섯 층으로 draft해도 target pass 하나의 1/5이다.',
+ 'e-q5c':'Q5 · 방법 — 3/4 · 검증, 정확히','h-verify':'추측이 수락되거나 죽는 법',
+ 'p-verify':'여기가 출력의 불변을 증명 가능하게 만드는 단계인데, 들리는 것보다 단순하다. target 모델이 블록 전체를 <em>한 번</em> 통과한다. 그 한 번의 pass가 모든 자리에서 target 자신이라면 생성했을 토큰을 만들어낸다. 자리별로 비교해 일치하는 가장 긴 prefix를 남기고, 첫 불일치에서는 target 자신의 토큰을 취하고 나머지는 버린다.',
+ 'f7-title':'실제 사이클 하나, 토큰 단위로 <span class="badge ours">기록된 trace · A100</span>',
+ 'f7-sub':'우리 A100에서 푼 GSM8K 풀이의 실제 사이클이다. drafter의 추측 15개와, target의 검증 pass 한 번이 그것들에 한 일.',
+ 'f7-cap':'bonus 토큰이 조용한 트릭이다. 검증 pass가 불일치 자리에서 target 자신의 다음 토큰을 이미 계산해뒀으므로 공짜로 따라온다. 추측을 <em>하나도</em> 수락하지 못한 사이클도 토큰 하나는 내놓는 이유이자, τ ≥ 1인 이유다.',
+ 'f8-title':'같은 일이 사이클마다 <span class="badge ours">기록된 trace · A100</span>',
+ 'f8-sub':'풀이 하나를 끝까지 넘겨보라. 추측이 어디서 죽는지, 그리고 어디서 16개를 다 맞히는지.',
+ 't-tokl':'확정','t-taul':'누적 τ','t-playlab':'재생',
+ 'q1-l':'넘어가기 전에',
+ 'q1-q':'전부 수락된 사이클 하나와 하나도 수락되지 않은 사이클 하나를 찾아보라. drafter는 어떤 종류의 텍스트에 강한가. 그리고 그것은 이 모델이 무엇을 배웠다는 뜻인가?',
+ 'e-q5d':'Q5 · 방법 — 4/4 · 추측이 좋은 이유','h-cond':'target의 hidden state를 K/V로 주입',
+ 'p-cond':'맨땅에서 추측하는 5층 drafter로는 부족하다. 논문 자신의 ablation이 2.8–3.7×로 못 박는다. DFlash의 추측이 살아남는 이유는 drafter가 맨땅에서 추측하지 않기 때문이다. target 모델이 문맥을 어떻게 표현하고 있는지를 그대로 받아먹는데, 그 표현에는 target이 아직 내놓지 않은 토큰에 대한 정보가 이미 들어 있다. 관건은 그 신호를 <em>어디에</em> 주입하느냐다.',
+ 'f9-title':'target의 지식이 들어가는 자리',
+ 'f9-sub':'논문 Table 9의 두 조건화 전략. 토글해보라.',
+ 'p-loop':'여기까지가 설계다. 루프를 따라가야만 보이는 부분은 두 번째 사이클에서 그 feature가 어디서 오느냐이고, 답이 고리를 깔끔하게 닫는다. 방금 돌아간 검증 pass에서 온다.',
+ 'f10-title':'한 사이클 전체, 그리고 다음 사이클로의 연결',
+ 'f10-sub':'네 박자. 무엇이 계산되고, 무엇이 재사용되고, 무엇이 버려지는지 따라가 보라.',
+ 'e-q6':'Q6 · 핵심 아이디어','h-core':'병렬성이 깊이를 사고, K/V 주입이 그 깊이를 값어치 있게 만든다',
+ 'a-q6':'diffusion drafting이 멀리 추측하는 비용을 없애 깊은 drafter를 감당 가능하게 만들고, target feature를 모든 draft layer의 K/V에 주입해 그 깊이가 허비되지 않게 한다. 둘 중 하나만으로는 3× 근처에 머문다.',
+ 'p-core':'논문의 ablation이 이 문장의 가장 깨끗한 증명이다. 각 실험이 두 반쪽 중 정확히 하나씩을 제거하기 때문이다.',
+ 'f11-title':'설계 선택마다의 가격표 <span class="badge paper">논문 Table 6 · 9 · 10</span>',
+ 'f11-sub':'표기 없으면 GSM8K다. 왼쪽 막대가 수락 길이 τ, 오른쪽이 end-to-end speedup.',
+ 'f11-cap':'위 세 줄을 논증으로 읽으면 된다. 맨몸 diffusion drafter는 평범하고, target feature를 입력에 얹으면 조금 낫고, 같은 신호를 모든 층의 K/V로 옮기면 그제서야 작동한다. 아래 세 줄은 깊이의 trade-off다. layer를 더할수록 τ는 계속 오르지만 8층에서는 drafting 시간이 이득을 갉아먹기 시작해서 논문은 5층을 채택한다.',
+ 'e-q7':'Q7 · 검증','h-q7':'논문은 스스로를 어떻게 검증하나',
+ 'a-q7':'math·code·chat에 걸친 여덟 벤치마크에서 지표 두 개를 본다. 수락 길이 τ와 평범한 autoregressive decoding 대비 end-to-end speedup이다. target은 Qwen3와 LLaMA-3.1, 백엔드는 연구용(Transformers)과 실서비스용(SGLang, 동시성이 중요한 쪽) 둘 다.',
+ 'p-q7':'출력 분포가 구조적으로 불변이므로 정확도는 질문이 아니다. 속도만이 질문이다. 이 페이지의 <span class="badge ours">probe</span> 그림들은 같은 프로토콜을 A100 한 장에서 우리가 돌린 것이다. 논문을 다시 증명하려는 게 아니라 그림에 진짜 토큰과 진짜 밀리초를 넣으려고 돌렸다.',
+ 'e-q8':'Q8 · 결과','h-res':'논문이 실제로 잰 것',
+ 'a-q8':'Qwen3-8B에 greedy decoding 기준으로, DFlash는 math와 code에서 autoregressive decoding보다 4.7–6.1× 빠르고 drafting 예산을 맞춘 EAGLE-3보다 약 2.4× 빠르다. chat(MT-Bench)이 2.75×로 눈에 띄는 약점이다.',
+ 'f12-title':'벤치마크별 speedup, Qwen3-8B <span class="badge paper">논문 Table 1</span>',
+ 'f12-sub':'Greedy decoding, Transformers 백엔드, H200. 괄호 안은 drafting 예산이다. EAGLE-3의 16-토큰 tree가 DFlash의 block size와 맞춘 조건이고, 60-토큰 tree는 EAGLE-3가 원래 선호하는 설정이다.',
+ 'f12-cap':'격차는 수락 길이를 따라간다. τ ≈ 7–8이 나오는 곳, 즉 다음 열 몇 개가 예측 가능한 구조적 math·code에서 DFlash는 달아나고, 열린 chat에서는 τ가 4.2로 떨어지면서 speedup도 같이 떨어진다. 16-토큰 예산의 DFlash가 60-토큰의 EAGLE-3를 이긴다는 점도 보라. 더 큰 탐색 tree는 검증 시간을 쓰는데 수락률이 그 값을 갚지 못한다.',
+ 'e-q9':'Q9 · 비교','h-q9':'정확히 무엇과 비교하나',
+ 'a-q9':'1.0× 바닥으로서의 평범한 autoregressive decoding, 그리고 state of the art로서의 EAGLE-3와 비교한다. 다른 diffusion-drafter 논문들(DiffuSpec, SpecDiff-2)은 공개 구현이 없어 벤치마크 대신 논증으로 다룬다. 7B drafter로 수락률을 사고 그 값을 drafting 지연으로 되갚는 쪽이다.',
+ 'p-q9':'개념적으로 중요한 비교 상대는 PARD다. 작은 autoregressive 모델을 병렬 생성 흉내를 내도록 학습시킨다. 목표는 같고 방향은 반대다. PARD는 drafter의 구조를 두고 행동을 바꾸고, DFlash는 병렬성이 구조가 되도록 아키텍처를 바꾼다.',
+ 'e-q10':'Q10 · 의의','h-q10':'무엇을 바꾸나',
+ 'a-q10':'사람들이 실제로 돈을 내는 작업, 즉 긴 reasoning trace와 code에서 speculative decoding을 "2× 정도의 가치"에서 "5× 정도의 가치"로 옮긴다. 그리고 diffusion 언어 모델을 실패한 범용 모델이 아니라 전문 drafter로 재정의한다.',
+ 'p-q10':'다리가 달린 쪽은 이 재정의다. diffusion LLM은 end-to-end 품질에서 autoregressive를 따라잡느라 고전해왔는데 drafter로서는 그럴 필요가 없다. 품질 보증은 검증이 대준다. 약한 모델에 강한 감사자가 붙은 것은 약한 모델 혼자와는 다른 물건이다.',
+ 'e-q11':'Q11 · 한계','h-q11':'얻은 것을 어디서 되돌려주나',
+ 'a-q11':'drafter를 target 모델마다 따로 학습시켜야 하고, 열린 chat은 math·code가 얻는 speedup의 대략 절반만 얻으며, serving 동시성이 올라가면 이득 전체가 침식된다. 바쁜 GPU는 더 이상 메모리를 기다리고 있지 않기 때문이다.',
+ 'f13-title':'speedup vs. 동시성 <span class="badge paper">논문 Table 3 · B200의 SGLang</span>',
+ 'f13-sub':'Qwen3-8B. 같은 방법, 같은 모델, 동시 요청만 늘렸다.',
+ 'f13-cap':'메커니즘은 Q1을 거꾸로 돌린 것이다. speculation은 노는 연산을 공짜 검증으로 바꾸는 일인데, 요청 32개가 동시에 흐르면 연산기가 더는 놀지 않으므로 바꿀 것이 줄어든다. speculative decoding은 지연 영역의 최적화이고, 이 차트가 그것이 드러나는 자리다.',
+ 'e-q12':'Q12 · 향후 과제','h-q12':'다음은 어디로',
+ 'a-q12':'논문 자신이 남긴 실마리는 적응적 block-size 스케줄링이다. block 16으로 학습한 drafter를 block 8로 돌려도 완만하게만 나빠진다는 것을 ablation이 보이므로, 서버가 부하에 따라 블록을 줄일 수 있다. 저자들은 그 스케줄러를 만들지 않고 남겨뒀다.',
+ 'p-q12':'그 일반화를 우리 A100에서 probe해봤다. 공개된 block-16 checkpoint를 MATH-500에서 block 8로 돌리면 τ가 7.78에서 5.66이 된다. 실제 비용이지만 완만한 비용이고, 논문이 자기 ablation 모델에서 보고한 패턴과 같다. 그 뒤 후속작 DFlash 2가 나왔다.',
+ 'e-q13':'Q13 · 자원 공개','h-q13':'직접 돌릴 수 있는 것',
+ 'a-q13':'저자들이 Qwen3, LLaMA-3.1 등에 대한 코드와 drafter checkpoint를 공개했고(<a href="https://github.com/z-lab/dflash">z-lab/dflash</a>) SGLang·vLLM 통합도 함께 있다. 우리 probe 런은 공개 checkpoint를 무수정으로 썼다.',
+ 'colophon':'이 페이지의 probe: NVIDIA A100-PCIE-40GB 한 장에서 Qwen/Qwen3-8B(bf16) + drafter z-lab/Qwen3-8B-DFlash-b16, upstream 코드 무수정. 여기 어떤 숫자를 쓰기 전에 우리 traced fork가 greedy 출력의 byte 일치를 assert한다. paper 표시가 붙은 그림은 논문 자신의 표(H200/B200)에서 왔다.',
+};
+const ENC=new Map();
+function redrawAll(){
+  drawClock();drawSerial();drawDraftCost();drawTauHist();drawBlockDiff();drawAccept();
+  drawAblation();drawPaper();drawConc();drawLoop();drawTrace();
+  if(window.__tauRefresh)window.__tauRefresh();
+  if(window.__condRefresh)window.__condRefresh();
+}
+function applyLang(){
+  for(const[k,v]of Object.entries(KO)){
+    const e=$(k);if(!e)continue;
+    if(!ENC.has(k))ENC.set(k,e.innerHTML);
+    e.innerHTML=KOQ()?v:ENC.get(k);}
+  $('lang-en').classList.toggle('on',!KOQ());
+  $('lang-ko').classList.toggle('on',KOQ());
+  redrawAll();
+}
+function setLang(l){window.__pageLang=l;try{localStorage.setItem('replica-lang',l);}catch(e){}
+  applyLang();}
+$('lang-en').onclick=()=>setLang('en');
+$('lang-ko').onclick=()=>setLang('ko');
+try{window.__pageLang=localStorage.getItem('replica-lang')||'en';}catch(e){window.__pageLang='en';}
+applyLang();
+</script>
+
+</body>
+</html>

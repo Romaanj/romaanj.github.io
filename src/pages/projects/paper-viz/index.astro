@@ -1,0 +1,167 @@
+---
+import Base from '../../../layouts/Base.astro';
+import LangToggle from '../../../components/LangToggle.astro';
+
+/**
+ * Paper Visualizations — index.
+ *
+ * The explainers themselves are self-contained static pages published from
+ * projects/replica (`python publish_to_site.py`) into
+ * public/projects/paper-viz/<slug>/index.html, so they keep their own styling
+ * and interactivity untouched by the site's global CSS.
+ */
+const papers = [
+  {
+    slug: 'dflash',
+    title: 'DFlash',
+    subtitle: 'Block Diffusion for Flash Speculative Decoding',
+    venue: 'ICML 2026',
+    arxiv: 'https://arxiv.org/abs/2602.06036',
+    date: '2026-08',
+    blurb:
+      'Why one forward pass yields one token, what τ actually buys inside a fixed 300 ms, ' +
+      'and the accept/reject rule played out on a real recorded cycle.',
+    blurb_ko:
+      'forward pass 한 번이 왜 토큰 하나인지, 고정된 300 ms 안에서 τ가 실제로 무엇을 사오는지, ' +
+      '그리고 수락·거부 규칙을 실제로 기록된 사이클 위에서.',
+    figures: ['τ as tokens per 300 ms', 'accept/reject on real tokens', 'the cycle that feeds itself'],
+    figures_ko: ['300 ms당 토큰으로 본 τ', '실제 토큰 위의 수락·거부', '자기 자신을 먹이는 사이클'],
+  },
+  {
+    slug: 'gptq',
+    title: 'GPTQ',
+    subtitle: 'Accurate Post-Training Quantization for Generative Pre-trained Transformers',
+    venue: 'ICLR 2023',
+    arxiv: 'https://arxiv.org/abs/2210.17323',
+    date: '2026-08',
+    blurb:
+      'Error compensation taught on two weights before anything else, the Hessian followed ' +
+      'from its derivation into the per-column arithmetic, and quantization drawn as a lattice.',
+    blurb_ko:
+      '오차 보상을 다른 무엇보다 먼저 weight 두 개로 가르치고, Hessian을 유도에서 열 단위 산술까지 ' +
+      '따라가며, 양자화를 격자 그림으로.',
+    figures: ['compensation on two weights', 'one cycle of real arithmetic', 'the OBQ column stepper'],
+    figures_ko: ['weight 두 개로 배우는 보상', '실제 산술로 보는 한 사이클', 'OBQ 열 스테퍼'],
+  },
+];
+---
+
+<Base
+  title="Paper Visualizations — Junwon Lee"
+  description="Papers I wanted to understand completely — read through 13 questions, with every concept drawn and probed on our own GPU."
+>
+  <section class="section pv-hero">
+    <div class="container">
+      <p class="eyebrow">Project · Paper Visualization</p>
+      <h1>
+        <span class="lang-en">Papers, drawn until they are obvious</span>
+        <span class="lang-ko">당연해질 때까지 그려본 논문들</span>
+      </h1>
+      <p class="lede">
+        <span class="lang-en">
+          Reading a paper twice is not the same as understanding it. These are papers I took
+          apart until the mechanism was drawable: each one is read through the same 13
+          questions, answered in one sentence each, with a picture wherever a sentence was not
+          enough. Nothing here is a summary — the figures run, and the numbers in them come
+          from probe runs on our own A100.
+        </span>
+        <span class="lang-ko">
+          논문을 두 번 읽는 것과 이해하는 것은 다르다. 여기 있는 것은 메커니즘을 그릴 수 있을
+          때까지 뜯어본 논문들이다. 전부 같은 13개 질문으로 읽고 각 질문에 한 문장으로 답한 뒤,
+          문장으로 부족한 자리마다 그림을 넣었다. 요약이 아니다. 그림은 실제로 돌아가고, 그 안의
+          숫자는 우리 A100에서 돌린 probe에서 나온다.
+        </span>
+      </p>
+      <LangToggle />
+    </div>
+  </section>
+
+  <section class="section-tight">
+    <div class="container">
+      <div class="pv-grid">
+        {papers.map((p) => (
+          <article class="card pv-card">
+            <div class="status-row">
+              <span class="tag accent">{p.venue}</span>
+              <span class="date">{p.date}</span>
+            </div>
+            <h3><a href={`/projects/paper-viz/${p.slug}/`}>{p.title}</a></h3>
+            <p class="pv-subtitle">{p.subtitle}</p>
+            <p>
+              <span class="lang-en">{p.blurb}</span>
+              <span class="lang-ko">{p.blurb_ko}</span>
+            </p>
+            <ul class="pv-figs">
+              {p.figures.map((f, i) => (
+                <li>
+                  <span class="lang-en">{f}</span>
+                  <span class="lang-ko">{p.figures_ko[i]}</span>
+                </li>
+              ))}
+            </ul>
+            <span class="card-meta pv-foot">
+              <a class="arrow-link" href={`/projects/paper-viz/${p.slug}/`}>
+                <span class="lang-en">Open</span><span class="lang-ko">열기</span>
+              </a>
+              <a class="arrow-link muted" href={p.arxiv} rel="noopener" target="_blank">arXiv</a>
+            </span>
+          </article>
+        ))}
+      </div>
+
+      <p class="pv-note">
+        <span class="lang-en">
+          Each page is self-contained and runs entirely in your browser — the interactive
+          figures need no server. Pages marked <em>probe</em> carry values measured on a single
+          NVIDIA A100; pages marked <em>paper</em> chart the authors' own tables.
+        </span>
+        <span class="lang-ko">
+          각 페이지는 자기완결형이고 전부 브라우저 안에서 돌아간다. 인터랙티브 그림에 서버는
+          필요 없다. <em>probe</em> 표시는 A100 한 장에서 실측한 값이고, <em>paper</em> 표시는
+          저자들의 표를 차트로 옮긴 것이다.
+        </span>
+      </p>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .pv-hero h1 { max-width: 20ch; }
+  .pv-grid {
+    display: grid;
+    gap: 1.25rem;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  }
+  .pv-card h3 { margin-bottom: 0.15rem; }
+  .pv-subtitle {
+    font-size: 0.9rem;
+    color: var(--muted, #6b7280);
+    font-style: italic;
+    margin: 0 0 0.6rem;
+  }
+  .pv-figs {
+    list-style: none;
+    padding: 0;
+    margin: 0.75rem 0 0.25rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+  .pv-figs li {
+    font-size: 0.74rem;
+    letter-spacing: 0.02em;
+    padding: 3px 9px;
+    border: 1px solid var(--border, #e5e7eb);
+    border-radius: 999px;
+    color: var(--muted, #6b7280);
+  }
+  .pv-foot { display: flex; gap: 1rem; align-items: center; }
+  .arrow-link.muted { opacity: 0.7; font-weight: 500; }
+  .pv-note {
+    margin-top: 2rem;
+    font-size: 0.85rem;
+    line-height: 1.6;
+    color: var(--muted, #6b7280);
+    max-width: 70ch;
+  }
+</style>
