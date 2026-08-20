@@ -15,8 +15,8 @@ published: true
 JAX는 멀티 디바이스 프로그래밍에 대해 세 가지 사고방식을 지원한다:
 
 1. **컴파일러야, 운전대를 잡아라!** XLA 컴파일러가 자동으로 배열을 분할하고, 주어진 프로그램이 돌아가도록 어떤 통신을 추가할지 결정하게 한다. 이렇게 하면 단일 디바이스에서 돌아가는 프로그램을 아무것도 바꾸지 않고 수천 개의 디바이스에서 자동으로 실행할 수 있다.
-2. **JAX야, 운전대를 잡아라!** 자동 병렬화는 훌륭하지만, 가끔 컴파일러가 말도 안 되는 짓을 한다. Explicit sharding을 쓰면 평소처럼 단일 디바이스 코드를 작성하되, sharding 전파는 (컴파일러가 아니라) JAX가 처리한다. 덕분에 여러분이 뭘 원하는지 불분명할 때 JAX가 되물어 확인할 수 있다.
-3. **그냥 내가 뜻하는 대로 쓰게 해달라니까!** 컴파일러는 좋지만, 가끔 잘못된 일을 하고 의도하지 않은 통신을 추가한다. 우리가 실행하려는 통신을 정확히 명시하고 싶을 때도 있다.
+2. **JAX야, 운전대를 잡아라!** 자동 병렬화는 훌륭하지만 가끔 컴파일러가 말도 안 되는 짓을 한다. Explicit sharding을 쓰면 평소처럼 단일 디바이스 코드를 작성하되, sharding 전파는 (컴파일러가 아니라) JAX가 처리한다. 덕분에 여러분이 뭘 원하는지 불분명할 때 JAX가 되물어 확인할 수 있다.
+3. **그냥 내가 뜻하는 대로 쓰게 해달라니까!** 컴파일러는 좋지만 가끔 잘못된 일을 하고 의도하지 않은 통신을 추가한다. 실행하려는 통신을 정확히 명시하고 싶을 때도 있다.
 
 | 모드 | 뷰 | 명시적 sharding? | 명시적 collective? |
 |:---:|:---:|:---:|:---:|
@@ -26,9 +26,9 @@ JAX는 멀티 디바이스 프로그래밍에 대해 세 가지 사고방식을 
 
 이에 대응해 JAX는 각 모드를 위한 API를 제공한다:
 
-1. `jax.jit`(`Auto` mesh axis 사용)을 쓰면 기존의 어떤 JAX 함수든 sharding된 입력으로 호출할 수 있다. 그러면 JAX는 XLA의 [Shardy](https://openxla.org/shardy) 컴파일러로 프로그램을 자동 병렬화한다. XLA는 기존 연산이 돌아가는 데 필요한 통신(AllGather, ReduceScatter, AllReduce 등)을 대신 추가해 준다. 완벽하지는 않지만, 대개는 코드 수정 없이 프로그램을 임의 개수의 칩으로 스케일링하는 일을 꽤 괜찮게 해낸다.
-2. `Explicit` mesh axis를 쓰는 `jax.jit`은 (1)과 비슷해 보이지만, sharding 전파를 XLA 대신 JAX가 처리한다. 즉 배열의 sharding이 실제로 JAX 타입 시스템의 일부가 되고, JAX는 모호한 통신을 감지하면 에러를 내서 사용자가 이를 해소하게 한다.
-3. `jax.shard_map`은 더 수동적인 대응물이다. 프로그램의 디바이스-로컬 뷰를 얻고, 원하는 통신은 전부 직접 명시적으로 작성해야 한다. sharding된 배열이 있는데 각 디바이스에 전체가 필요한가? `jax.lax.all_gather`를 추가하라. 배열을 디바이스들에 걸쳐 합산하고 싶은가? `jax.lax.psum`(AllReduce)을 추가하라. 프로그래밍은 더 어렵지만, 원하지 않는 일이 벌어질 가능성은 훨씬 낮다.
+1. `jax.jit`(`Auto` mesh axis 사용)을 쓰면 기존의 어떤 JAX 함수든 sharding된 입력으로 호출할 수 있다. 그러면 JAX는 XLA의 [Shardy](https://openxla.org/shardy) 컴파일러로 프로그램을 자동 병렬화한다. XLA는 기존 연산이 돌아가는 데 필요한 통신(AllGather, ReduceScatter, AllReduce 등)을 대신 추가해 준다. 완벽하지는 않지만 대개는 코드 수정 없이 프로그램을 임의 개수의 칩으로 스케일링하는 일을 꽤 괜찮게 해낸다.
+2. `Explicit` mesh axis를 쓰는 `jax.jit`은 (1)과 비슷해 보이지만 sharding 전파를 XLA 대신 JAX가 처리한다. 배열의 sharding이 실제로 JAX 타입 시스템의 일부가 되고, JAX는 모호한 통신을 감지하면 에러를 내서 사용자가 이를 해소하게 한다.
+3. `jax.shard_map`은 더 수동적인 대응물이다. 프로그램의 디바이스-로컬 뷰를 얻고, 원하는 통신은 전부 직접 명시적으로 작성해야 한다. sharding된 배열이 있는데 각 디바이스에 전체가 필요한가? `jax.lax.all_gather`를 추가하라. 배열을 디바이스들에 걸쳐 합산하고 싶은가? `jax.lax.psum`(AllReduce)을 추가하라. 프로그래밍은 더 어렵지만 원하지 않는 일이 벌어질 가능성은 훨씬 낮다.
 
 ### Auto sharding 모드
 
@@ -62,17 +62,17 @@ jit_matmul = jax.jit(matmul_square, out_shardings=jax.P('X', None)).lower(In, W)
 out = jit_matmul(In, W)
 ```
 
-이 코드는 어떤 sharding으로도 자동으로 실행되며 연산을 우리 디바이스들에 분할한다. **그런데 하드웨어 수준에서는 실제로 무슨 일이 일어나는가?**
+이 코드는 어떤 sharding으로도 자동으로 실행되며 연산을 디바이스들에 분할한다. **그런데 하드웨어 수준에서는 실제로 무슨 일이 일어나는가?**
 
-1. 먼저 In과 W를 디바이스들에 걸쳐 sharding된 상태로 생성한다[^1]. W는 contracting 차원을 따라 2-way로 sharding되고, In은 8-way로 — 입력 차원을 따라 4-way, contracting 차원을 따라 2-way로 — sharding된다. 이는 W[D<sub>Y</sub>, F], In[B<sub>X</sub>, D<sub>Y</sub>]라는 sharding에 해당하며, 일종의 model parallelism + data parallelism이다.
+1. 먼저 In과 W를 디바이스들에 걸쳐 sharding된 상태로 생성한다[^1]. W는 contracting 차원을 따라 2-way로 sharding되고, In은 8-way로 — 입력 차원을 따라 4-way, contracting 차원을 따라 2-way로 — sharding된다. W[D<sub>Y</sub>, F], In[B<sub>X</sub>, D<sub>Y</sub>]라는 sharding에 해당하며, 일종의 model parallelism + data parallelism이다.
 2. 로컬에서(즉 한 디바이스에서) 실행했다면 `matmul_square`는 그냥 입력을 제곱하고 단순한 matmul을 수행했을 것이다. 하지만 `out_shardings`를 `P('X', None)`으로 지정했기 때문에, 출력은 batch를 따라 sharding되되 모델 차원에 대해서는 복제(replicate)되어야 하고, 이를 계산하려면 AllReduce가 필요하다.
 
-이전 장들의 표기를 쓰면, 아마 다음과 같은 일이 일어날 것이다:
+이전 장들의 표기를 쓰면 아마 다음과 같은 일이 일어날 것이다:
 
 1. Out[B<sub>X</sub>, F] { U<sub>Y</sub> } = In[B<sub>X</sub>, D<sub>Y</sub>] \*<sub>D</sub> W[D<sub>Y</sub>, F]
 2. Out[B<sub>X</sub>, F] = **AllReduce**(Out[B<sub>X</sub>, F] { U<sub>Y</sub> })
 
-`jax.jit`이 이걸 자동으로 추가해 준다! `jit_matmul.as_text()`로 HLO를 실제로 출력해 보면 (대폭 축약해서) 다음과 같은 HLO를 볼 수 있다:
+`jax.jit`이 이걸 자동으로 추가해 준다! `jit_matmul.as_text()`로 HLO를 실제로 출력해 보면 (대폭 축약해서) 다음과 같은 HLO가 나온다:
 
 ```py
 # This fusion is the actual matmul of the sharded inputs and matrix
@@ -82,9 +82,9 @@ out = jit_matmul(In, W)
 ROOT %AllReduce = bf16[2,8192]{1,0:T(4,128)(2,1)} AllReduce(bf16[2,8192]{1,0:T(4,128)(2,1)S(1)} %fusion)
 ```
 
-위에서 matmul(fusion)과 AllReduce를 볼 수 있다. shape에 특히 주목하라. `bf16[2, 1024]`는 activation의 로컬 뷰인데, `batch_size=8`이 4개 디바이스에 나뉘고 `d_model=2048`도 마찬가지로 2-way로 나뉘기 때문이다.
+위에서 matmul(fusion)과 AllReduce가 보인다. shape에 특히 주목하라. `bf16[2, 1024]`는 activation의 로컬 뷰다. `batch_size=8`이 4개 디바이스에 나뉘고 `d_model=2048`도 마찬가지로 2-way로 나뉘기 때문이다.
 
-**이건 꽤 마법 같다!** 프로그램이 아무리 복잡해도 [Shardy](https://openxla.org/shardy)와 jit은 모든 중간 activation의 sharding을 찾아내고 필요한 통신을 추가하려고 시도한다. 그렇긴 해도 Shardy에는 결함이 있다. 실수를 하기도 한다. 프로파일을 보다가 뭔가 잘못됐다는 걸 알아차릴 때가 있다. 굳이 필요하지도 않은 거대한 AllGather가 프로파일의 80%를 차지하는 식이다. 이럴 때는 `jax.lax.with_sharding_constraint`로 중간 텐서에 명시적으로 주석을 달아 컴파일러를 교정해 볼 수 있다. 예컨대 matmul이 두 개일 때, 다음과 같이 중간 activation이 `y` 차원을 따라 sharding되도록 강제할 수 있다(이게 좋은 생각이라는 건 아니다):
+**이건 꽤 마법 같다!** 프로그램이 아무리 복잡해도 [Shardy](https://openxla.org/shardy)와 jit은 모든 중간 activation의 sharding을 찾아내고 필요한 통신을 추가하려고 시도한다. 그렇긴 해도 Shardy에는 결함이 있다. 실수를 하기도 한다. 프로파일을 보다가 뭔가 잘못됐다는 걸 알아차릴 때가 있다. 굳이 필요하지도 않은 거대한 AllGather가 프로파일의 80%를 차지하는 식이다. 이럴 때는 `jax.lax.with_sharding_constraint`로 중간 텐서에 명시적으로 주석을 달아 컴파일러를 교정해 볼 수 있다. 예컨대 matmul이 두 개일 때, 다음과 같이 중간 activation이 `y` 차원을 따라 sharding되도록 강제하면 된다(이게 좋은 생각이라는 건 아니다):
 
 ```py
 import jax
@@ -101,11 +101,11 @@ def matmul(x, W_in, W_out):
   return jnp.einsum('bf,df->bd', hidden, W_out)
 ```
 
-자동 분할의 세계에서 JAX 병렬 프로그래밍의 약 60%는 이런 식으로 `jax.lax.with_sharding_constraint`를 통해 중간 sharding을 제어하는 일이다. 하지만 "컴파일러 간질이기(compiler tickling)"는 즐거운 프로그래밍 모델이 아니기로 악명 높다. 모든 중간 변수에 주석을 달아도 올바른 결과가 나올지 여전히 알 수 없다. 그 대신, JAX 자체가 sharding 전파를 다루고 제어할 수 있다면 어떨까?
+자동 분할의 세계에서 JAX 병렬 프로그래밍의 약 60%는 이렇게 `jax.lax.with_sharding_constraint`로 중간 sharding을 제어하는 일이다. 하지만 "컴파일러 간질이기(compiler tickling)"는 즐거운 프로그래밍 모델이 아니기로 악명 높다. 모든 중간 변수에 주석을 달아도 올바른 결과가 나올지 여전히 알 수 없다. 그 대신, JAX 자체가 sharding 전파를 다루고 제어할 수 있다면 어떨까?
 
 ### Explicit sharding 모드
 
-Explicit sharding(또는 "sharding in types")은 automatic sharding과 아주 비슷해 보이지만, sharding 전파가 JAX 수준에서 일어난다! 각 JAX 연산에는 인자들의 sharding으로부터 결과의 sharding을 만들어내는 sharding 규칙이 있다. 결과 sharding은 `jax.typeof`로 확인할 수 있다:
+Explicit sharding(또는 "sharding in types")은 automatic sharding과 아주 비슷해 보이지만 sharding 전파가 JAX 수준에서 일어난다! 각 JAX 연산에는 인자들의 sharding으로부터 결과의 sharding을 만들어내는 sharding 규칙이 있다. 결과 sharding은 `jax.typeof`로 확인할 수 있다:
 
 ```py
 import jax
@@ -132,7 +132,7 @@ def f(x):
 f(x)
 ```
 
-보다시피 JAX가 입력(`x`)의 sharding을 출력(`out`)으로 전파했고, 이는 trace 시점에 `jax.typeof`로 들여다볼 수 있다. 대부분의 연산에서는 합리적인 선택지가 하나뿐이어서 이 규칙이 단순하고 자명하다(예: elementwise 연산은 같은 sharding을 유지한다). 하지만 어떤 연산들은 결과를 어떻게 shard할지 모호한데, 이 경우 JAX는 trace 시점 에러를 던지며 프로그래머에게 `out_sharding` 인자를 명시적으로 제공하라고 요구한다(예: jnp.einsum, jnp.reshape 등). 충돌이 있는 다른 예를 보자:
+보다시피 JAX가 입력(`x`)의 sharding을 출력(`out`)으로 전파했고, trace 시점에 `jax.typeof`로 들여다볼 수 있다. 대부분의 연산에서는 합리적인 선택지가 하나뿐이어서 이 규칙이 단순하고 자명하다(예: elementwise 연산은 같은 sharding을 유지한다). 하지만 어떤 연산들은 결과를 어떻게 shard할지 모호한데, 이 경우 JAX는 trace 시점 에러를 던지며 프로그래머에게 `out_sharding` 인자를 명시적으로 제공하라고 요구한다(예: jnp.einsum, jnp.reshape 등). 충돌이 있는 다른 예를 보자:
 
 ```py
 # We create a matrix W and input activations In sharded across our devices.
@@ -156,7 +156,7 @@ Please specify the output sharding via the `out_sharding` parameter.
 Got lhs_contracting_spec=('Y',) and rhs_contracting_spec=('Y',)
 ```
 
-이건 아주 좋은 일인데, einsum의 출력을 어떻게 shard해야 하는지가 실제로 모호하기 때문이다. 출력 sharding은:
+einsum의 출력을 어떻게 shard해야 하는지가 실제로 모호하니, 이 에러는 아주 좋은 일이다. 출력 sharding은:
 * P('X', 'Y')일 수 있고 — 이 경우 ReduceScatter가 유발된다 — 또는
 * P('X', None)일 수도 있다 — 이 경우 AllReduce가 유발된다.
 
@@ -200,9 +200,9 @@ out = slice_and_average(x)
 assert out.shape == (4,)
 ```
 
-**이 코드는 무엇을 하는가?** `slice_and_average`는 각 TPU에서 배열의 1/8을 가지고 실행되며, 거기서 앞의 4개 원소를 잘라내 전체 mesh에 걸쳐 평균을 낸다. 즉 사실상 `mean(x[:4], x[64:68], x[128:132], …)`을 계산하는 셈이다. 이건 꽤 멋진 일인데, JAX에서 달리 표현하기 쉽지 않은 연산이기 때문이다.
+**이 코드는 무엇을 하는가?** `slice_and_average`는 각 TPU에서 배열의 1/8을 가지고 실행되며, 거기서 앞의 4개 원소를 잘라내 전체 mesh에 걸쳐 평균을 낸다. 사실상 `mean(x[:4], x[64:68], x[128:132], …)`을 계산하는 셈이다. JAX에서 달리 표현하기 쉽지 않은 연산이니 꽤 멋진 일이다.
 
-**jax.jit 대신 왜 이렇게 하는가?** `jax.jit`을 썼다면 `slice_and_average`는 배열의 전역 뷰(전체 `[512,]` 배열)를 봤을 것이다. 이 비균일한 slice를 잘라낸 다음 평균을 내야 했을 테고, XLA가 그걸 올바르게 해석해 줘야 했을 것이다. XLA가 잘못된 통신을 추가하거나 혼란에 빠졌을 수도 있다. 여기서는 로컬 뷰를 보면서 우리에게 필요한 통신만 작성한다.
+**jax.jit 대신 왜 이렇게 하는가?** `jax.jit`을 썼다면 `slice_and_average`는 배열의 전역 뷰(전체 `[512,]` 배열)를 봤을 것이다. 이 비균일한 slice를 잘라낸 다음 평균을 내야 했을 테고, XLA가 그걸 올바르게 해석해 줘야 했을 것이다. XLA가 잘못된 통신을 추가하거나 혼란에 빠졌을 수도 있다. 여기서는 로컬 뷰를 보면서 필요한 통신만 작성한다.
 
 **예시 [Collective Matmul]:** 더 현실적인 예로, activation이 처음부터 model sharded인 model parallelism을 구현하고 싶다고 하자. 즉 A[B<sub>X</sub>, D<sub>Y</sub>] \*<sub>D</sub> W[D, F<sub>Y</sub>] -> Out[B<sub>X</sub>, F<sub>Y</sub>]이다. 순진하게는 A를 먼저 AllGather한 다음 로컬 행렬 곱셈을 하면 된다:
 
@@ -282,19 +282,19 @@ expected_out = matmul(A, W)
 np.testing.assert_array_equal(shmapped_out, expected_out)
 ```
 
-이거 꽤 깔끔하다! 벤치마크해 보면 이 버전이 훨씬 빠르다는 것도 알 수 있다! [여기](https://imgur.com/a/e9I6SrM)는 기본 jit matmul의 프로파일인데, 시작 부분의 커다란 blocking AllGather 때문에 311us가 걸린다:
+이거 꽤 깔끔하다! 벤치마크해 보면 이 버전이 훨씬 빠르기까지 하다! [여기](https://imgur.com/a/e9I6SrM)는 기본 jit matmul의 프로파일인데, 시작 부분의 커다란 blocking AllGather 때문에 311us가 걸린다:
 
 <figure>
   <img src="https://jax-ml.github.io/scaling-book/assets/img/not-overlapped.png" alt="AllGather가 겹쳐지지 않은 기본 jit matmul의 프로파일" loading="lazy" />
 </figure>
 
-그리고 [여기](https://imgur.com/a/21iy0Sv)는 위의 버전으로, 244us가 걸린다. 프로파일에 AllGather가 없는 것을 볼 수 있다. 전부 알짜 작업이다! FLOPs 활용률도 훨씬 높다.
+그리고 [여기](https://imgur.com/a/21iy0Sv)는 위의 버전으로, 244us가 걸린다. 프로파일에 AllGather가 보이지 않는다. 전부 알짜 작업이다! FLOPs 활용률도 훨씬 높다.
 
 <figure>
   <img src="https://jax-ml.github.io/scaling-book/assets/img/overlapped.png" alt="통신이 겹쳐진 collective matmul의 프로파일" loading="lazy" />
 </figure>
 
-contracting 차원에 sharding이 없을 때의 matmul 시간이 [224us](https://imgur.com/a/i3gNKfq)라는 점도 짚어 둘 만하다. 즉 여기서 우리는 unsharded 기준선에 놀랄 만큼 가까이 와 있다. 이는 TPU 활용률을 높이기 위해 여러분이 하게 될 법한 성능 엔지니어링의 좋은 예다. 더 많은 `shard_map` 예제는 [이 노트가 훌륭하다](https://jax.readthedocs.io/en/latest/notebooks/shard_map.html#example-1-all-gather-on-one-side).
+contracting 차원에 sharding이 없을 때의 matmul 시간이 [224us](https://imgur.com/a/i3gNKfq)라는 점도 짚어 둘 만하다. 여기서 우리는 unsharded 기준선에 놀랄 만큼 가까이 와 있다. TPU 활용률을 높이기 위해 여러분이 하게 될 법한 성능 엔지니어링의 좋은 예다. 더 많은 `shard_map` 예제는 [이 노트가 훌륭하다](https://jax.readthedocs.io/en/latest/notebooks/shard_map.html#example-1-all-gather-on-one-side).
 
 이제 `jax.jit`이나 `shard_map`으로 직접 구현해 볼 만한 유용한 연습 문제 몇 개를 소개한다!
 
@@ -304,7 +304,7 @@ contracting 차원에 sharding이 없을 때의 matmul 시간이 [224us](https:/
 
 **문제 1:** **A**를 shape float32[S<sub>X</sub>, D<sub>Y</sub>]의 activation 배열이라 하고, `X * Y = N`이라 하자. 다음을 해 보라:
 
-1. 각 `(X, Y)` shard 내부의 평균을 계산하는 JAX 함수를 작성하라. 즉 `arr[i, j]`가 shard `(i, j)`의 평균인 [X, Y] 크기의 배열을 반환한다. `jax.jit`과 `shard_map` 두 가지 방식 모두로 해 보라. 각각 프로파일해서 얼마나 걸렸는지 확인하라. 통신이 추가되었는가? *힌트: 추가되지 않아야 정상이지만, 가끔 XLA가 그래도 추가한다.*
+1. 각 `(X, Y)` shard 내부의 평균을 계산하는 JAX 함수를 작성하라. 즉 `arr[i, j]`가 shard `(i, j)`의 평균인 [X, Y] 크기의 배열을 반환한다. `jax.jit`과 `shard_map` 두 가지 방식 모두로 해 보라. 각각 프로파일해서 얼마나 걸렸는지 확인하라. 통신이 추가되었는가? *힌트: 추가되지 않아야 정상이지만 가끔 XLA가 그래도 추가한다.*
 
 2. 어떤 shift에 대해 **X를 따라 각 shard 내부에서** `roll(x, shift, axis=0) - x`를 반환하는 JAX 함수를 작성하라. 이걸 jax.jit으로 시킬 만큼 내가 가학적이지는 않으니, `shard_map`으로만 하면 된다.
 
@@ -383,13 +383,13 @@ np.testing.assert_array_equal(y1, y2)
 
 </details>
 
-**문제 2:** 여기서는 기본적인 "mixture of experts" 모델을 함께 만들어 본다. **W**: float32[E<sub>X</sub>, D, F]를 E개의 "expert" 행렬 집합이라 하자. **A**: float32[S<sub>X</sub>, D]를 우리의 activation이라 하고, **B**: int32[S<sub>X</sub>]를 "라우팅 할당(routing assignments)"의 집합이라 하자. B[i]는 `[0, E)` 범위의 정수로, 그 activation을 어떤 행렬로 처리할지 알려 준다. `Out[i] = A[i] @ W[B[i]]`를 반환하는 JAX 함수를 작성하려 한다.
+**문제 2:** 여기서는 기본적인 "mixture of experts" 모델을 함께 만들어 본다. **W**: float32[E<sub>X</sub>, D, F]를 E개의 "expert" 행렬 집합이라 하자. **A**: float32[S<sub>X</sub>, D]를 activation이라 하고, **B**: int32[S<sub>X</sub>]를 "라우팅 할당(routing assignments)"의 집합이라 하자. B[i]는 `[0, E)` 범위의 정수로, 그 activation을 어떤 행렬로 처리할지 알려 준다. `Out[i] = A[i] @ W[B[i]]`를 반환하는 JAX 함수를 작성하려 한다.
 
 1. 우선 sharding을 아예 무시하는 것부터 시작하자. 이 텐서들을 전부 한 디바이스에 들어갈 만큼 작게 만들어라. 이 함수의 로컬 구현을 작성하라. *`[S, D, F]` shape의 배열을 실체화(materialize)하지 않도록 주의하라! 힌트: 마스킹에 신경 쓰면서 토큰들을 `[E, S, D]` shape의 새 버퍼로 정렬해 보라(왜 두 번째 차원의 크기가 S여야 할까?).*
 
-2. 위 방법을 그냥 `jax.jit`하면, 뭔가 일이 일어나긴 할 것이다. 프로파일해서 XLA가 어떤 통신을 하기로 결정했는지 보라. 얼마나 걸리는가?
+2. 위 방법을 그냥 `jax.jit`하면 뭔가 일이 일어나긴 할 것이다. 프로파일해서 XLA가 어떤 통신을 하기로 결정했는지 보라. 얼마나 걸리는가?
 
-3. 위 구현에서 눈에 띄는 문제 하나는, 아마 전체 activation **A**를 로컬로 gather한다는 것이다. 즉 AllGather<sub>X</sub>([S<sub>X</sub>, D])다. 이는 통신 면에서 비쌀 뿐 아니라, 전체 activation을 로컬에 담을 수 없다면 메모리 면에서도 엄청나게 비싸다. 위를 `shard_map`과 명시적 통신으로 구현하라.
+3. 위 구현에서 눈에 띄는 문제 하나는, 아마 전체 activation **A**를 로컬로 gather한다는 것이다. 즉 AllGather<sub>X</sub>([S<sub>X</sub>, D])다. 통신 면에서 비쌀 뿐 아니라, 전체 activation을 로컬에 담을 수 없다면 메모리 면에서도 엄청나게 비싸다. 위를 `shard_map`과 명시적 통신으로 구현하라.
 
       1. 첫 번째 패스에서는 `jax.lax.all_gather`를 쓰고 step 1처럼 재정렬하는 것이 가장 쉬울 것이다.
 
@@ -442,13 +442,13 @@ def matmul(W, x, B):
 
 **문제 3:** 위의 collective matmul 예제는 실제 LLM에 정말로 아주 유의미하다. 예제를 변형해 전체 Transformer 스택을 만들어 보자.
 
-1. 연습으로, 우선 AllReduce collective matmul, 즉 A[B<sub>X</sub>, D<sub>Y</sub>] \*<sub>D</sub> W[D<sub>Y</sub>, F] -> Out[B<sub>X</sub>, F]를 구현하는 것부터 시작하자. 출력이 replicate되지 않는다는 점에 유의하라. 순진한 알고리즘은 위에서 논의했다 — 기본적으로 로컬 matmul 뒤에 AllReduce를 붙이는 것이다. 이 연산의 통신이 겹쳐진 "collective" 버전을 만들어 보라. *힌트: 출력 차원에 대해 타일링하고, `jax.lax.psum`(즉 AllReduce)을 자유롭게 사용하라.* *참고: XLA가 이를 처리하는 방식 때문에, 실제로는 기준선보다 빠르지 않을 수도 있다.*
+1. 연습으로, 우선 AllReduce collective matmul, 즉 A[B<sub>X</sub>, D<sub>Y</sub>] \*<sub>D</sub> W[D<sub>Y</sub>, F] -> Out[B<sub>X</sub>, F]를 구현하는 것부터 시작하자. 출력이 replicate되지 않는다는 점에 유의하라. 순진한 알고리즘은 위에서 논의했다 — 기본적으로 로컬 matmul 뒤에 AllReduce를 붙이는 것이다. 이 연산의 통신이 겹쳐진 "collective" 버전을 만들어 보라. *힌트: 출력 차원을 따라 타일링하고, `jax.lax.psum`(AllReduce)을 자유롭게 사용하라.* *참고: XLA가 이를 처리하는 방식 때문에, 실제로는 기준선보다 빠르지 않을 수도 있다.*
 
-2. 위 AllReduce collective matmul의 대응물은 ReduceScatter collective matmul이다. Tmp[B<sub>X</sub>, F<sub>Y</sub>] \*<sub>F</sub> W2[F<sub>Y</sub>, D] -> Out[B<sub>X</sub>, D<sub>Y</sub>]처럼 말이다. 이는 Transformer의 down-projection 행렬에서 발생한다. 이것의 collective, 즉 통신이 겹쳐진 버전을 JAX로 구현하라. 필요한 최소한의 데이터만 전달하도록 주의하라. *힌트: 결과를 누적하면서 permute해 보라.*
+2. 위 AllReduce collective matmul의 대응물은 ReduceScatter collective matmul이다. Tmp[B<sub>X</sub>, F<sub>Y</sub>] \*<sub>F</sub> W2[F<sub>Y</sub>, D] -> Out[B<sub>X</sub>, D<sub>Y</sub>]처럼 말이다. Transformer의 down-projection 행렬에서 발생한다. 이것의 collective, 즉 통신이 겹쳐진 버전을 JAX로 구현하라. 필요한 최소한의 데이터만 전달하도록 주의하라. *힌트: 결과를 누적하면서 permute해 보라.*
 
 3. 이 둘을 합쳐, In[B<sub>X</sub>, D<sub>Y</sub>] \*<sub>D</sub> W<sub>in</sub>[D, F<sub>Y</sub>] \*<sub>F</sub> W<sub>out</sub>[F<sub>Y</sub>, D] -> Out[B<sub>X</sub>, D<sub>Y</sub>]를 통신이 겹쳐진 상태로 수행하는 end-to-end Transformer 블록을 만들어라.[^4] `jax.jit` 구현보다 얼마나 빠른가?
 
-**문제 4:** 위에서 구현한 collective matmul은 전부 단방향이다. 즉 한 방향으로만 permute한다. collective AllReduce matmul과 collective ReduceScatter matmul을 양방향 통신을 쓰도록 다시 작성하라. 얼마나 더 빨라지는가?
+**문제 4:** 위에서 구현한 collective matmul은 전부 단방향이다. 한 방향으로만 permute한다. collective AllReduce matmul과 collective ReduceScatter matmul을 양방향 통신을 쓰도록 다시 작성하라. 얼마나 더 빨라지는가?
 
 <div class="takeaway">
 
@@ -456,7 +456,7 @@ def matmul(W, x, B):
 
 </div>
 
-[^1]: 우리가 이걸 어떻게 했는지 눈여겨보라. 이것은 특정 sharding을 가진 배열을 만드는 한 가지 방법이다(즉 생성 함수에 device 인자를 추가하는 것). 다른 방법은 `jnp.array(....)`로 배열을 평범하게 만든 뒤 예컨대 `jax.device_put(..., jax.P('X', 'Y'))`를 하는 것이다. 또 다른 방법은 원하는 배열을 생성하는 함수를 작성해 두고, `out_shardings`를 원하는 값으로 지정해서 jit 컴파일하는 것이다.
+[^1]: 우리가 이걸 어떻게 했는지 눈여겨보라. 특정 sharding을 가진 배열을 만드는 한 가지 방법이다(즉 생성 함수에 device 인자를 추가하는 것). 다른 방법은 `jnp.array(....)`로 배열을 평범하게 만든 뒤 예컨대 `jax.device_put(..., jax.P('X', 'Y'))`를 하는 것이다. 또 다른 방법은 원하는 배열을 생성하는 함수를 작성해 두고, `out_shardings`를 원하는 값으로 지정해서 jit 컴파일하는 것이다.
 [^2]: mesh를 에뮬레이션해서 colab에서 직접 갖고 놀고 싶다면, 다음 셀을 사용하면 된다: `import jax; jax.config.update('jax_num_cpu_devices', 8)`
-[^3]: 가짜 문제로 mesh를 에뮬레이션만 하고 싶다면, `import jax; jax.config.update('jax_num_cpu_devices', 8)`로 CPU에서 8개의 가짜 디바이스를 만들 수도 있다(jax >= 0.4.27 언저리가 필요하다). 다만 이는 실제 성능을 반영하지 않는다.
+[^3]: 가짜 문제로 mesh를 에뮬레이션만 하고 싶다면, `import jax; jax.config.update('jax_num_cpu_devices', 8)`로 CPU에서 8개의 가짜 디바이스를 만들 수도 있다(jax >= 0.4.27 언저리가 필요하다). 다만 실제 성능을 반영하지 않는다.
 [^4]: 이전과 마찬가지로, 여기서는 생략한 비선형성 때문에 $W_{in} \cdot W_{out}$을 먼저 계산할 수는 없다.

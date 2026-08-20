@@ -55,17 +55,17 @@ KV cache로 샘플링하면 $n$개 토큰을 생성하는 시간 복잡도가 FF
 
 ### Transformer를 더 세분화해서 보기
 
-지금까지 우리는 Transformer를 대체로 feedforward 블록의 더미로 취급해 왔다. FLOPs와 메모리 관점에서는 이걸로 충분한 경우가 많지만, 추론을 제대로 모델링하기에는 부족하다.[^2] [4장](/scaling-book/transformers/)에서 봤듯이 Transformer forward pass의 주요 구성 요소는 다음과 같다:
+지금까지는 Transformer를 대체로 feedforward 블록의 더미로 취급해 왔다. FLOPs와 메모리 관점에서는 이걸로 충분한 경우가 많지만, 추론을 제대로 모델링하기에는 부족하다.[^2] [4장](/scaling-book/transformers/)에서 봤듯이 Transformer forward pass의 주요 구성 요소는 다음과 같다:
 
 1. **여러 선형 연산들.** MLP($W_{in}$, $W_{out}$)와 attention의 QKV projection 및 output projection($W_Q$, $W_K$, $W_V$, $W_O$)이 여기에 든다. 모두 HBM에서 파라미터와 activation 배치를 읽고, FLOPs를 좀 수행하고, 결과를 HBM에 다시 쓰는 일이다.
 2. **Dot-product attention.** HBM에서 key-value projection 배치와 query activation 배치를 읽고, 내적 몇 번과 softmax 연산을 좀 하고, attention 결과를 HBM에 다시 써야 한다.
 3. **그 밖의 모든 것.** layer norm 적용, activation 함수, 토큰 샘플링, KV cache 갱신, positional embedding 등이다. FLOPs가 좀 들긴 하지만 위 연산들에 지배되거나 그 안으로 fuse된다.
 
-다음 몇 개 절에서는 이들 각각을 prefill과 generation의 맥락에서 보며 무엇이 성능의 병목이 될지 물을 것이다. 단일 가속기 안에서 우리는 compute-bound인가 memory-bound인가? prefill과 generation에서 그 답이 얼마나 다른지 강조하고 싶다.
+다음 몇 개 절에서는 이들 각각을 prefill과 generation의 맥락에서 보며 무엇이 성능의 병목이 될지 물을 것이다. 단일 가속기 안에서는 compute-bound인가 memory-bound인가? prefill과 generation에서 그 답이 얼마나 다른지 강조하고 싶다.
 
 ### 선형 연산: 무엇이 병목인가?
 
-모든 선형 연산은 MLP 블록에 있든 attention에 있든 개념적으로 같다. 그 arithmetic intensity는 batch size에 달려 있다. [1장](/scaling-book/roofline/)에서 이미 한 계산이지만 반복할 가치가 있다. $\text{bf16[B, D]}$ 배치와 $\text{bf16[D, F]}$ 행렬의 단일 행렬 곱셈을 보자. 이는 큰 MLP 블록($W_\text{in}$ 또는 $W_\text{out}$)일 수도 있고 더 작은 attention projection($W_Q$, $W_K$, $W_V$, $W_O$) 중 하나일 수도 있다. 이 matmul을 하려면 두 배열을 HBM에서 MXU로 로드하고, 곱셈을 수행하고, 결과를 HBM에 다시 써야 한다. 이전처럼:
+모든 선형 연산은 MLP 블록에 있든 attention에 있든 개념적으로 같다. 그 arithmetic intensity는 batch size에 달려 있다. [1장](/scaling-book/roofline/)에서 이미 한 계산이지만 반복할 가치가 있다. $\text{bf16[B, D]}$ 배치와 $\text{bf16[D, F]}$ 행렬의 단일 행렬 곱셈을 보자. 큰 MLP 블록($W_\text{in}$ 또는 $W_\text{out}$)일 수도 있고 더 작은 attention projection($W_Q$, $W_K$, $W_V$, $W_O$) 중 하나일 수도 있다. 이 matmul을 하려면 두 배열을 HBM에서 MXU로 로드하고, 곱셈을 수행하고, 결과를 HBM에 다시 써야 한다. 이전처럼:
 
 $$
 T_\text{math} = \frac{\text{Computation FLOPs}}{\text{Accelerator FLOPs/s}} = \frac{2BDF}{\text{Accelerator FLOPs/s}}
@@ -81,7 +81,7 @@ $$
 \frac{2BDF}{2BD + 2DF + 2BF} \geq \frac{\text{Accelerator FLOPs/s}}{\text{Bandwidth Bytes/s}} \underset{\text{TPU v5e}}{=} \frac{1.97E+14}{8.20E+11} = 240
 $$
 
-이어야 한다. 우변은 우리 하드웨어의 arithmetic intensity다. 이제 $D$와 $F$가 $B$에 비해 매우 크다고 가정하면(보통 배치는 많아야 500이고 $D$와 $F > 10k$다), $\small{2BD + 2DF + 2BF \approx 2DF}$라는 사실을 이용해 분모를 단순화할 수 있고, 다음을 얻는다:
+이어야 한다. 우변은 하드웨어의 arithmetic intensity다. 이제 $D$와 $F$가 $B$에 비해 매우 크다고 가정하면(보통 배치는 많아야 500이고 $D$와 $F > 10k$다), $\small{2BD + 2DF + 2BF \approx 2DF}$라는 사실을 이용해 분모를 단순화해 다음을 얻는다:
 
 $$
 \begin{align*}
@@ -90,7 +90,7 @@ $$
 \end{align*}
 $$
 
-weight를 quantize하거나 행렬 곱셈에 더 낮은 정밀도의 FLOPs를 쓰면 이 임계 batch size는 달라질 수 있다. 예를 들어 weight를 int8이나 fp8로 quantize하면 $B_\text{crit}$는 2배 줄어든다. FLOPs를 int8이나 fp8로 수행하면 $B_\text{crit}$는 2배 늘어난다. 따라서 $\beta = \text{bits per param} / \text{bits per activation}$, $\alpha_\text{hbm} = C / W_\text{hbm}$로 두면 임계 batch size는 사실 $B_\text{crit} = \beta \alpha_\text{hbm}$이다.
+weight를 quantize하거나 행렬 곱셈에 더 낮은 정밀도의 FLOPs를 쓰면 이 임계 batch size는 달라진다. 예를 들어 weight를 int8이나 fp8로 quantize하면 $B_\text{crit}$는 2배 줄어든다. FLOPs를 int8이나 fp8로 수행하면 $B_\text{crit}$는 2배 늘어난다. 따라서 $\beta = \text{bits per param} / \text{bits per activation}$, $\alpha_\text{hbm} = C / W_\text{hbm}$로 두면 임계 batch size는 사실 $B_\text{crit} = \beta \alpha_\text{hbm}$이다.
 
 <div class="takeaway">
 
@@ -98,7 +98,7 @@ weight를 quantize하거나 행렬 곱셈에 더 낮은 정밀도의 FLOPs를 �
 
 </div>
 
-학습 중에는 같은 weight를 아주 큰 배치에 재사용하므로 모든 행렬 곱셈에서 intensity가 높다. **이 높은 arithmetic intensity는 prefill에도 그대로 이어지는데, 사용자 프롬프트가 보통 수백에서 수천 토큰에 이르기 때문이다.** 앞서 봤듯 TPU v5e의 하드웨어 arithmetic intensity는 240이므로, 이 하드웨어에서 bf16으로 도는 dense 모델에 240 토큰보다 긴 시퀀스가 들어오면 compute-bound가 될 것으로 기대할 수 있고, 만사형통이다. 이보다 짧은 프롬프트도 기술적으로는 함께 배치해 활용률을 높일 수 있지만 보통 그럴 필요는 없다.
+학습 중에는 같은 weight를 아주 큰 배치에 재사용하므로 모든 행렬 곱셈에서 intensity가 높다. **이 높은 arithmetic intensity는 prefill에도 그대로 이어지는데, 사용자 프롬프트가 보통 수백에서 수천 토큰에 이르기 때문이다.** 앞서 봤듯 TPU v5e의 하드웨어 arithmetic intensity는 240이므로, 이 하드웨어에서 bf16으로 도는 dense 모델에 240 토큰보다 긴 시퀀스가 들어오면 compute-bound가 될 것으로 기대되고, 만사형통이다. 이보다 짧은 프롬프트도 기술적으로는 함께 배치해 활용률을 높일 수 있지만 보통 그럴 필요는 없다.
 
 <div class="takeaway">
 
@@ -114,13 +114,13 @@ weight를 quantize하거나 행렬 곱셈에 더 낮은 정밀도의 FLOPs를 �
 
 </div>
 
-*이 수치가 얼마나 큰지 짚어 둘 만하다!* generation batch size 240이란 240개의 요청이 동시에 생성 중이라는 뜻이고, dense 모델이라면 KV cache도 240개 따로라는 뜻이다. 그래서 일부 벌크 추론 환경을 제외하면 실전에서 달성하기 어렵다. 반면 prefill에서 240 토큰 이상을 밀어 넣는 것은 꽤 일상적이다. 다만 sparsity가 커질수록 어느 정도 주의가 필요하다.
+*이 수치가 얼마나 큰지 짚어 둘 만하다!* generation batch size 240이란 240개의 요청이 동시에 생성 중이고, dense 모델이라면 KV cache도 240개 따로라는 말이다. 그래서 일부 벌크 추론 환경을 제외하면 실전에서 달성하기 어렵다. 반면 prefill에서 240 토큰 이상을 밀어 넣는 것은 꽤 일상적이다. 다만 sparsity가 커질수록 어느 정도 주의가 필요하다.
 
-**이 정확한 숫자는 quantization의 종류와 하드웨어에 따라 달라진다는 점에 유의하라.** 가속기는 낮은 정밀도에서 더 많은 연산을 공급할 수 있는 경우가 많다. 예를 들어 파라미터는 int8인데 연산을 bf16으로 하면 임계 batch size는 120으로 떨어진다. activation과 파라미터가 모두 int8이면, TPU v5e가 int8 x int8을 400 TOPs/s로 공급할 수 있으므로 다시 240으로 튀어 오른다.
+**이 정확한 숫자는 quantization의 종류와 하드웨어에 따라 달라진다는 점에 유의하라.** 가속기는 낮은 정밀도에서 더 많은 연산을 공급하는 경우가 많다. 예를 들어 파라미터는 int8인데 연산을 bf16으로 하면 임계 batch size는 120으로 떨어진다. activation과 파라미터가 모두 int8이면, TPU v5e가 int8 x int8을 400 TOPs/s로 공급할 수 있으므로 다시 240으로 튀어 오른다.
 
 ### Attention은 어떤가?
 
-dot-product attention 연산으로 가면 이야기가 더 복잡해진다. 특히 KV cache를 감안해야 하기 때문이다. 순수한 multi-headed attention의 attention head 하나만 보자. 단일 Flash Attention fusion에서 우리는[^3]:
+dot-product attention 연산으로 가면 이야기가 더 복잡해진다. 특히 KV cache를 감안해야 하기 때문이다. 순수한 multi-headed attention의 attention head 하나만 보자. 단일 Flash Attention fusion에서는[^3]:
 
 1. shape $\text{bf16[B, T, D]}$인 $Q$ activation을 HBM에서 읽는다.
 2. $\text{bf16[B, S, D]}$ 텐서 한 쌍인 $KV$ cache를 HBM에서 읽는다.
@@ -134,7 +134,7 @@ $$
 \text{Multiheaded Attention Arithmetic Intensity} = \frac{4BSTD}{4BSD + 4BTD} = \frac{ST}{S+T}
 $$
 
-prefill에서는 self-attention이므로 $S=T$이고, 따라서 $T^2 / 2T = T / 2$로 단순화된다. 이는 좋은 소식인데, **prefill 중 attention의 arithmetic intensity가 $\Theta(T)$**라는 뜻이기 때문이다. 즉 attention에서 compute-bound가 되기는 꽤 쉽다. 시퀀스 길이가 어느 정도만 길면 문제없다!
+prefill에서는 self-attention이므로 $S=T$이고, 따라서 $T^2 / 2T = T / 2$로 단순화된다. **prefill 중 attention의 arithmetic intensity가 $\Theta(T)$**라는 뜻이니 좋은 소식이다. attention에서 compute-bound가 되기는 꽤 쉽다. 시퀀스 길이가 어느 정도만 길면 문제없다!
 
 하지만 generation은 시퀀스 차원이 자명하고(trivial), $B$와 $D$ 차원이 소거되므로 다음 근사를 쓸 수 있다:
 
@@ -142,7 +142,7 @@ $$
 S \gg T = 1 \implies \frac{ST}{S+T} \approx 1
 $$
 
-이는 나쁜 소식인데, generation 중에는 attention의 arithmetic intensity를 개선하기 위해 할 수 있는 일이 아무것도 없다는 뜻이기 때문이다. 거대한 KV cache를 로드하면서 아주 적은 양의 FLOPs만 수행하고 있는 것이다. **그래서 attention에서는 기본적으로 항상 memory bandwidth-bound다!**
+나쁜 소식이다. generation 중에는 attention의 arithmetic intensity를 개선하기 위해 할 수 있는 일이 아무것도 없다. 거대한 KV cache를 로드하면서 아주 적은 양의 FLOPs만 수행하고 있는 것이다. **그래서 attention에서는 기본적으로 항상 memory bandwidth-bound다!**
 
 <div class="takeaway">
 
@@ -152,11 +152,11 @@ $$
 
 *개념적으로 왜 그럴까?* 모델의 선형 부분에서 compute-bound가 되는 주된 이유는, 파라미터(메모리 bandwidth를 많이 먹는 구성 요소)가 많은 배치 원소에 재사용되기 때문이다. 그러나 KV cache는 배치 원소마다 따로 있으므로 batch size가 커지면 KV cache도 늘어난다. 아키텍처를 공격적으로 손보지 않는 한 여기서는 거의 *항상* memory-bound가 된다.
 
-이는 또한 파라미터 메모리가 KV cache 메모리와 비슷해지는 순간부터, batch size를 늘려도 throughput의 수익이 체감한다는 뜻이기도 하다. 수익 체감이 얼마나 아픈지는 시퀀스 하나 기준 파라미터 대 KV cache 바이트의 비율, 즉 대략 $2DF / SHK$ 비율에 달려 있다. $HK\approx D$이므로 이는 대략 $F$ 대 $S$(시퀀스 길이)의 비율에 의존한다. KV cache를 작게 만드는 아키텍처 수정에도 좌우된다(잠시 뒤 더 말한다).
+파라미터 메모리가 KV cache 메모리와 비슷해지는 순간부터는 batch size를 늘려도 throughput의 수익이 체감한다는 말이기도 하다. 수익 체감이 얼마나 아픈지는 시퀀스 하나 기준 파라미터 대 KV cache 바이트의 비율, 즉 대략 $2DF / SHK$ 비율에 달려 있다. $HK\approx D$이므로 대략 $F$ 대 $S$(시퀀스 길이)의 비율에 의존한다. KV cache를 작게 만드는 아키텍처 수정에도 좌우된다(잠시 뒤 더 말한다).
 
 ### LLM latency와 throughput의 이론적 추정
 
-이 계산으로부터, 최적화할 때 목표로 삼을 만한 스텝 시간의 꽤 좋은 한계를 얻을 수 있다. **(주의: 독자가 이 장 전체에서 단 하나만 가져가야 한다면 바로 다음 내용이다.)** generation 중 batch size가 작을 때(흔한 경우), attention과 MLP 블록 모두에서 memory bandwidth bound라고 가정하면 스텝당 latency의 하한을 잡을 수 있다:
+이 계산으로부터, 최적화할 때 목표로 삼을 만한 스텝 시간의 꽤 좋은 한계를 얻을 수 있다. **(주의: 독자가 이 장 전체에서 단 하나만 가져가야 한다면 바로 다음 내용이다.)** generation 중 batch size가 작을 때(흔한 경우), attention과 MLP 블록 모두에서 memory bandwidth bound라고 가정하면 스텝당 latency의 하한이 잡힌다:
 
 $$
 \begin{equation*}
@@ -187,7 +187,7 @@ $$
 <details>
 <summary>정답 보기</summary>
 
-**정답:** int8이면 파라미터는 30e9 바이트를 쓰고, 주어진 스펙에서 KV cache는 각각 `100e3 * 8192 = 819MB`를 쓴다. 칩은 16개이고, 각각 `8.2e11` bytes/s의 bandwidth와 `1.97e14` bf16 FLOPs/s를 가진다. batch size가 작으므로 위 식에서 스텝 시간은 최소 `(4 * 819e6 + 30e9) / (16 * 8.2e11) = 2.5 ms`로 기대할 수 있다. 256 토큰이라면 MLP 블록이 확실히 compute-bound 영역에 들어가므로, 스텝 시간은 대략 `(256 * 819e6) / (16 * 8.2e11) + (2 * 256 * 30e9) / (16 * 1.97e14) = 21ms`가 된다.
+**정답:** int8이면 파라미터는 30e9 바이트를 쓰고, 주어진 스펙에서 KV cache는 각각 `100e3 * 8192 = 819MB`를 쓴다. 칩은 16개이고, 각각 `8.2e11` bytes/s의 bandwidth와 `1.97e14` bf16 FLOPs/s를 가진다. batch size가 작으므로 위 식에서 스텝 시간은 최소 `(4 * 819e6 + 30e9) / (16 * 8.2e11) = 2.5 ms`로 기대된다. 256 토큰이라면 MLP 블록이 확실히 compute-bound 영역에 들어가므로, 스텝 시간은 대략 `(256 * 819e6) / (16 * 8.2e11) + (2 * 256 * 30e9) / (16 * 1.97e14) = 21ms`가 된다.
 
 </details>
 
@@ -213,7 +213,7 @@ batch size라는 손잡이로 latency와 throughput을 맞바꿀 수 있을 뿐 
 
 * HBM 읽기가 FLOPs와 완벽하게 겹쳐진다는 가정은 현실적이지 않다. 컴파일러(XLA)는 실수를 저지를 수 있기 때문이다.
 * sharding된 모델에서는 XLA가 model-sharded 행렬 곱셈의 ICI 통신을 FLOPs 자체와 효율적으로 겹치는 데 실패하는 일도 잦아서, $$\text{BS}=32$$를 넘으면 선형 연산에서 latency 손해를 보기 시작하는 경우가 많다.
-* 이론적 roofline보다 큰 batch size에서도 불완전한 겹침 때문에 throughput이 조금은 더 개선된다. 그래도 이는 좋은 휴리스틱이다.
+* 이론적 roofline보다 큰 batch size에서도 불완전한 겹침 때문에 throughput이 조금은 더 개선된다. 그래도 좋은 휴리스틱이다.
 
 </details>
 
@@ -231,7 +231,7 @@ batch size라는 손잡이로 latency와 throughput을 맞바꿀 수 있을 뿐 
 | H (qkv_dim)        | 128    |
 | V (num_embeddings) | 32,000 |
 
-추론 중 메모리를 쓰는 것은 무엇일까? 당연히, 우리의 파라미터다. 세어 보면:
+추론 중 메모리를 쓰는 것은 무엇일까? 당연히, 파라미터다. 세어 보면:
 
 | param            | 공식                                                                                                          | 크기 (bytes)                                                |
 | ---------------- | ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
@@ -239,11 +239,11 @@ batch size라는 손잡이로 latency와 throughput을 맞바꿀 수 있을 뿐 
 | Vocab 파라미터     | 2 (input과 output embedding) x n_embeddings x d_model                                                         | 2 x 32,000 x 5,120 = **0.3e9**                                 |
 | Attention 파라미터 | [2 (*q와 output*) x d_model x n_heads x d_qkv + 2 (*k와 v*) x d_model x n\_kv\_heads x d_qkv] x n_layers | (2 x 5,120 x 40 x 128 + 2 x 5,120 x 40 x 128) x 40 = **4.2e9** |
 
-이 파라미터들을 더하면 8.5e9 + 4.2e9 + 0.3e9 = **총 13e9 파라미터**로, 기대와 정확히 일치한다. 앞 절들에서 봤듯 학습 중에는 파라미터를 bfloat16으로, optimizer 상태를 float32로 저장할 수 있다. 그러면 메모리를 약 100GB 쓴다. 이는 gradient checkpoint에 비하면 아무것도 아닌데, checkpoint는 수 TB를 쓸 수 있다.
+이 파라미터들을 더하면 8.5e9 + 4.2e9 + 0.3e9 = **총 13e9 파라미터**로, 기대와 정확히 일치한다. 앞 절들에서 봤듯 학습 중에는 파라미터를 bfloat16으로, optimizer 상태를 float32로 저장할 수 있다. 그러면 메모리를 약 100GB 쓴다. 수 TB를 쓰기도 하는 gradient checkpoint에 비하면 아무것도 아니다.
 
-**추론은 어떻게 다른가?** 추론 중에는 파라미터 사본 하나를 저장한다. bfloat16이라 하자. 그러면 26GB를 쓴다 — 실전에서는 quantization으로 이보다 훨씬 잘할 수 있는 경우가 많다. 추적할 optimizer 상태나 gradient는 없다. checkpoint(backward pass를 위해 activation을 들고 있는 것)를 하지 않으므로 activation footprint는 prefill[^4]과 generate 모두에서 무시할 만하다. 8k 토큰을 prefill하면 activation 하나는 겨우 `8,192 x 5,120 x 2 bytes = 80MB` 정도의 메모리만 쓴다. 더 긴 prefill은 여러 개의 작은 forward pass로 쪼갤 수 있으므로 긴 context에서도 문제가 되지 않는다. generation은 그보다도 적은 토큰을 쓰므로 activation은 무시할 만하다.
+**추론은 어떻게 다른가?** 추론 중에는 파라미터 사본 하나를 저장한다. bfloat16이라 하자. 그러면 26GB를 쓴다 — 실전에서는 quantization으로 흔히 이보다 훨씬 잘한다. 추적할 optimizer 상태나 gradient는 없다. checkpoint(backward pass를 위해 activation을 들고 있는 것)를 하지 않으므로 activation footprint는 prefill[^4]과 generate 모두에서 무시할 만하다. 8k 토큰을 prefill하면 activation 하나는 겨우 `8,192 x 5,120 x 2 bytes = 80MB` 정도의 메모리만 쓴다. 더 긴 prefill은 여러 개의 작은 forward pass로 쪼갤 수 있으므로 긴 context에서도 문제가 되지 않는다. generation은 그보다도 적은 토큰을 쓰므로 activation은 무시할 만하다.
 
-**주된 차이는 KV cache다.** 이는 모든 과거 토큰에 대한 key와 value projection으로, 크기의 상한은 오직 허용된 최대 시퀀스 길이뿐이다. $$T$$ 토큰에 대한 총 크기는
+**주된 차이는 KV cache다.** 모든 과거 토큰에 대한 key와 value projection으로, 크기의 상한은 오직 허용된 최대 시퀀스 길이뿐이다. $$T$$ 토큰에 대한 총 크기는
 
 $$
 \text{KV cache size} = 2 \cdot \text{bytes per float} \cdot H \cdot K \cdot L \cdot T
@@ -295,15 +295,15 @@ KV cache가 작아져도 수익 체감은 여전히 있지만, 칩당 이론 thr
 
 원조 [Attention is All You Need 논문](https://arxiv.org/abs/1706.03762) 이후, 모델을 더 효율적으로 만드는 많은 기법이 개발되었고 그중 다수는 KV cache를 정면으로 겨냥한다. 일반적으로 KV cache가 작아지면 latency를 해치지 않으면서 generation 스텝의 batch size와 context 길이를 키우기 쉬워지고, Transformer를 둘러싼 시스템들(요청 caching 같은)의 삶도 편해진다. 품질에 미치는 영향을 무시하면 다음과 같은 것들이 있다:
 
-**Grouped multi-query attention(일명 GMQA, GQA):** KV head 수를 줄이고, attention 메커니즘에서 이를 여러 Q head와 공유할 수 있다. 극단적으로는 KV head 하나를 모든 Q head와 공유하는 것도 가능하다. 이는 순수 MHA 대비 KV cache를 Q:KV 비율만큼 줄이며, 모델 성능이 이 변경에 비교적 둔감하다는 것이 관찰되어 있다.
+**Grouped multi-query attention(일명 GMQA, GQA):** KV head 수를 줄이고, attention 메커니즘에서 이를 여러 Q head와 공유할 수 있다. 극단적으로는 KV head 하나를 모든 Q head와 공유하는 것도 가능하다. 순수 MHA 대비 KV cache를 Q:KV 비율만큼 줄이며, 모델 성능이 이 변경에 비교적 둔감하다는 것이 관찰되어 있다.
 
 <figure>
   <img src="https://jax-ml.github.io/scaling-book/assets/img/gmqa.png" alt="GMQA 다이어그램" loading="lazy" />
 </figure>
 
-이는 attention 연산의 arithmetic intensity를 실질적으로 높이는 효과도 있다([4장](/scaling-book/transformers/)의 문제 4 참조).
+attention 연산의 arithmetic intensity를 실질적으로 높이는 효과도 있다([4장](/scaling-book/transformers/)의 문제 4 참조).
 
-**Local attention 레이어 섞기:** local attention은 context를 작거나 중간 크기의 최대 길이로 제한한다. 학습과 prefill 시점에는 attention 행렬을 삼각형 대신 대각선 띠(diagonal strip)로 마스킹하는 것이 된다. 이는 local 레이어의 KV cache 최대 길이를 실질적으로 제한한다. global 레이어 사이에 local 레이어를 얼마간 섞어 넣으면, local window보다 긴 context에서 KV cache 크기가 크게 줄어든다.
+**Local attention 레이어 섞기:** local attention은 context를 작거나 중간 크기의 최대 길이로 제한한다. 학습과 prefill 시점에는 attention 행렬을 삼각형 대신 대각선 띠(diagonal strip)로 마스킹하는 것이 되어 local 레이어의 KV cache 최대 길이를 실질적으로 제한한다. global 레이어 사이에 local 레이어를 얼마간 섞어 넣으면, local window보다 긴 context에서 KV cache 크기가 크게 줄어든다.
 
 **레이어 간 KV 공유:** 모델이 일정한 패턴으로 레이어 간에 같은 KV cache를 공유하도록 학습할 수 있다. KV cache 크기가 줄어들고 batch size 증대·caching·오프라인 저장 등에서 이득이 있긴 하지만, 공유된 KV cache는 HBM에서 여러 번 읽어야 할 수 있어 *스텝 시간이 반드시 좋아지는 것은 아니다.*
 
@@ -312,11 +312,11 @@ KV cache가 작아져도 수익 체감은 여전히 있지만, 칩당 이론 thr
   <figcaption><b>왼쪽:</b> 순수 global attention 여러 레이어. <b>오른쪽:</b> 인접 레이어와의 공유를 포함한 global/local 교차 패턴의 한 예. 출처: <a href="https://research.character.ai/optimizing-inference/?ref=blog.character.ai">Character.ai 블로그</a>.</figcaption>
 </figure>
 
-**Quantization:** 추론은 보통 파라미터와 KV의 정밀도에 덜 민감하다. 파라미터와 KV cache를 (예: int8, int4, `fp8` 등으로) quantize하면 양쪽 모두에서 메모리 bandwidth를 아끼고, compute roofline에 도달하는 데 필요한 batch size를 낮추고, 더 큰 batch size로 돌 수 있도록 메모리를 아낄 수 있다. quantization에는 모델이 quantization으로 학습되지 않았더라도 학습 후에 적용할 수 있는 경우가 많다는 추가 장점이 있다.
+**Quantization:** 추론은 보통 파라미터와 KV의 정밀도에 덜 민감하다. 파라미터와 KV cache를 (예: int8, int4, `fp8` 등으로) quantize하면 양쪽 모두에서 메모리 bandwidth를 아끼고, compute roofline에 도달하는 데 필요한 batch size를 낮추고, 더 큰 batch size로 돌 수 있도록 메모리를 아낀다. quantization에는 모델이 quantization으로 학습되지 않았더라도 흔히 학습 후에 적용할 수 있다는 추가 장점이 있다.
 
-**Ragged HBM 읽기와 Paged Attention 사용:** 위 계산에서 우리는 KV cache마다 8k의 context를 할당했지만, KV cache 전체를 메모리에서 읽을 필요는 없는 경우가 많다 — 요청의 길이 분포는 폭넓고 모델의 최대 context를 다 쓰지 않으므로, KV cache의 패딩이 아닌 부분만 읽는 kernel(예: Flash Attention 변형)을 구현할 수 있는 경우가 많다.
+**Ragged HBM 읽기와 Paged Attention 사용:** 위 계산에서는 KV cache마다 8k의 context를 할당했지만, KV cache 전체를 메모리에서 읽을 필요는 없는 경우가 많다 — 요청의 길이 분포는 폭넓고 모델의 최대 context를 다 쓰지 않으므로, KV cache의 패딩이 아닌 부분만 읽는 kernel(예: Flash Attention 변형)을 구현할 수 있다.
 
-Paged Attention(Kwon et al. 2023)은 이를 한 단계 더 다듬은 것으로, KV cache를 OS 스타일의 페이지 테이블에 저장하고 KV cache 패딩을 거의 완전히 피한다. 복잡성이 많이 추가되지만, 각 배치가 필요한 만큼만 메모리를 쓰게 된다. 이는 런타임 최적화라서 역시 아키텍처와는 무관하다.
+Paged Attention(Kwon et al. 2023)은 이를 한 단계 더 다듬은 것으로, KV cache를 OS 스타일의 페이지 테이블에 저장하고 KV cache 패딩을 거의 완전히 피한다. 복잡성이 많이 추가되지만, 각 배치가 필요한 만큼만 메모리를 쓰게 된다. 런타임 최적화라서 역시 아키텍처와는 무관하다.
 
 <figure>
   <img src="https://jax-ml.github.io/scaling-book/assets/img/paged-attention.png" alt="Paged Attention" class="img-small" loading="lazy" />
@@ -325,13 +325,13 @@ Paged Attention(Kwon et al. 2023)은 이를 한 단계 더 다듬은 것으로, 
 
 <div class="takeaway">
 
-**큰 그림(Big Picture):** 종합하면, 이 KV cache 최적화들은 표준 MHA Transformer 대비 KV cache 크기를 한 자릿수 배 이상 줄일 수 있다. 이는 Transformer 전체 비용의 한 자릿수 배 개선으로 이어질 수 있다.
+**큰 그림(Big Picture):** 종합하면, 이 KV cache 최적화들은 표준 MHA Transformer 대비 KV cache 크기를 한 자릿수 배 이상 줄일 수 있다. Transformer 전체 비용의 한 자릿수 배 개선으로 이어질 수 있다.
 
 </div>
 
 ## 여러 가속기에 추론 분산하기
 
-지금까지는 단일 칩을 넘어서는 확장을 대충 얼버무려 왔다. [5장](/scaling-book/training/)을 따라, 우리가 쓸 수 있는 여러 전략과 그 트레이드오프를 살펴보자. 늘 그렇듯 prefill과 generation을 따로 본다.
+지금까지는 단일 칩을 넘어서는 확장을 대충 얼버무려 왔다. [5장](/scaling-book/training/)을 따라, 쓸 수 있는 여러 전략과 그 트레이드오프를 살펴보자. 늘 그렇듯 prefill과 generation을 따로 본다.
 
 ### Prefill
 
@@ -350,15 +350,15 @@ roofline 관점에서 **prefill은 학습과 거의 동일**하며, 거의 모�
 
 ### Generation
 
-generation은 prefill보다 복잡한 짐승이다. 우선 많은 요청을 함께 배치해야 하므로 큰 batch size를 얻기가 더 어렵다. latency 목표도 더 낮다. 이 둘이 합쳐져 우리는 보통 더 memory-bound이고 통신 오버헤드에 더 민감하며, 이는 sharding 전략을 제약한다:
+generation은 prefill보다 복잡한 짐승이다. 우선 많은 요청을 함께 배치해야 하므로 큰 batch size를 얻기가 더 어렵다. latency 목표도 더 낮다. 이 둘이 합쳐져 보통 더 memory-bound이고 통신 오버헤드에 더 민감하며, 이는 sharding 전략을 제약한다:
 
-1. **FSDP는 불가능하다:** 파라미터와 KV cache를 HBM에서 MXU로 로드하는 데서 memory-bound이므로, HBM보다 몇 자릿수 배 느린 ICI로 그것들을 옮기고 싶지 않다. *우리는 weight가 아니라 activation을 옮기고 싶다.* 즉 FSDP와 비슷한 방법들은 generation에서 대개 완전히 비현실적이다.[^5]
+1. **FSDP는 불가능하다:** 파라미터와 KV cache를 HBM에서 MXU로 로드하는 데서 memory-bound이므로, HBM보다 몇 자릿수 배 느린 ICI로 그것들을 옮기고 싶지 않다. *우리는 weight가 아니라 activation을 옮기고 싶다.* FSDP와 비슷한 방법들은 generation에서 대개 완전히 비현실적이다.[^5]
 
 2. **데이터 parallelism을 할 이유가 없다:** 순수 데이터 parallelism은 파라미터를 복제할 뿐, 파라미터를 더 빨리 로드하는 데 도움이 안 되므로 무익하다. 그럴 바엔 모델 사본을 여러 개 띄우는 편이 낫다.[^6]
 
 3. **시퀀스가 없다 = sequence sharding도 없다.** sequence sharding은… 행운을 빈다.
 
-_dense 모델의 generation에는 결국 model sharding의 변형들만 남는다._ prefill과 마찬가지로 가장 단순한 것은 단순 model parallelism(activation은 완전 복제, weight는 MLP의 hidden 차원으로 완전 sharding)을 ICI bound가 되는 4-8 way까지 하는 것이다. 그러나 우리는 종종 memory bandwidth bound이므로, 사실 이 한계를 넘어 sharding해서 latency를 개선할 수 있다!
+_dense 모델의 generation에는 결국 model sharding의 변형들만 남는다._ prefill과 마찬가지로 가장 단순한 것은 단순 model parallelism(activation은 완전 복제, weight는 MLP의 hidden 차원으로 완전 sharding)을 ICI bound가 되는 4-8 way까지 하는 것이다. 그러나 종종 memory bandwidth bound이므로, 사실 이 한계를 넘어 sharding해서 latency를 개선할 수 있다!
 
 **generation의 ICI bound에 대한 노트:** 학습 중에는 compute-bound가 되고 싶으므로, roofline은 ICI 통신이 FLOPs보다 오래 걸리는 시점을 본다. 그러나 generation 중에 파라미터 로딩으로 memory bandwidth bound라면, 이 지점을 넘어 model sharding을 늘려도 (tokens/sec/chip 기준) throughput 비용을 최소로 하면서 latency를 개선할 수 있다. model sharding을 늘리면 weight를 나눠 로드할 HBM이 늘어나고, FLOPs는 문제가 아니다.[^7] model parallelism이 병목이 되기 전까지 얼마나 할 수 있는지 보자.
 
@@ -370,19 +370,19 @@ $$
 T_\text{ICI comms} > T_\text{HBM comms} \rightarrow \frac{W_\text{hbm}}{W_\text{ici}} > \frac{F}{Y \cdot B} \rightarrow Y > F / (B \cdot \beta)
 $$
 
-여기서 $\beta = W_\text{hbm} / W_\text{ici}$이다. 이 수치는 TPU v5e와 TPU v6e에서 보통 8 근처다. 즉 예컨대 $F$가 16,384이고 $B$가 32라면, 이론상 throughput에 의미 있는 타격 없이 `16384 / (32 * 8) = 64` way까지 model parallelism을 할 수 있다. 이는 KV cache를 64-way로 완전히 shard할 수 있다는 가정인데, 이는 어렵다: 아래에서 논의한다.
+여기서 $\beta = W_\text{hbm} / W_\text{ici}$이다. 이 수치는 TPU v5e와 TPU v6e에서 보통 8 근처다. 예컨대 $F$가 16,384이고 $B$가 32라면, 이론상 throughput에 의미 있는 타격 없이 `16384 / (32 * 8) = 64` way까지 model parallelism을 할 수 있다. KV cache를 64-way로 완전히 shard할 수 있다는 가정인데, 이게 어렵다: 아래에서 논의한다.
 
 attention 레이어에서도 $$W_Q$$와 $$W_O$$를 Megatron 스타일로 head에 대해 model shard한다. KV weight는 꽤 작아서, $K$-way sharding을 넘어 shard하기보다 복제하는 편이 저렴한 경우가 많다.
 
 <div class="takeaway">
 
-**요점(Takeaway):** generation 중 우리의 유일한 선택지는 model parallelism의 변형들이다. 우리는 더 큰 KV cache나 파라미터 대신 activation을 옮기는 것을 목표로 한다. batch size가 클 때는 FLOPs-ICI bound($F / \alpha$)까지 model parallelism을 한다. batch size가 더 작을 때는 (적당한 throughput 비용을 치르고) model sharding을 더 해서 latency를 개선할 수 있다. KV head 수보다 많은 way로 model shard하고 싶을 때는 KV를 배치 차원으로도 shard할 수 있다.
+**요점(Takeaway):** generation 중 유일한 선택지는 model parallelism의 변형들이다. 더 큰 KV cache나 파라미터 대신 activation을 옮기는 것을 목표로 한다. batch size가 클 때는 FLOPs-ICI bound($F / \alpha$)까지 model parallelism을 한다. batch size가 더 작을 때는 (적당한 throughput 비용을 치르고) model sharding을 더 해서 latency를 개선할 수 있다. KV head 수보다 많은 way로 model shard하고 싶을 때는 KV를 배치 차원으로도 shard할 수 있다.
 
 </div>
 
 ### KV cache sharding
 
-**shard해야 할 자료구조가 하나 더 있다 — KV cache다.** 역시 cache의 복제는 거의 항상 피하고 싶은데, cache가 attention latency의 주된 원천이기 때문이다. 이를 위해 먼저 KV를 head 차원으로 Megatron-shard한다. 이는 $K$-way sharding까지로 제한되므로, head 수가 적은 모델에서는 head 차원을 최대한 shard한 뒤 배치 차원으로 shard한다. 즉 $\text{KV}[2, B_Z, S, K_Y, H]$이다. 이러면 KV cache가 완전히 분산된다.
+**shard해야 할 자료구조가 하나 더 있다 — KV cache다.** cache가 attention latency의 주된 원천이므로 역시 복제는 거의 항상 피하고 싶다. 이를 위해 먼저 KV를 head 차원으로 Megatron-shard한다. $K$-way sharding까지로 제한되므로, head 수가 적은 모델에서는 head 차원을 최대한 shard한 뒤 배치 차원으로 shard한다. 즉 $\text{KV}[2, B_Z, S, K_Y, H]$이다. 이러면 KV cache가 완전히 분산된다.
 
 <figure>
   <img src="https://jax-ml.github.io/scaling-book/assets/img/esta-figure.png" alt="attention 메커니즘의 sharding 방식 비교" loading="lazy" />
@@ -435,7 +435,7 @@ attention 레이어에서도 $$W_Q$$와 $$W_O$$를 Megatron 스타일로 head에
 1. **latency가 끔찍하다.** prefill과 generate의 batch size가 서로 묶인다. 큰 prefill batch size에서는 Time to first token(TTFT)이 끔찍하다 — 어떤 사용자든 토큰을 보려면 모든 prefill이 끝나야 한다. 작은 batch size에서는 generate throughput이 끔찍하다.
 2. **짧은 generation이 긴 generation에 막힌다.** 많은 시퀀스가 다른 것보다 먼저 끝나면서 generation 중 빈 배치 슬롯이 생기고, generate throughput을 더 해친다. batch size와 generation 길이가 커질수록 문제가 악화된다.
 3. **prefill이 패딩된다.** prefill이 가장 긴 시퀀스에 맞춰 패딩되어 연산을 많이 낭비한다. 해법이 있긴 하지만 역사적으로 XLA에서는 이 FLOPs를 건너뛰기가 꽤 어려웠다. 역시 batch size와 prefill 시퀀스 길이가 커질수록 나빠진다.
-4. **prefill과 generation이 sharding을 공유해야 한다.** prefill과 generate가 같은 slice에 살기 때문에 (weight 사본을 두 벌 두지 않는 한) 둘 다 같은 토폴로지와 sharding을 쓰게 되고, 이는 대체로 성능에 도움이 안 된다. 예컨대 generate는 model sharding을 훨씬 더 많이 원한다.
+4. **prefill과 generation이 sharding을 공유해야 한다.** prefill과 generate가 같은 slice에 살기 때문에 (weight 사본을 두 벌 두지 않는 한) 둘 다 같은 토폴로지와 sharding을 쓰게 되고, 대체로 성능에 도움이 안 된다. 예컨대 generate는 model sharding을 훨씬 더 많이 원한다.
 
 따라서 이 방법은 엣지 응용(보통 한 사용자만 서비스하고 FLOPs/byte가 낮은 하드웨어를 쓰는 경우)과 Transformer 코드베이스 수명 초기의 빠른 반복(단순함 덕분)에만 권장된다.
 
@@ -445,9 +445,9 @@ attention 레이어에서도 $$W_Q$$와 $$W_O$$를 Megatron 스타일로 head에
   <img src="https://jax-ml.github.io/scaling-book/assets/img/interleaving.png" alt="interleaved 구성" loading="lazy" />
 </figure>
 
-이러면 batched prefill의 TTFT 낭비를 피하면서 generation throughput을 높게 유지할 수 있다. 우리는 이를 **interleaved** 구성이라 부르는데, prefill과 generation 스텝을 "끼워 넣기(interleave)" 때문이다. eval처럼 throughput이 주된 목표인 벌크 generation 응용에는 아주 강력하다. 오케스트레이터는 generation 슬롯이 열리는 순간 prefill을 우선하도록 구성할 수 있어, 아주 큰 generation batch size에서도 높은 활용률을 보장한다. 다른 요청과 함께 배치되지 않으므로 prefill을 최대 길이에 맞춰 패딩하는 것도 피할 수 있다.
+이러면 batched prefill의 TTFT 낭비를 피하면서 generation throughput을 높게 유지할 수 있다. 이를 **interleaved** 구성이라 부르는데, prefill과 generation 스텝을 "끼워 넣기(interleave)" 때문이다. eval처럼 throughput이 주된 목표인 벌크 generation 응용에는 아주 강력하다. 오케스트레이터는 generation 슬롯이 열리는 순간 prefill을 우선하도록 구성할 수 있어, 아주 큰 generation batch size에서도 높은 활용률을 보장한다. 다른 요청과 함께 배치되지 않으므로 prefill을 최대 길이에 맞춰 패딩하는 것도 피할 수 있다.
 
-주된 단점은, 서버가 prefill을 수행하는 동안 다른 모든 요청의 generation이 멈춘다는 것이다. 모든 연산 자원을 prefill이 소모하기 때문이다. 응답을 한창 decode 중인 사용자 A는 prefill이 진행 중인 사용자 B에게 막힌다. 즉 TTFT는 좋아졌지만 토큰 생성이 평균적으로 들쭉날쭉하고 느려서, 많은 응용에서 좋은 사용자 경험이 아니다 — 다른 사용자의 prefill이 요청 전체 latency의 critical path에 놓이는 것이다.
+주된 단점은, 서버가 prefill을 수행하는 동안 다른 모든 요청의 generation이 멈춘다는 것이다. 모든 연산 자원을 prefill이 소모하기 때문이다. 응답을 한창 decode 중인 사용자 A는 prefill이 진행 중인 사용자 B에게 막힌다. TTFT는 좋아졌지만 토큰 생성이 평균적으로 들쭉날쭉하고 느려서, 많은 응용에서 좋은 사용자 경험이 아니다 — 다른 사용자의 prefill이 요청 전체 latency의 critical path에 놓이는 것이다.
 
 이를 해결하기 위해 decode와 prefill을 분리한다. Transformer 추론을 한 서버에서 할 수도 있지만, latency 관점에서는 이 서로 다른 두 과제를 두 개의 TPU/GPU 집합에서 따로 실행하는 편이 나은 경우가 많다. prefill 서버는 KV cache를 생성해 네트워크를 통해 generate 서버로 보내고, generate 서버는 여러 cache를 배치로 묶어 각각에 대해 토큰을 생성한다. 이를 **"disaggregated"** serving이라 부른다.
 
@@ -455,11 +455,11 @@ attention 레이어에서도 $$W_Q$$와 $$W_O$$를 Megatron 스타일로 head에
   <img src="https://jax-ml.github.io/scaling-book/assets/img/disaggregation.png" alt="disaggregated serving" loading="lazy" />
 </figure>
 
-이는 몇 가지 이점을 준다:
+이렇게 하면 몇 가지 이점이 있다:
 
 1. **대규모에서의 낮은 latency:** prefill 용량이 부족한 경우를 제외하면, 한 사용자의 요청이 다른 사용자의 요청에 막히는 일이 없다. 요청은 즉시 prefill되고, generation 서버로 보내지고, 즉시 generation 버퍼에 꽂혀야 한다. 동시 요청이 많이 들어올 것으로 예상되면, prefill 서버 수를 generate 서버 수와 독립적으로 확장해 사용자가 prefill 큐에서 오래 기다리지 않게 할 수 있다.
 
-2. **특화:** prefill과 generate의 latency 최적 파라미터 sharding 전략/하드웨어 토폴로지는 꽤 다른 경우가 많다(예컨대 model parallelism을 늘리는 것은 generate에는 유용하지만 prefill에는 아니다). 두 연산을 같은 sharding에 묶으면 둘 다 성능이 상하고, weight를 두 벌 두면 메모리를 쓴다. 또 prefill을 자기만의 서버로 옮기면 현재 처리 중인 것 말고는 KV cache를 들고 있을 필요가 없다. 즉 history caching(다음 절 참조)이나 prefill latency 최적화에 쓸 수 있는 메모리가 훨씬 많아진다.
+2. **특화:** prefill과 generate의 latency 최적 파라미터 sharding 전략/하드웨어 토폴로지는 꽤 다른 경우가 많다(예컨대 model parallelism을 늘리는 것은 generate에는 유용하지만 prefill에는 아니다). 두 연산을 같은 sharding에 묶으면 둘 다 성능이 상하고, weight를 두 벌 두면 메모리를 쓴다. 또 prefill을 자기만의 서버로 옮기면 현재 처리 중인 것 말고는 KV cache를 들고 있을 필요가 없다. 그만큼 history caching(다음 절 참조)이나 prefill latency 최적화에 쓸 수 있는 메모리가 훨씬 많아진다.
 
 단점 하나는 KV cache를 이제 네트워크 너머로 옮겨야 한다는 것이다. 보통은 감내할 만하지만, 이 역시 KV cache 크기를 줄일 동기가 된다.
 
@@ -471,7 +471,7 @@ attention 레이어에서도 $$W_Q$$와 $$W_O$$를 Megatron 스타일로 head에
 
 ### Continuous batching
 
-위의 문제 (2)는 **continuous batching** 개념의 동기가 된다. 우리는 다음을 최적화·컴파일한다:
+위의 문제 (2)는 **continuous batching** 개념의 동기가 된다. 다음을 최적화·컴파일한다:
 
 * 가변 context 길이를 처리하고, 어떤 최대 batch size와 context 길이/페이지 수를 가진 KV 버퍼에 결과를 삽입하는 prefill 함수.
 * KV cache를 받아, 현재 활성인 모든 요청에 대해 generation 스텝을 수행하는 generate 함수.
@@ -484,14 +484,14 @@ attention 레이어에서도 $$W_Q$$와 $$W_O$$를 Megatron 스타일로 head에
 
 ### Prefix caching
 
-prefill은 비싸고 compute-bound라(개선 여지가 적다), 비용을 줄이는 가장 좋은 방법 중 하나는 덜 하는 것이다. LLM은 autoregressive하므로 ["I", "like", "dogs"]와 ["I", "like", "cats"]라는 쿼리는 처음 두 토큰에서 동일한 KV cache를 만든다. 이는 원칙적으로, "I like dogs" cache를 먼저 계산하고 그다음 "I like cats" cache를 계산하면 연산의 1/3만 하면 된다는 뜻이다. cache를 재사용해 일의 대부분을 아낄 수 있는 것이다. 이는 몇 가지 특정한 경우에 특히 강력하다:
+prefill은 비싸고 compute-bound라(개선 여지가 적다), 비용을 줄이는 가장 좋은 방법 중 하나는 덜 하는 것이다. LLM은 autoregressive하므로 ["I", "like", "dogs"]와 ["I", "like", "cats"]라는 쿼리는 처음 두 토큰에서 동일한 KV cache를 만든다. 원칙적으로 "I like dogs" cache를 먼저 계산하고 그다음 "I like cats" cache를 계산하면 연산의 1/3만 하면 된다는 뜻이다. cache를 재사용해 일의 대부분을 아낄 수 있는 것이다. 이 재사용은 몇 가지 특정한 경우에 특히 강력하다:
 
-1. **챗봇:** 대부분의 챗봇 대화는 자기 자신에 엄격하게 덧붙여지기만 하는 주고받기 대화다. 즉 각 대화 턴의 KV cache를 저장해 두면 최신 토큰을 제외한 모든 연산을 건너뛸 수 있다.
+1. **챗봇:** 대부분의 챗봇 대화는 자기 자신에 엄격하게 덧붙여지기만 하는 주고받기 대화다. 각 대화 턴의 KV cache를 저장해 두면 최신 토큰을 제외한 모든 연산을 건너뛸 수 있다.
 2. **Few-shot prompting:** 어떤 종류든 few-shot 프롬프트가 있다면 저장해서 공짜로 재사용할 수 있다. 시스템 지시문도 흔히 이런 형태다.
 
 이를 어렵게 만드는 유일한 이유는 메모리 제약이다. 봤다시피 KV cache는 크고(종종 수 GB), caching이 유용하려면 후속 쿼리가 도착할 때까지 들고 있어야 한다. 보통 prefill 서버의 남는 HBM은 로컬 caching 시스템에 쓸 수 있다. 게다가 가속기의 CPU 호스트에는 대개 메모리가 많다(예: 8xTPUv5e 서버는 HBM이 128GiB이지만 호스트 DRAM은 약 450GiB다). 이 메모리는 HBM보다 훨씬 느리지만 — 보통 generation 스텝을 하기엔 너무 느리다 — cache 읽기에는 충분히 빠르다. 실전에서는:
 
-* KV cache는 최초 요청을 처리한 TPU 집합에 로컬이므로, 후속 쿼리가 같은 replica에 도착하도록 어떤 형태의 affinity routing이 필요하다. 이는 로드 밸런싱에 문제를 일으킬 수 있다.
+* KV cache는 최초 요청을 처리한 TPU 집합에 로컬이므로, 후속 쿼리가 같은 replica에 도착하도록 어떤 형태의 affinity routing이 필요하다. 로드 밸런싱에 문제를 일으킬 수 있다.
 * 작은 KV cache가 (또다시) 도움이 된다 — 같은 공간에 더 많은 KV cache를 저장할 수 있고, 읽기 시간도 줄어든다.
 * KV cache와 그 lookup은 트리나 trie에 꽤 자연스럽게 저장할 수 있다. eviction은 LRU 기준으로 하면 된다.
 
@@ -537,7 +537,7 @@ PyTorch 버전의 JetStream도 [여기](https://github.com/google/jetstream-pyto
 * Attention 파라미터 수: $L * 2 * D * H * (N + K)$
 * Vocabulary 파라미터: $D * V$ (이 행렬들을 공유하므로)
 
-따라서 총 파라미터 수는 $L * D * (3F + 2H * (N + K)) + D * V$이다. 위 수치를 대입하면 `64 * 4096 * (3*16384 + 2 * 256 * (32 + 8)) + 4096 * 32128 = 18.4e9`이다. 즉 이 모델은 약 184억 개의 파라미터를 가진다.
+따라서 총 파라미터 수는 $L * D * (3F + 2H * (N + K)) + D * V$이다. 위 수치를 대입하면 `64 * 4096 * (3*16384 + 2 * 256 * (32 + 8)) + 4096 * 32128 = 18.4e9`이다. 이 모델의 파라미터는 약 184억 개다.
 
 KV cache는 int8에서 토큰당 $2 * L * K * H$, 즉 토큰당 `2 * 64 * 8 * 256 = 262kB`이다.
 
@@ -548,7 +548,7 @@ KV cache는 int8에서 토큰당 $2 * L * K * H$, 즉 토큰당 `2 * 64 * 8 * 25
 <details>
 <summary>정답 보기</summary>
 
-KV cache는 int8에서 토큰당 $2 \cdot L \cdot K \cdot H$, 즉 `2 * 64 * 8 * 256 = 262kB` 크기다. 128k 시퀀스라면 배치 항목당 `262e3 * 128e3 = 33.5GB`다. 각 TPU가 16GB의 HBM을 가지므로, 파라미터를 포함하면 담을 수 있는 최대 batch size는 `(16 * 16e9 - 18.4e9) / 33.5e9 = 7`이다. $K=1$이면 이것의 8배, 즉 약 56이다.
+KV cache는 int8에서 토큰당 $2 \cdot L \cdot K \cdot H$, 즉 `2 * 64 * 8 * 256 = 262kB` 크기다. 128k 시퀀스라면 배치 항목당 `262e3 * 128e3 = 33.5GB`다. 각 TPU의 HBM이 16GB이므로, 파라미터를 포함하면 담을 수 있는 최대 batch size는 `(16 * 16e9 - 18.4e9) / 33.5e9 = 7`이다. $K=1$이면 이것의 8배, 즉 약 56이다.
 
 </details>
 
@@ -579,20 +579,20 @@ KV cache는 int8에서 토큰당 $2 \cdot L \cdot K \cdot H$, 즉 `2 * 64 * 8 * 
 <details>
 <summary>정답 보기</summary>
 
-(1) MoE이므로 각 MLP 블록은 이제 $3 * E * D * F$개의 파라미터를 가진다. dense 변형의 $E$배다. 따라서 이제 $L * D * (3EF + 2H * (N + K)) + D * V$, 즉 `64 * 4096 * (3*16*16384 + 2 * 256 * (32 + 8)) + 4096 * 32128 = 212e9` 총 파라미터로, 약 12배 증가다. activated 파라미터는 $E$개가 아니라 $k$개가 활성화되므로 총 `64 * 4096 * (3*2*16384 + 2 * 256 * (32 + 8)) + 4096 * 32128 = 31.2e9`로, dense 변형 대비 2배 미만의 증가다.
+(1) MoE이므로 각 MLP 블록의 파라미터는 이제 $3 * E * D * F$개다. dense 변형의 $E$배다. 따라서 이제 $L * D * (3EF + 2H * (N + K)) + D * V$, 즉 `64 * 4096 * (3*16*16384 + 2 * 256 * (32 + 8)) + 4096 * 32128 = 212e9` 총 파라미터로, 약 12배 증가다. activated 파라미터는 $E$개가 아니라 $k$개가 활성화되므로 총 `64 * 4096 * (3*2*16384 + 2 * 256 * (32 + 8)) + 4096 * 32128 = 31.2e9`로, dense 변형 대비 2배 미만의 증가다.
 
 (2) FLOPs는 $k$배만 늘어나는데 파라미터는 $E$배 많으므로, HBM roofline이 $E/k$배 올라간다. 즉 TPU v5e에서는 약 `240 * (16 / 2) = 1920` 토큰이 필요하다.
 
 (3) MoE라는 성격은 attention 메커니즘에 대해 아무것도 바꾸지 않으므로 KV cache 크기는 그대로다.
 
-(4) 이는 여전히 $2 \cdot \text{activated params} \cdot T$다. 즉 $2 * \text{31.2e9} * T$이다.
+(4) 여전히 $2 \cdot \text{activated params} \cdot T$다. 즉 $2 * \text{31.2e9} * T$이다.
 
 </details>
 
 **문제 6:** MoE에서는 "expert sharding"을 할 수 있다. mesh의 한 axis에 expert들을 나눠 놓는 것이다. 우리의 표준 표기로 첫 번째 FFW weight는 shape `[E, D, F]`이고 [E<sub>Z</sub>, D<sub>X</sub>, F<sub>Y</sub>]로 shard한다. 여기서 `X`는 학습 중에만 FSDP 차원으로 쓰인다. TPU v5e에서 추론을 하고 싶다고 하자:
 
 1. Y=8, Z=16인 TPU v5e 8x16 slice에서 위 모델의 HBM weight 로딩 시간은 얼마인가? TPU당 남는 HBM은 얼마인가?
-2. 우리 모델을 담을 수 있는 가장 작은 slice는 무엇인가?
+2. 이 모델을 담을 수 있는 가장 작은 slice는 무엇인가?
 
 **문제 7 [2D model sharding]:** 여기서는 [ESTI 논문](https://arxiv.org/pdf/2211.05102)이 2D weight-stationary sharding이라 부르는 것의 수학을 따라가 본다. 부록 B에서 간략히 설명하지만, 수학을 스스로 유도할 수 있는지 이 문제를 먼저 풀어 보라. 2D weight stationary sharding의 기본 아이디어는 weight를 $D$와 $F$ axis 둘 다로 shard해 각 청크가 대략 정사각형이 되게 하는 것이다. 이러면 통신 부하가 줄고 조금 더 멀리 확장할 수 있다.
 
@@ -642,7 +642,7 @@ $$
 N > 32 \cdot \left(\frac{F}{D}\right) \cdot \left(\frac{3}{4}\right)^2
 $$
 
-이라고 주장한다. 즉 칩이 72개보다 많으면 이 새 방식을 쓰는 편이 낫다는 뜻이다. 그런데 이건 약간 이상한 결과인데, 역사적으로 우리는 ~20 way tensor parallelism 근처에서 ICI bound가 되곤 했기 때문이다. 하지만 여기서는 communication-bound라 하더라도 총 칩 수가 늘수록 총통신이 계속 줄어든다! 이것이 말해 주는 바는, 칩을 계속 늘리고, batch size를 키우고, 파라미터 스케일링을 더 하면서도 latency가 줄어드는 것을 볼 수 있다는 것이다.
+이라고 주장한다. 칩이 72개보다 많으면 이 새 방식을 쓰는 편이 낫다는 말이다. 그런데 역사적으로는 ~20 way tensor parallelism 근처에서 ICI bound가 되곤 했으니, 약간 이상한 결과다. 하지만 여기서는 communication-bound라 하더라도 총 칩 수가 늘수록 총통신이 계속 줄어든다! 칩을 계속 늘리고, batch size를 키우고, 파라미터 스케일링을 더 하면서도 latency가 줄어드는 것을 볼 수 있다는 말이다.
 
 </details>
 
@@ -658,25 +658,25 @@ $$
 
 위에서 제시한 단순한 규칙 — compute-bound가 되려면 batch size가 240 토큰보다 커야 한다 — 은 대체로 참이지만, 다른 연산들이 가용 HBM을 다 쓰지 않는 동안(예컨대 디바이스 간 통신 중에) TPU가 weight를 미리 가져올(prefetch) 수 있다는 점은 어느 정도 무시한 것이다.
 
-다음은 d<sub>model</sub> 8192, d<sub>ff</sub> 32768에 레이어당 matmul이 2개뿐인 작은 Transformer의 레이어 시간(마이크로초) 실측 플롯이다. [이 Colab 노트북](https://colab.sandbox.google.com/drive/1_6krERgtolH7hbUIo7ewAMLlbA4fqEF8?usp=sharing)에서 나온 것이다. batch 240 근처까지는 스텝 시간이 매우 천천히 늘다가, 그 뒤 선형으로 증가하는 것을 볼 수 있다.
+다음은 d<sub>model</sub> 8192, d<sub>ff</sub> 32768에 레이어당 matmul이 2개뿐인 작은 Transformer의 레이어 시간(마이크로초) 실측 플롯이다. [이 Colab 노트북](https://colab.sandbox.google.com/drive/1_6krERgtolH7hbUIo7ewAMLlbA4fqEF8?usp=sharing)에서 나온 것이다. batch 240 근처까지는 스텝 시간이 매우 천천히 늘다가, 그 뒤 선형으로 증가한다.
 
 <figure>
   <img src="https://jax-ml.github.io/scaling-book/assets/img/batch-scaling-latency.png" alt="batch size에 따른 레이어 시간" class="img-small" loading="lazy" />
 </figure>
 
-다음은 tokens / us 단위의 실제 throughput이다. 논지를 꽤 분명하게 보여준다. 여기서 우리 레이어는 약 600M 파라미터를 4-way shard한 것이므로, 최소 약 365us의 latency를 기대할 수 있다.
+다음은 tokens / us 단위의 실제 throughput이다. 논지를 꽤 분명하게 보여준다. 여기서 이 레이어는 약 600M 파라미터를 4-way shard한 것이므로, 최소 약 365us의 latency를 기대할 수 있다.
 
 <figure>
   <img src="https://jax-ml.github.io/scaling-book/assets/img/batch-scaling-throughput.png" alt="batch size에 따른 throughput" class="img-small" loading="lazy" />
 </figure>
 
-적어도 이 모델에서는, 실제로 데이터 parallel shard당 BS240 근처까지 throughput이 증가하는 것을 볼 수 있다.
+적어도 이 모델에서는 실제로 데이터 parallel shard당 BS240 근처까지 throughput이 증가한다.
 
 ### 부록 B: 2D Weight Stationary sharding
 
-토폴로지가 커질 때, (TPU의 것과 같은) 더 높은 차원의 mesh에 접근할 수 있다면 두 번째 sharding axis를 도입해 이를 더 다듬을 수 있다. 우리는 이를 "**2D Weight Stationary**"라 부르며, [Efficiently Scaling Transformer Inference 논문](https://arxiv.org/abs/2211.05102)에 더 자세히 설명되어 있다.
+토폴로지가 커질 때, (TPU의 것과 같은) 더 높은 차원의 mesh에 접근할 수 있다면 두 번째 sharding axis를 도입해 이를 더 다듬을 수 있다. 이를 "**2D Weight Stationary**"라 부르며, [Efficiently Scaling Transformer Inference 논문](https://arxiv.org/abs/2211.05102)에 더 자세히 설명되어 있다.
 
-Megatron에서는 hidden $$F$$ 차원만 shard하므로, 1D sharding에서 칩 수가 많아지면 그 shard가 $$E$$($$d_\text{model}$$ 차원)보다 상당히 작아질 수 있다. 이는 더 큰 batch size에서는, MLP의 첫 레이어를 적용한 뒤 hidden 차원에 대해 collectives의 일부를 수행하는 편이 더 경제적일 수 있다는 뜻이다.
+Megatron에서는 hidden $$F$$ 차원만 shard하므로, 1D sharding에서 칩 수가 많아지면 그 shard가 $$E$$($$d_\text{model}$$ 차원)보다 상당히 작아질 수 있다. 그래서 더 큰 batch size에서는 MLP의 첫 레이어를 적용한 뒤 hidden 차원에 대해 collectives의 일부를 수행하는 편이 더 경제적일 수 있다.
 
 <figure>
   <img src="https://jax-ml.github.io/scaling-book/assets/img/2d-weight-stationary.png" alt="2D weight stationary sharding" class="img-small" loading="lazy" />
@@ -687,11 +687,11 @@ Megatron에서는 hidden $$F$$ 차원만 shard하므로, 1D sharding에서 칩 �
 1. 1D weight-stationary sharding, 일명 순수 Megatron sharding. AllGather 후 activation이 완전히 복제되고, weight는 hidden F 차원으로 완전히 sharding된다.
 2. 2D weight stationary sharding. weight가 hidden F와 reduction E 차원 둘 다로 sharding되고, activation은 E 차원으로 sharding된다. 첫 레이어 전에 (yz) axis에서 AllGather를 수행하고, 그다음 (x) axis에서 ReduceScatter를 한다.
 
-attention 레이어의 경우에도 칩 수가 적을 때는 Megatron 스타일 sharding이 비교적 단순하다. 그러나 Megatron은 $$n_\text{heads}$$ 차원에서 일어나므로 가능한 sharding의 양에 한계가 있다. 2D sharding을 attention용으로 수정하면(hidden 차원 대신 $$n_\text{heads}$$ 차원을 shard한다), 더 멀리 확장할 수 있는 능력을 얻는다.
+attention 레이어의 경우에도 칩 수가 적을 때는 Megatron 스타일 sharding이 비교적 단순하다. 그러나 Megatron은 $$n_\text{heads}$$ 차원에서 일어나므로 가능한 sharding의 양에 한계가 있다. 2D sharding을 attention용으로 수정하면(hidden 차원 대신 $$n_\text{heads}$$ 차원을 shard한다), 더 멀리 확장할 수 있게 된다.
 
 ### 부록 C: latency에 묶인 통신
 
-복습하자면, [3장](/scaling-book/sharding/)에서 우리는 full-duplex bandwidth WICI와 latency Tmin인 링크로 연결된 1D ring 위의 X개 칩에 대해, 각 TPU에서 크기 B인 텐서로의 AllGather를 수행하는 데 걸리는 시간을 유도했다.
+복습하자면, [3장](/scaling-book/sharding/)에서 full-duplex bandwidth WICI와 latency Tmin인 링크로 연결된 1D ring 위의 X개 칩에 대해, 각 TPU에서 크기 B인 텐서로의 AllGather를 수행하는 데 걸리는 시간을 유도했다.
 
 $$
 T_{total} = \max\left(\frac{T_{min} \cdot |X|}{2}, \frac{B}{W_{ICI}}\right)
@@ -705,7 +705,7 @@ $$
 
 latency 최적화된 추론 중에는 옮기는 데이터 양이 비교적 적기 때문에, activation에 대한 collectives는 (특히 작은 batch size에서) latency 항에 묶이는 경우가 많다. latency는 완료까지 거쳐야 하는 hop 수를 세는 것으로 꽤 쉽게 시각화할 수 있다.
 
-TPU에서 통신의 텐서 크기 의존 부분이 hop당 1마이크로초(hop은 인접한 두 디바이스 간의 통신) 미만이면, collective를 실제로 디스패치하는 고정 오버헤드에 병목이 걸릴 수 있다. `4.5e10`의 단방향 ICI bandwidth 기준으로, ICI 통신이 latency bound가 되는 것은 $$(\text{bytes} / n_\text{shards}) / 4.5e10 < 1e-6$$일 때다. 8-way Megatron sharding이라면 `buffer_size < 360kB`일 때다. **추론 중에는 이게 그리 작은 값이 아니다:** `BS=16`, `D=8192`의 int8이면 activation이 `16*8192=131kB`를 쓰므로, 우리는 이미 latency bound다.
+TPU에서 통신의 텐서 크기 의존 부분이 hop당 1마이크로초(hop은 인접한 두 디바이스 간의 통신) 미만이면, collective를 실제로 디스패치하는 고정 오버헤드에 병목이 걸릴 수 있다. `4.5e10`의 단방향 ICI bandwidth 기준으로, ICI 통신이 latency bound가 되는 것은 $$(\text{bytes} / n_\text{shards}) / 4.5e10 < 1e-6$$일 때다. 8-way Megatron sharding이라면 `buffer_size < 360kB`일 때다. **추론 중에는 이게 그리 작은 값이 아니다:** `BS=16`, `D=8192`의 int8이면 activation이 `16*8192=131kB`를 쓰므로 이미 latency bound다.
 
 <div class="takeaway">
 
@@ -713,11 +713,11 @@ TPU에서 통신의 텐서 크기 의존 부분이 hop당 1마이크로초(hop�
 
 </div>
 
-여기에는 compute roofline과의 유사점이 있다 — 우리는 어떤 작은 연산들의 고정 비용(통신에서는 latency, matmul에서는 memory bandwidth)을 치르고 있는 것이다.
+여기에는 compute roofline과의 유사점이 있다 — 어떤 작은 연산들의 고정 비용(통신에서는 latency, matmul에서는 memory bandwidth)을 치르고 있는 것이다.
 
 ### 부록 D: Speculative Sampling
 
-end-to-end latency가 *정말로* 중요할 때 쓸 수 있는 추가 트릭이 하나 있으니, speculative sampling(Leviathan et al. 2022; Chen et al. 2023)이다. 복습하자면 우리는 보통 큰 Transformer에서 토큰을 하나씩 생성한다:
+end-to-end latency가 *정말로* 중요할 때 쓸 수 있는 추가 트릭이 하나 있으니, speculative sampling(Leviathan et al. 2022; Chen et al. 2023)이다. 복습하자면 보통은 큰 Transformer에서 토큰을 하나씩 생성한다:
 
 <figure>
   <img src="https://jax-ml.github.io/scaling-book/assets/img/spec-sampling1.png" alt="일반적인 토큰 단위 샘플링" loading="lazy" />
@@ -739,7 +739,7 @@ speculative sampling에서는 더 작고 저렴한 모델로 토큰을 생성한
 
 전통적으로 speculative decoding은 타깃 모델과 샘플링 분포가 비슷한 더 작은 모델의 존재에 의존한다. 예컨대 LLaMA-2 70B에 대한 LLaMA-2 2B처럼 — 그런 모델은 없는 경우가 많다. 있다 해도 수락률(acceptance rate)이 낮으면 그 작은 drafter조차 너무 비쌀 수 있다. 그 대신 drafter를 본 모델 안에 심는 것이 도움이 될 수 있다. 예컨대 베이스 모델 후반부 레이어 중 하나에 전용 drafter head를 추가하는 식이다(Li et al. 2024; Cai et al. 2024; DeepSeek-AI et al. 2024). 이 head는 파라미터 대부분을 본 모델과 공유하므로 실행이 더 빠르고, 샘플링 분포도 더 가깝게 맞는다.
 
-일반적인 autoregressive 샘플링에서 token/s는 스텝 시간과 같다. 우리는 여전히 여기의 Arithmetic Intensity 절에 따른 이론적 최소 스텝 시간에 묶여 있다(사실 speculative sampling의 스텝 시간은 보통 일반 autoregressive 샘플링보다 꽤 느리지만, 스텝당 평균 1개보다 많은 토큰을 얻으므로 tokens/s는 훨씬 좋아질 수 있다).
+일반적인 autoregressive 샘플링에서 token/s는 스텝 시간과 같다. 여전히 여기의 Arithmetic Intensity 절에 따른 이론적 최소 스텝 시간에 묶여 있다(사실 speculative sampling의 스텝 시간은 보통 일반 autoregressive 샘플링보다 꽤 느리지만, 스텝당 평균 1개보다 많은 토큰을 얻으므로 tokens/s는 훨씬 좋아질 수 있다).
 
 <figure>
   <img src="https://jax-ml.github.io/scaling-book/assets/img/spec-sampling3.png" alt="Chinchilla speculative sampling 결과" loading="lazy" />
@@ -757,9 +757,9 @@ speculative sampling에서는 더 작고 저렴한 모델로 토큰을 생성한
 </div>
 
 [^1]: 역사적으로, 추론을 전혀 건드리지 않고도 Transformer 연구를 놀랄 만큼 많이 할 수 있었다 — scoring 기반 객관식 벤치마크는 제대로 된 KV cache나 generation 루프 구현 없이도 효율적으로 돌릴 수 있다. 그래서 특히 연구용 코드베이스에는 추론 코드패스에 낮게 매달린 과일이 많이 남아 있는 경우가 흔했다.
-[^2]: 이 장 전체에서 알아차리게 될 한 가지는, 추론이 학습보다 훨씬 덜 관대하다는 점이다. 보통 FLOPs는 훨씬 적고, batching의 기회도 적고, latency에 대한 민감도는 훨씬 크다. KV cache 역시 추론을 극적으로 복잡하게 만든다.
+[^2]: 이 장 전체에서 알아차리게 되겠지만, 추론은 학습보다 훨씬 덜 관대하다. 보통 FLOPs는 훨씬 적고, batching의 기회도 적고, latency에 대한 민감도는 훨씬 크다. KV cache 역시 추론을 극적으로 복잡하게 만든다.
 [^3]: 여기서는 softmax·마스크 적용 등에 드는 non-matmul FLOPs를 무시해 상당히 단순화하고 있다. 이들은 연산이나 HBM 읽기와 겹쳐져야 하지만, 특정 TPU 세대에서는 그게 만만치 않을 수 있다. 이 세부 사항이 핵심 메시지 — KV cache는 대개 memory bound다 — 를 바꾸지는 않지만, 주의를 기울일 가치는 있다.
 [^4]: 특히 attention 행렬을 materialize하지 않게 해 주는 Flash Attention 덕분이다.
 [^5]: 학습이 끝난 뒤 실수로 켜진 채로 두는 것은, 성능이 자릿수 단위로 퇴보하는 쉽고 흔한 원인이다.
-[^6]: 여기서 말하는 것은, 더 작은 batch size로 모델 사본을 실은 서버를 여러 대 띄우라는 뜻이다. 모델 수준의 데이터 parallelism은 엄격히 더 나쁘다.
+[^6]: 더 작은 batch size로 모델 사본을 실은 서버를 여러 대 띄우라는 뜻이다. 모델 수준의 데이터 parallelism은 엄격히 더 나쁘다.
 [^7]: FLOPs 시간이 병목이 아니므로, 걱정해야 할 것은 ICI 시간이 파라미터 로딩 시간을 넘어서는 것이라는 의미에서다.

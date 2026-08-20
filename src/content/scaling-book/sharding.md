@@ -12,7 +12,7 @@ published: true
 
 ## Partitioning 표기법과 collective 연산
 
-LLM을 1만 개의 TPU나 GPU에서 학습할 때도, 우리는 추상적으로는 하나의 장치에서 학습할 때와 똑같은 연산을 하고 있다. 다른 점은 **배열이 단일 TPU/GPU의 HBM에 들어가지 않는다**는 것이고, 그래서 배열을 쪼개야 한다.[^1] 이를 배열을 "*sharding*" 또는 "*partitioning*"한다고 말한다. 스케일링의 기술은 연산이 효율적으로 유지되도록 모델을 sharding하는 방법을 알아내는 데 있다.
+LLM을 1만 개의 TPU나 GPU에서 학습할 때도, 추상적으로는 하나의 장치에서 학습할 때와 똑같은 연산을 하고 있다. 다른 점은 **배열이 단일 TPU/GPU의 HBM에 들어가지 않는다**는 것이고, 그래서 배열을 쪼개야 한다.[^1] 이를 배열을 "*sharding*" 또는 "*partitioning*"한다고 말한다. 스케일링의 기술은 연산이 효율적으로 유지되도록 모델을 sharding하는 방법을 알아내는 데 있다.
 
 2D 배열 **A**를 4개의 TPU에 sharding한 예를 보자:
 
@@ -25,10 +25,10 @@ sharding된 배열도 sharding되지 않은 배열과 같은 *global shape*(또�
 
 ### Sharding을 위한 통일된 표기법
 
-텐서가 장치들에 걸쳐 블록 단위로 *어떻게* sharding되는지는 *named-axis notation*(이름 붙은 축 표기법)의 변형으로 기술한다. **device mesh**라 부르는 2D 또는 3D 장치 그리드의 존재를 가정하고, 각 axis에 **mesh axis 이름**(**예: X**, **Y, Z**)을 붙인다. 그런 다음 배열의 각 이름 붙은 차원이 물리적 mesh axis들에 걸쳐 어떻게 분할되는지를 기술함으로써, 행렬 데이터가 device mesh 위에 어떻게 배치되는지 명시할 수 있다. 이 배정을 **sharding**이라 부른다.
+텐서가 장치들에 걸쳐 블록 단위로 *어떻게* sharding되는지는 *named-axis notation*(이름 붙은 축 표기법)의 변형으로 기술한다. **device mesh**라 부르는 2D 또는 3D 장치 그리드의 존재를 가정하고, 각 axis에 **mesh axis 이름**(**예: X**, **Y, Z**)을 붙인다. 그런 다음 배열의 각 이름 붙은 차원이 물리적 mesh axis들에 걸쳐 어떻게 분할되는지를 기술함으로써, 행렬 데이터가 device mesh 위에 어떻게 배치되는지 명시한다. 이 배정을 **sharding**이라 부른다.
 
 **예시 (위 다이어그램)**: 위 다이어그램의 경우:
-* **Mesh:** 위의 device mesh `Mesh(devices=((0, 1), (2, 3)), axis_names=('X', 'Y'))` — 4개의 TPU가 2x2 그리드에 있고 axis 이름은 $X$와 $Y$라는 뜻이다.
+* **Mesh:** 위의 device mesh `Mesh(devices=((0, 1), (2, 3)), axis_names=('X', 'Y'))` — 4개의 TPU가 2x2 그리드에 있고 axis 이름은 $X$와 $Y$다.
 * **Sharding:** $A[I_X, J_Y]$ — 첫 번째 axis인 $I$를 mesh axis $X$를 따라, 두 번째 axis인 $J$를 mesh axis $Y$를 따라 shard하라는 뜻이다. 이 sharding은 각 shard가 배열의 $1 / (\lvert X\rvert \cdot \lvert Y\rvert)$을 담는다는 것을 알려 준다.
 
 이 둘을 합치면 배열의 local shape(개별 장치가 담는 shard의 크기)이 $(\lvert I\rvert / 2, \lvert J\rvert / 2)$임을 알 수 있다. 여기서 $$\lvert I\rvert$$는 A의 첫 번째 차원의 크기이고 $$\lvert J\rvert$$는 A의 두 번째 차원의 크기다.
@@ -50,19 +50,19 @@ $A[I_{XY}, J]$는 첫 번째 차원(I)을 X와 Y 하드웨어 axis 모두를 따
   <img src="https://jax-ml.github.io/scaling-book/assets/img/sharding-colored1.png" alt="fully-replicated 행렬" class="img-small" loading="lazy" />
 </figure>
 
-행렬의 *fully-replicated*(완전 복제) 형태는 sharding 배정 없이 그냥 $A[I, J]$로 쓴다. 이는 *각* 장치가 행렬 전체의 완전한 복사본을 담고 있다는 뜻이다.
+행렬의 *fully-replicated*(완전 복제) 형태는 sharding 배정 없이 그냥 $A[I, J]$로 쓴다. *각* 장치가 행렬 전체의 완전한 복사본을 담고 있다는 말이다.
 
 <figure>
   <img src="https://jax-ml.github.io/scaling-book/assets/img/sharding-colored2.png" alt="한 차원만 분할된 행렬" class="img-small" loading="lazy" />
 </figure>
 
-이 차원들 중 하나가 어떤 mesh axis에 걸쳐 분할되었음은 아래첨자 mesh axis로 표시할 수 있다. 예컨대 $A[I_X, J]$는 **I** 논리 axis가 **X** mesh 차원에 걸쳐 분할되었지만 **J** 차원은 분할되지 *않았고*, 블록들이 **Y** mesh axis에 걸쳐 *partially-replicated*(부분 복제) 상태로 남아 있다는 뜻이다.
+이 차원들 중 하나가 어떤 mesh axis에 걸쳐 분할되었음은 아래첨자 mesh axis로 표시한다. 예컨대 $A[I_X, J]$는 **I** 논리 axis가 **X** mesh 차원에 걸쳐 분할되었지만 **J** 차원은 분할되지 *않았고*, 블록들이 **Y** mesh axis에 걸쳐 *partially-replicated*(부분 복제) 상태로 남아 있다는 뜻이다.
 
 <figure>
   <img src="https://jax-ml.github.io/scaling-book/assets/img/sharding-colored3.png" alt="두 차원이 모두 분할된 행렬" class="img-small" loading="lazy" />
 </figure>
 
-$A[I_X, J_Y]$는 **I** 논리 axis가 **X** mesh axis에 걸쳐, **J** 차원이 **Y** mesh axis에 걸쳐 분할되었다는 뜻이다.
+$A[I_X, J_Y]$는 **I** 논리 axis가 **X** mesh axis에 걸쳐, **J** 차원이 **Y** mesh axis에 걸쳐 분할되었음을 뜻한다.
 
 <figure>
   <img src="https://jax-ml.github.io/scaling-book/assets/img/sharding-colored4.png" alt="A[I_X, J_Y] sharding" class="img-small" loading="lazy" />
@@ -129,12 +129,12 @@ JAX의 멋진 점은 이 배열들이 마치 sharding되지 않은 것처럼 동
 
 여러 장치에 분산된 데이터 배열이 있고 그 위에서 수학 연산을 수행하고 싶다면, 데이터와 연산 양쪽을 sharding하는 데 따르는 오버헤드는 무엇일까?
 
-당연히 이는 어떤 연산이냐에 달려 있다.
+당연히 어떤 연산이냐에 달려 있다.
 
 * *elementwise* 연산의 경우, 분산된 배열에 연산하는 데 **오버헤드가 없다**.
 * 여러 장치에 흩어져 있는 원소들에 걸친 연산을 수행하고 싶을 때는 일이 복잡해진다. 다행히 머신러닝에서는 거의 모든 연산이 행렬 곱셈 형태이고, 행렬 곱셈은 분석하기 비교적 단순하다.
 
-이 절의 나머지는 sharded 행렬을 곱하는 방법을 다룬다. 1차 근사로, 이는 각 청크를 온전히 곱하거나 합할 수 있도록 행렬의 청크들을 이리저리 옮기는 일이다. **각 sharding마다 필요한 통신이 다르다.** 예를 들어 $A[I_X, J] \cdot B[J, K_Y] \to C[I_X, K_Y]$는 *contracting 차원*(실제로 합산이 일어나는 차원인 J)이 sharding되어 있지 않으므로 아무 통신 없이 곱할 수 있다. 반면 출력이 sharding되지 않기를 원한다면(즉 $A[I_X, J] \cdot B[J, K_Y] \to C[I, K]$), $A$와 $B$를, 혹은 $C$를 (*AllGather*를 사용해) 모든 장치로 복사해야 한다. 이 두 선택은 통신 비용이 다르므로, 그 비용을 계산해 더 낮은 쪽을 골라야 한다.
+이 절의 나머지는 sharded 행렬을 곱하는 방법을 다룬다. 1차 근사로는 각 청크를 온전히 곱하거나 합할 수 있도록 행렬의 청크들을 이리저리 옮기는 일이다. **각 sharding마다 필요한 통신이 다르다.** 예를 들어 $A[I_X, J] \cdot B[J, K_Y] \to C[I_X, K_Y]$는 *contracting 차원*(실제로 합산이 일어나는 차원인 J)이 sharding되어 있지 않으므로 아무 통신 없이 곱할 수 있다. 반면 출력이 sharding되지 않기를 원한다면(즉 $A[I_X, J] \cdot B[J, K_Y] \to C[I, K]$), $A$와 $B$를, 혹은 $C$를 (*AllGather*를 사용해) 모든 장치로 복사해야 한다. 이 두 선택은 통신 비용이 다르므로, 그 비용을 계산해 더 낮은 쪽을 골라야 한다.
 
 <details>
 <summary>"블록 행렬 곱셈"의 관점에서 생각해 볼 수도 있다</summary>
@@ -180,7 +180,7 @@ a_{32} & a_{33}
 \end{equation}
 $$
 
-행렬 곱셈에는 좋은 성질이 있다: 피승수들을 블록으로 표현하면, 곱도 표준 규칙을 따르는 블록 matmul들로 표현할 수 있다:
+행렬 곱셈에는 좋은 성질이 있다: 피승수들을 블록으로 표현하면, 곱도 표준 규칙을 따르는 블록 matmul들로 표현된다:
 
 $$
 \begin{equation}
@@ -205,7 +205,7 @@ $$
 
 </details>
 
-편리하게도, 가능한 모든 sharding은 우리가 고려해야 할 대략 4가지 경우로 요약할 수 있고, 각 경우마다 어떤 통신을 추가해야 하는지에 대한 규칙이 있다.
+편리하게도, 가능한 모든 sharding은 고려해야 할 대략 4가지 경우로 요약되고, 각 경우마다 어떤 통신을 추가해야 하는지에 대한 규칙이 있다.
 
 1. **Case 1:** 어느 입력도 contracting 차원을 따라 sharding되어 있지 않다. _아무 통신 없이 로컬 shard들을 곱할 수 있다._
 2. **Case 2:** 한 입력의 contracting 차원이 sharding되어 있다. _보통 sharding된 입력을 contracting 차원을 따라 "AllGather"한다._
@@ -224,7 +224,7 @@ $$
 \end{equation*}
 $$
 
-아무런 통신 없이 잘 작동하며, 결과는 X와 Y 하드웨어 차원 모두에 걸쳐 sharding된 텐서가 된다. 왜 그런지 생각해 보자. 기본적으로 연산은 sharding과 *독립적*인데, 각 배치 원소가 contraction되는 axis의 로컬 청크를 갖고 있어서 그것을 곱하고 reduce할 수 있기 때문이다. 다음 경우들은 모두 문제없이 작동하며 이 규칙을 따른다:
+아무런 통신 없이 잘 작동하며, 결과는 X와 Y 하드웨어 차원 모두에 걸쳐 sharding된 텐서가 된다. 왜 그런지 생각해 보자. 각 배치 원소가 contraction되는 axis의 로컬 청크를 갖고 있어서 그것을 곱하고 reduce할 수 있으므로, 기본적으로 연산은 sharding과 *독립적*이다. 다음 경우들은 모두 문제없이 작동하며 이 규칙을 따른다:
 
 $$
 \begin{align*}
@@ -235,7 +235,7 @@ $$
 \end{align*}
 $$
 
-**A**도 **B**도 contracting 차원 **J**가 sharding되어 있지 않으므로, 입력들의 로컬 블록 행렬 곱셈을 그냥 수행하면 결과가 *이미* 원하는 출력 sharding대로 sharding되어 있다. 두 피승수의 non-contracting 차원이 같은 axis를 따라 sharding되어 있으면 이는 더 이상 성립하지 않는다(자세한 내용은 아래 Case 4 절을 보라).
+**A**도 **B**도 contracting 차원 **J**가 sharding되어 있지 않으므로, 입력들의 로컬 블록 행렬 곱셈을 그냥 수행하면 결과가 *이미* 원하는 출력 sharding대로 sharding되어 있다. 두 피승수의 non-contracting 차원이 같은 axis를 따라 sharding되어 있으면 이 성질은 더 이상 성립하지 않는다(자세한 내용은 아래 Case 4 절을 보라).
 
 ### Case 2: 한쪽 입력의 contracting 차원이 sharding된 경우
 
@@ -263,7 +263,7 @@ $$
 
 </div>
 
-**B**가 X를 따라 sharding되어 있지 않은 경우에는, 로컬 부분 matmul을 수행한 뒤 sharded partial sum들을 합산(또는 *AllReduce*)할 수도 있다. 이렇게 하면 연산을 shard할 수 있지만 보통 통신 비용이 더 높다. 어떤 경우에는 이쪽이 더 빠를 수도 있으나, 실전에서는 대개 **B**도 sharding되어 있는 것이 보통이다. 아래 연습 문제 4에서 언제 이쪽이 더 나은지 다룬다.
+**B**가 X를 따라 sharding되어 있지 않은 경우에는, 로컬 부분 matmul을 수행한 뒤 sharded partial sum들을 합산(또는 *AllReduce*)할 수도 있다. 이렇게 하면 연산을 shard할 수 있지만 보통 통신 비용이 더 높다. 어떤 경우에는 이쪽이 더 빠를 수도 있으나, 실전에서는 **B**도 sharding되어 있는 것이 보통이다. 아래 연습 문제 4에서 언제 이쪽이 더 나은지 다룬다.
 
 **AllGather란 무엇인가?** AllGather는 우리가 다룰 첫 번째 핵심 [MPI](https://en.wikipedia.org/wiki/Message_Passing_Interface) 통신 primitive다. AllGather는 한 axis를 따라 *sharding을 제거*하고, 장치들에 흩어진 shard들을 그 axis를 따라 *각* 장치 위에 다시 조립한다. 위 표기법으로 말하면, AllGather는 축들의 집합에서 아래첨자를 제거한다. 예:
 
@@ -304,7 +304,7 @@ $$
 T_{total} = \frac{V}{W_\text{ici}}
 $$
 
-주목할 점: 이것은 **$X$에 의존하지 않는다!** 꽤 놀라운 사실인데, TPU들이 로컬로만 연결되어 있는데도 연결의 지역성이 문제가 되지 않는다는 뜻이기 때문이다. 우리는 그저 각 링크의 속도에 병목이 걸릴 뿐이다.
+주목할 점: 이것은 **$X$에 의존하지 않는다!** 꽤 놀라운 사실이다. TPU들이 로컬로만 연결되어 있는데도 연결의 지역성이 문제가 되지 않는다는 말이다. 그저 각 링크의 속도에 병목이 걸릴 뿐이다.
 
 <div class="takeaway">
 
@@ -312,7 +312,7 @@ $$
 
 </div>
 
-**ICI latency에 대한 노트:** ICI 링크의 각 홉에는 데이터 양과 무관한 고유의 오버헤드가 있다. 보통 1us 정도다. 이는 배열 $$A$$가 아주 작아서 각 홉이 1us도 안 걸릴 때는, 계산이 $X$에 _의존하는_ "latency-bound" 영역에 들어갈 수 있다는 뜻이다.
+**ICI latency에 대한 노트:** ICI 링크의 각 홉에는 데이터 양과 무관한 고유의 오버헤드가 있다. 보통 1us 정도다. 그래서 배열 $$A$$가 아주 작아서 각 홉이 1us도 안 걸릴 때는, 계산이 $X$에 _의존하는_ "latency-bound" 영역에 들어가기도 한다.
 
 <details>
 <summary>자세한 유도 보기</summary>
@@ -340,7 +340,7 @@ $$
 
 공칭 peak bandwidth(`4.5e10`)의 약 95%를 달성할 뿐 아니라, 이 peak에 약 10MB에서 도달한다는 점에도 주목하자. 16-way sharding이면 장치당 약 625kB인 셈이다(*여담*: 이는 GPU보다 훨씬 좋은 수치다).
 
-**여러 axis에 걸쳐 AllGather하면 어떻게 되나?** 여러 axis에 걸쳐 gather할 때는 gather를 수행할 ICI 차원이 여러 개가 된다. 예컨대 AllGather<sub>XY</sub>([B, D<sub>XY</sub>])는 두 개의 하드웨어 mesh axis에 걸쳐 동작한다. 이는 가용 bandwidth를 $N_\text{axes}$배로 늘린다.
+**여러 axis에 걸쳐 AllGather하면 어떻게 되나?** 여러 axis에 걸쳐 gather할 때는 gather를 수행할 ICI 차원이 여러 개가 된다. 예컨대 AllGather<sub>XY</sub>([B, D<sub>XY</sub>])는 두 개의 하드웨어 mesh axis에 걸쳐 동작한다. 그러면 가용 bandwidth가 $N_\text{axes}$배로 늘어난다.
 
 latency까지 고려하면 일반 규칙은 다음과 같다:
 
@@ -366,7 +366,7 @@ $$
 
 <div class="takeaway">
 
-**참고(Note):** `{'X': 16, 'Y': 4}` 같은 2D mesh가 있을 때, 각 axis가 반드시 특정 _하드웨어_ axis에 대응해야 하는 것은 아니다. 예컨대 위 mesh는 하드웨어 axis 2개를 $X$ axis에 합친 4x4x4 TPU v5p 큐브를 기술하는 것일 수도 있다. 이는 나중에 여러 axis에 걸친 data parallelism을 설명할 때 다시 등장한다.
+**참고(Note):** `{'X': 16, 'Y': 4}` 같은 2D mesh가 있을 때, 각 axis가 반드시 특정 _하드웨어_ axis에 대응해야 하는 것은 아니다. 예컨대 위 mesh는 하드웨어 axis 2개를 $X$ axis에 합친 4x4x4 TPU v5p 큐브를 기술하는 것일 수도 있다. 이 이야기는 나중에 여러 axis에 걸친 data parallelism을 설명할 때 다시 등장한다.
 
 </div>
 
@@ -386,7 +386,7 @@ $$
 
 표기 **{ U<sub>X</sub> }**는 "X mesh axis를 따라 **unreduced**(아직 합산되지 않음)"라고 읽으며, 이 연산이 어떤 의미에서 "미완성" — 마지막 합산이 남아 있어야 비로소 완료되는 — 상태임을 가리킨다. $\cdot_\text{LOCAL}$ 문법은 로컬 합산까지는 수행하되 결과를 unreduced 상태로 남겨 둔다는 뜻이다.
 
-이는 행렬 곱셈과 outer product에 관한 다음 결과로 볼 수 있다:
+행렬 곱셈과 outer product에 관한 다음 결과로 보면 된다:
 
 $$
 A \cdot B = \sum_{i=1}^{P} \underbrace{A_{:,i} \otimes B_{i,:}}_{\in \mathbb{R}^{n \times m}}
@@ -394,7 +394,7 @@ $$
 
 여기서 ⊗는 outer product다. 따라서 axis **X** 위의 TPU **i**가 **A**의 **i**번째 열과 **B**의 **i**번째 행을 갖고 있다면, 로컬 행렬 곱셈으로 $$A_{:,i} \otimes B_{i,:} \in \mathbb{R}_{n\times m}$$을 얻을 수 있다. 이 행렬은 각 원소 자리에, **A • B**가 그 자리에 갖는 합의 **i**번째 항을 담고 있다. mesh axis **X**에 걸쳐 sharding해 둔 **P**에 대한 그 합산은 여전히 수행해야 전체 **A • B**를 얻는다. **A**와 **B**를 블록(즉 shard) 단위로 쓰고 결과의 각 shard에 대해 합산해도 똑같은 방식으로 작동한다.
 
-이 합산은 **X** axis에 걸친 완전한 **AllReduce**로 수행해 문제를 해소할 수 있다:
+이 합산을 **X** axis에 걸친 완전한 **AllReduce**로 수행하면 문제가 해소된다:
 
 $$
 \begin{align*}
@@ -409,9 +409,9 @@ $$
 \textbf{AllReduce}_Y A[I_X, J] \{U_Y\} \rightarrow A[I_X, J]
 $$
 
-즉 단순히 $\\{U_Y\\}$ 접미사를 제거할 뿐, 그 외에는 결과를 바꾸지 않는다.
+단순히 $\\{U_Y\\}$ 접미사를 제거할 뿐, 그 외에는 결과를 바꾸지 않는다.
 
-**AllReduce는 비용이 얼마나 드나?** AllReduce가 어떻게 수행되는지에 대한 한 가지 멘탈 모델은, 모든 장치가 자기 shard를 이웃들에게 보내고 받은 shard를 전부 합산한다는 것이다. 각 "shard"가 전체 배열과 같은 shape을 가지므로 AllGather보다 분명히 비싸다. 일반적으로 **AllReduce는 AllGather보다 2배 비싸다.** 이를 보는 한 가지 방법은 **AllReduce**를 두 개의 다른 primitive의 합성으로 표현할 수 있다는 점이다: **ReduceScatter**와 **AllGather**다. AllReduce처럼 ReduceScatter도 배열의 partial sum을 해소하지만, 출력은 주어진 차원을 따라 'scatter'(분할)된 상태로 나온다. AllGather는 그 조각들을 전부 모아 논리 axis를 그 물리 axis를 따라 'unpartition/unshard/replicate'한다.
+**AllReduce는 비용이 얼마나 드나?** AllReduce가 어떻게 수행되는지에 대한 한 가지 멘탈 모델은, 모든 장치가 자기 shard를 이웃들에게 보내고 받은 shard를 전부 합산한다는 것이다. 각 "shard"가 전체 배열과 같은 shape을 가지므로 AllGather보다 분명히 비싸다. 일반적으로 **AllReduce는 AllGather보다 2배 비싸다.** 이를 보는 한 가지 방법은 **AllReduce**가 두 개의 다른 primitive의 합성으로 표현된다는 점이다: **ReduceScatter**와 **AllGather**다. AllReduce처럼 ReduceScatter도 배열의 partial sum을 해소하지만, 출력은 주어진 차원을 따라 'scatter'(분할)된 상태로 나온다. AllGather는 그 조각들을 전부 모아 논리 axis를 그 물리 axis를 따라 'unpartition/unshard/replicate'한다.
 
 $$
 \begin{align*}
@@ -521,7 +521,7 @@ $$
 <details>
 <summary>AllGather와 ReduceScatter가 서로의 미분인 이유 보기</summary>
 
-이는 broadcast와 reduction이 선형 연산자로서 서로의 전치(transpose)이고, AllGather와 ReduceScatter가 각각 broadcast와 reduce의 outer product([Kronecker product](https://en.wikipedia.org/wiki/Kronecker_product)라고도 한다)라는 사실에서 나온다. 구체적으로, 벡터 $x \in \mathbb{R}^n$과 임의의 장치 수 $p \in \mathbb{N}$가 있고 $u = (1, \ldots, 1) \in \mathbb{R}^p$라 하면, broadcast와 reduce를 다음과 같이 정의할 수 있다. 여러분의 직관적 이해와 일치할 것이다:
+이 성질은 broadcast와 reduction이 선형 연산자로서 서로의 전치(transpose)이고, AllGather와 ReduceScatter가 각각 broadcast와 reduce의 outer product([Kronecker product](https://en.wikipedia.org/wiki/Kronecker_product)라고도 한다)라는 사실에서 나온다. 구체적으로, 벡터 $x \in \mathbb{R}^n$과 임의의 장치 수 $p \in \mathbb{N}$가 있고 $u = (1, \ldots, 1) \in \mathbb{R}^p$라 하면, broadcast와 reduce를 다음과 같이 정의하자. 여러분의 직관적 이해와 일치할 것이다:
 
 $$
 \begin{align*}
@@ -669,7 +669,7 @@ $$
 T_\text{total} = \max\left(\frac{2BDF}{X \cdot C}, \frac{4BF}{W_\text{ici}}\right)
 $$
 
-문제는 이것이다: *둘 중 어느 쪽이 더 큰가?* 전략 (2)는 $D / (X \cdot C) > 2 / W_\text{ici}$일 때, 즉 $D / 2X > C / W_\text{ici} \approx 2550 \rightarrow X < D / (2 * 2550)$일 때 compute bound다. $D \approx 8k$ 정도를 합리적으로 기대할 수 있으므로 이는 대략 $X < 2$를 뜻하는데, 그럴 일은 별로 없다 — 따라서 전략 2에서는 기본적으로 항상 comms bound다. 기준선(전략 1)에서는 $$B < C / W_\text{ici} = 2550$$일 때 comms bound인데, 이는 자주(항상은 아니지만) 참이다.
+문제는 이것이다: *둘 중 어느 쪽이 더 큰가?* 전략 (2)는 $D / (X \cdot C) > 2 / W_\text{ici}$일 때, 즉 $D / 2X > C / W_\text{ici} \approx 2550 \rightarrow X < D / (2 * 2550)$일 때 compute bound다. $D \approx 8k$ 정도를 합리적으로 기대할 수 있으므로 이는 대략 $X < 2$를 뜻하는데 그럴 일은 별로 없다 — 전략 2에서는 기본적으로 항상 comms bound인 셈이다. 기준선(전략 1)에서는 $$B < C / W_\text{ici} = 2550$$일 때 comms bound인데, 이는 자주(항상은 아니지만) 참이다.
 
 따라서 $B < 2550$이면 두 경우 모두 comms-bound이고
 
@@ -677,7 +677,7 @@ $$
 T_\text{comms for Strategy 2} < T_\text{comms for Strategy 1} \Leftrightarrow \frac{4BF}{W_\text{ici}} < \frac{2DF}{W_\text{ici}}
 $$
 
-이는 $D > 2B$일 때 참이다(여기서 $2B < 5100$). 이는 자주 참이므로, batch가 작으면 전략 2가 때때로 더 나을 수 있다. batch가 클 때($B > 2550$)는
+이는 $D > 2B$일 때 참이다(여기서 $2B < 5100$). 이 조건은 자주 참이므로, batch가 작으면 전략 2가 때때로 더 나을 수 있다. batch가 클 때($B > 2550$)는
 
 $$
 T_\text{comms for Strategy 2} < T_\text{math for Strategy 1} \Leftrightarrow \frac{4BF}{W_\text{ici}} < \frac{2BDF}{C}
@@ -708,7 +708,7 @@ $$
 **문제 6:** TPU v5e 4x4에서 $A[I_X, J_Y] \cdot_J B[J_Y, K] \to C[I_X, K]$를 수행하고 싶다고 하자. 어떤 통신을 수행하는가? 통신과 연산에 각각 시간이 얼마나 쓰이는가?
 
 * $A[I_X, J] \cdot_J B[J_X, K_Y] \to C[I_X, K_Y]$는 어떤가? 이는 data, tensor, ZeRO sharding을 결합하는, 학습에서 가장 표준적인 설정이다.
-* $A[I_X, J] \cdot_J B[J, K_Y] \to C[I_X, K_Y]$는 어떤가? 이는 순수 tensor parallelism(+data)을 쓰는, 추론의 표준 설정이다.
+* $A[I_X, J] \cdot_J B[J, K_Y] \to C[I_X, K_Y]$는 어떤가? 순수 tensor parallelism(+data)을 쓰는, 추론의 표준 설정이다.
 
 **문제 7:** 전형적인 Transformer 블록에는 두 행렬 $W_\text{in}[D, F]$와 $W_\text{out}[F, D]$가 있고 $F \gg D$다. batch size가 B라고 하자. 그러면 전체 블록은 $In[B, D] \cdot W_\text{in}[D, F] \cdot W_\text{out}[F, D]$다. $D=8192$, $F=32768$, $B=128$로 잡고 모든 것이 bfloat16이라고 가정하자. TPU v5e 2x2 슬라이스에서 돌리되, 각 TPU에 여유 메모리가 300MB밖에 없다고 치자. 메모리 한도 아래로 유지하면서 전체 시간을 최소화하려면 In, $W_\text{in}$, $W_\text{out}$, Out을 어떻게 shard해야 하는가? 통신과 FLOPs에 시간이 각각 얼마나 쓰이는가? *힌트: 최종 출력이 완전히 복제될 필요는 없지만, "layer"를 반복할 수 있도록 입력과 같은 방식으로 sharding되어야 한다.*
 
@@ -742,7 +742,7 @@ $$
 
 1. 먼저 outer product들을 계산해 결과를 $$O[N, K]: o_{kj} = \sum_i a_{ki} b_{ij}$$에 저장한다. 반복되는 인덱스가 contraction되는 인덱스가 아니라는 점에 주목하자 — outer product를 하고 있기 때문이다. 여기서 합은 우리가 쓰는 특정 장치에 저장된 i 값들의 집합에 대해 돈다. 예컨대 contracting axis의 크기가 16이고 장치가 4개라면, 장치 0에서 i는 {0, 1, 2, 3}, 장치 1에서는 {4, 5, 6, 7}, 장치 2에서는 {8, 9, 10, 11}, 장치 3에서는 {12, 13, 14, 15}를 돈다. 그런 다음 각 장치에 있는 $O[N, K]$의 partial sum들을 AllReduce해 완전한 $O[N, K]$를 만든다.
 2. 2단계에서 AllReduce 대신 더 싼 ReduceScatter로 끝낼 수 있다. 어느 axis로든 가능하다: $[N, K] \\{ U_X \\} \to [N_X, K]$ 또는 $[N, K] \\{ U_X \\} \to [N, K_X]$.
-3. 본문에서 설명했듯 (throughput-bound일 때) AllGather의 비용은 ReduceScatter의 비용과 같다. 처리하는 전체 행렬의 크기로 정해질 뿐이다. 따라서 gather-후-matmul 알고리즘에서는 ($A$를 $\text{AllGather}$하므로) 이것이 $NM$으로 스케일하고, matmul-후-reduce-scatter 알고리즘에서는 ($O$를 reduce-scatter하므로) NK로 스케일한다. 따라서 두 알고리즘의 통신 비용의 비는 `M/K`다.
+3. 본문에서 설명했듯 (throughput-bound일 때) AllGather의 비용은 ReduceScatter의 비용과 같다. 처리하는 전체 행렬의 크기로 정해질 뿐이다. 따라서 gather-후-matmul 알고리즘에서는 ($A$를 $\text{AllGather}$하므로) 이것이 $NM$으로 스케일하고, matmul-후-reduce-scatter 알고리즘에서는 ($O$를 reduce-scatter하므로) NK로 스케일한다. 두 알고리즘의 통신 비용의 비는 `M/K`다.
 
 </details>
 
@@ -758,7 +758,7 @@ $$
 <details>
 <summary>정답 보기</summary>
 
-(1) **풀이:** 과정은 단순하다. 알고리즘의 각 단계에서 각 장치는 행렬의 single-shard "스트립"(총 $$\frac{N}{D} \times N$$개 원소 크기)을 가장 가까운 이웃에게 보낸다. 각 shard는 자기가 출발한 장치를 제외한 모든 장치로 전달되어야 하므로 이 일이 $$D-1$$번 일어난다. 따라서 각 장치가 총 $$\frac{N^2(D-1)}{D}$$개의 스칼라를 전송하며, 즉 단일 ICI 링크를 그만큼의 스칼라가 흐른다.
+(1) **풀이:** 과정은 단순하다. 알고리즘의 각 단계에서 각 장치는 행렬의 single-shard "스트립"(총 $$\frac{N}{D} \times N$$개 원소 크기)을 가장 가까운 이웃에게 보낸다. 각 shard는 자기가 출발한 장치를 제외한 모든 장치로 전달되어야 하므로 이 일이 $$D-1$$번 일어난다. 따라서 각 장치가 총 $$\frac{N^2(D-1)}{D}$$개의 스칼라를 전송하며, 단일 ICI 링크를 그만큼의 스칼라가 흐르는 셈이다.
 
 **답:** $$N^2 (1-\frac{1}{D})$$, $$D >> 1$$이면 그냥 $$N^2$$.
 

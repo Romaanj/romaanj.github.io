@@ -45,7 +45,7 @@ LLaMA-3 모델 패밀리(Grattafiori et al. 2024)에는 세 가지 주요 모델
 | Attention params | n_layers * [ 2 (q embedding과 이어 붙인 output projection) * d_model * n_heads * d_qkv + 2 (k와 v) * d_model * n_kv_heads * d_qkv]                 | 80 * (2 * 8,192 * 64 * 128 + 2 * 8,192 * 8 * 128) = **12e9** |
 |                  |                                                                                                                                                    | 56.3e9 + 2.1e9 + 12e9 = **70.4e9**                           |
 
-훌륭하다! 기대한 숫자가 나온다. 예상대로 FFW 파라미터가 전체 파라미터 수를 압도하지만, attention도 무시할 수준은 아니라는 것을 알 수 있다.
+훌륭하다! 기대한 숫자가 나온다. 예상대로 FFW 파라미터가 전체 파라미터 수를 압도하지만 attention도 무시할 수준은 아니다.
 
 <div class="takeaway">
 
@@ -55,7 +55,7 @@ LLaMA-3 모델 패밀리(Grattafiori et al. 2024)에는 세 가지 주요 모델
 
 이제 FLOPs를 보자! *[4장](/scaling-book/transformers/)에서 다룬 학습의 일반 규칙을 떠올려 보자.*
 
-**질문:** LLaMA-3는 학습 스텝마다 토큰당 몇 FLOPs를 수행하는가? *이는 전체 학습 과정이 얼마나 비쌀지 가늠하는 데 도움이 된다.*
+**질문:** LLaMA-3는 학습 스텝마다 토큰당 몇 FLOPs를 수행하는가? *이 값은 전체 학습 과정이 얼마나 비쌀지 가늠하는 데 도움이 된다.*
 
 <details>
 <summary>정답 보기</summary>
@@ -96,9 +96,9 @@ LLaMA-3 모델 패밀리(Grattafiori et al. 2024)에는 세 가지 주요 모델
 | **Gradient Checkpoints** | 2 * 8192 * 4e6 * 4 * 80 | ~20.9TB  |
 | **합계**                 |                         | ~21.6TB  |
 
-총합은 약 21.6TB다. 아주 보수적인 checkpointing 방식인데도 gradient checkpoint가 메모리 그림을 강하게 지배한다는 것을 알 수 있다. 기술적으로는 레이어당 checkpoint 1개까지 줄이거나 microbatching을 할 수도 있지만, 이 정도면 합리적인 그림이다. 이 가정하에서 TPU v5p 하나당 HBM이 96GB이므로 `21.6e12 / 96e9 = 225`개의 TPU가 필요하다. 사실 그렇게 많지 않다!
+총합은 약 21.6TB다. 아주 보수적인 checkpointing 방식인데도 gradient checkpoint가 메모리 그림을 강하게 지배한다. 기술적으로는 레이어당 checkpoint 1개까지 줄이거나 microbatching을 할 수도 있지만, 이 정도면 합리적인 그림이다. 이 가정하에서 TPU v5p 하나당 HBM이 96GB이므로 `21.6e12 / 96e9 = 225`개의 TPU가 필요하다. 사실 그렇게 많지 않다!
 
-*그런데 왜 이렇게 하지 않을까?* 학습에 `44 days * 8960 / 225 = 1752 days`가 걸리기 때문이다. 거의 5년이다. **너무 길다.** 그래도 이 계산은 우리가 대형 클러스터를 쓰는 이유가 메모리에 발목 잡혀서가 아니라 FLOPs가 더 필요해서라는 점을 분명히 보여 준다.
+*그런데 왜 이렇게 하지 않을까?* 학습에 `44 days * 8960 / 225 = 1752 days`가 걸리기 때문이다. 거의 5년이다. **너무 길다.** 그래도 이 계산은 대형 클러스터를 쓰는 이유가 메모리에 발목 잡혀서가 아니라 FLOPs가 더 필요해서라는 점을 분명히 보여 준다.
 
 </details>
 
@@ -107,21 +107,21 @@ LLaMA-3 모델 패밀리(Grattafiori et al. 2024)에는 세 가지 주요 모델
 <details>
 <summary>정답 보기</summary>
 
-**정답**: 총 메모리는 여전히 약 21.6TB이므로 칩당 약 2.4GB를 쓰게 되는데, 사실상 없는 것이나 다름없다. 훨씬 공격적인 checkpointing, 예컨대 레이어당 checkpoint 12개를 쓰더라도 칩당 8GB에 불과하다. 이 규모에서는 학습 중 memory-bound가 되는 것과는 거리가 한참 멀다.
+**정답**: 총 메모리는 여전히 약 21.6TB이므로 칩당 약 2.4GB를 쓰게 되는데 사실상 없는 것이나 다름없다. 훨씬 공격적인 checkpointing, 예컨대 레이어당 checkpoint 12개를 쓰더라도 칩당 8GB에 불과하다. 이 규모에서는 학습 중 memory-bound가 되는 것과는 거리가 한참 멀다.
 
 </details>
 
 <div class="takeaway">
 
-**요점(Takeaways):** 기술적으로는 아주 큰 모델도 아주 작은 topology에서 학습할 수 있다. 다만 시간이 오래 걸릴 가능성이 높다는 단서가 붙는다. 학습 런의 총 FLOPs를 계산할 수 있으면, 적당한 MFU와 알려진 topology를 가정해 학습 시간을 어림잡을 수 있다.
+**요점(Takeaways):** 기술적으로는 아주 큰 모델도 아주 작은 topology에서 학습할 수 있다. 다만 시간이 오래 걸릴 가능성이 높다는 단서가 붙는다. 학습 런의 총 FLOPs를 계산해 두면 적당한 MFU와 알려진 topology를 가정해 학습 시간을 어림잡을 수 있다.
 
 </div>
 
 ### LLaMA 3-70B를 학습용으로 sharding하는 법
 
-위 설정을 그대로 유지해서, 4M 토큰 batch size(배치당 길이 4096짜리 시퀀스 1024개)로 LLaMA 3-70B를 8960칩 TPU v5p pod에서 학습하고 싶다고 하자. 이 모델에 가장 좋은 sharding 전략이 무엇인지 논의해 보자.
+위 설정을 그대로 유지해서 4M 토큰 batch size(배치당 길이 4096짜리 시퀀스 1024개)로 LLaMA 3-70B를 8960칩 TPU v5p pod에서 학습하고 싶다고 하자. 이 모델에 가장 좋은 sharding 전략이 무엇인지 논의해 보자.
 
-**질문:** 위 가정에서 FSDP만으로 우리 모델을 학습할 수 있을까? 우선 sequence/context parallelism은 전혀 할 수 없다고 하자. *이게 가장 먼저 떠올려야 할 아이디어다. 단순하고, 잘 동작한다면 추가 통신이 전혀 생기지 않기 때문이다.*
+**질문:** 위 가정에서 FSDP만으로 이 모델을 학습할 수 있을까? 우선 sequence/context parallelism은 전혀 할 수 없다고 하자. *이게 가장 먼저 떠올려야 할 아이디어다. 단순하고, 잘 동작한다면 추가 통신이 전혀 생기지 않기 때문이다.*
 
 <details>
 <summary>정답 보기</summary>
@@ -144,7 +144,7 @@ LLaMA-3 모델 패밀리(Grattafiori et al. 2024)에는 세 가지 주요 모델
 <details>
 <summary>정답 보기</summary>
 
-**정답**: 먼저 이게 애초에 가능한지부터 확인하자. 칩당 batch size가 $2550^2 / 2F = 113$보다 작으면 comms-bound가 된다는 것을 알고 있다. 위에서 보았듯 우리는 이보다 약간 위에 있다. 다행이다! 이제 최적의 FSDP 양을 고르기 위해 다음 공식을 쓸 수 있다
+**정답**: 먼저 이게 애초에 가능한지부터 확인하자. 칩당 batch size가 $2550^2 / 2F = 113$보다 작으면 comms-bound가 된다는 것을 알고 있다. 위에서 보았듯 우리는 이보다 약간 위에 있다. 다행이다! 이제 최적의 FSDP 양을 고르는 데는 다음 공식을 쓰면 된다
 
 $$
 X_{opt} = \sqrt{\frac{2BN}{F}} = \sqrt{\frac{2 \cdot 4.19e6 \cdot 8960}{28672}} = 1618

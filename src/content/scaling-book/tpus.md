@@ -61,7 +61,7 @@ matmul도 거의 똑같아 보이겠지만, VPU/vector unit 대신 MXU로 로드
 
 </div>
 
-**VMEM과 arithmetic intensity:** VMEM은 HBM보다 훨씬 작지만 MXU로의 bandwidth는 훨씬 높다. [1장](/scaling-book/roofline/)에서 봤듯이, 이는 알고리즘의 입력/출력을 전부 VMEM에 담을 수 있으면 통신 병목에 걸릴 가능성이 훨씬 낮아진다는 뜻이다. 연산의 arithmetic intensity가 나쁠 때 특히 도움이 된다: VMEM bandwidth는 HBM bandwidth보다 약 22배 높아서, VMEM에서 읽고 VMEM에 쓰는 MXU 연산은 arithmetic intensity가 10-20만 되어도 peak FLOPs 활용에 도달한다. 즉 weight를 HBM 대신 VMEM에 넣을 수 있다면 행렬 곱셈이 훨씬 작은 batch size에서도 FLOPs bound가 될 수 있다. 그리고 근본적으로 arithmetic intensity가 낮은 알고리즘도 여전히 효율적일 수 있다는 뜻이다. 다만 VMEM이 워낙 작아서 이게 쉽지 않은 경우가 많다.[^3]
+**VMEM과 arithmetic intensity:** VMEM은 HBM보다 훨씬 작지만 MXU로의 bandwidth는 훨씬 높다. [1장](/scaling-book/roofline/)에서 봤듯이, 알고리즘의 입력/출력을 전부 VMEM에 담을 수 있으면 통신 병목에 걸릴 가능성이 훨씬 낮아진다. 연산의 arithmetic intensity가 나쁠 때 특히 도움이 된다: VMEM bandwidth는 HBM bandwidth보다 약 22배 높아서, VMEM에서 읽고 VMEM에 쓰는 MXU 연산은 arithmetic intensity가 10-20만 되어도 peak FLOPs 활용에 도달한다. weight를 HBM 대신 VMEM에 넣을 수 있다면 행렬 곱셈은 훨씬 작은 batch size에서도 FLOPs bound가 된다. 그리고 근본적으로 arithmetic intensity가 낮은 알고리즘도 여전히 효율적일 수 있다. 다만 VMEM이 워낙 작아서 이게 쉽지 않은 경우가 많다.[^3]
 
 <figure>
   <img src="https://jax-ml.github.io/scaling-book/assets/img/tpu-bandwidth.png" alt="TPU 메모리 계층별 bandwidth" loading="lazy" />
@@ -97,7 +97,7 @@ torus 구조는 임의의 두 노드 사이의 최대 거리를 $N$에서 $N / 2
   <img src="https://jax-ml.github.io/scaling-book/assets/img/tpu-rack.png" alt="TPU 랙" loading="lazy" />
 </figure>
 
-더 작은 topology(예: `2x2x1`, `2x2x2`)도 요청할 수 있지만 wraparound는 없다. 이는 중요한 단서 조항인데, 대부분의 통신 시간이 통상 두 배가 되기 때문이다. 완전한 큐브의 배수(예: `4x4x4`나 `4x4x8`)는 optical switch가 wraparound를 제공한다.[^6]
+더 작은 topology(예: `2x2x1`, `2x2x2`)도 요청할 수 있지만 wraparound는 없다. 대부분의 통신 시간이 통상 두 배가 되므로 중요한 단서 조항이다. 완전한 큐브의 배수(예: `4x4x4`나 `4x4x8`)는 optical switch가 wraparound를 제공한다.[^6]
 
 <figure>
   <img src="https://jax-ml.github.io/scaling-book/assets/img/subslices.png" alt="작은 TPU 서브슬라이스 topology" loading="lazy" />
@@ -109,7 +109,7 @@ TPU v5e와 Trillium pod는 단일 `16x16` 2D torus로 구성되며, 크기 16인
   <img src="https://jax-ml.github.io/scaling-book/assets/img/more-subslices.png" alt="TPU v5e 서브슬라이스 topology" loading="lazy" />
 </figure>
 
-**이 nearest-neighbor 연결이 TPU와 GPU의 핵심 차이다.** GPU는 TPU처럼 로컬 연결을 쓰는 대신, 모든 GPU 사이의 point-to-point 연결을 근사하는 스위치 계층으로 연결된다. 보통 한 노드 안의 GPU(H100은 8개, B200 NVL72는 최대 72개)는 직접 연결되고, 더 큰 topology에서는 GPU 사이에 O(log(N)) 홉이 필요하다. 한편으로 이는 GPU가 적은 홉 수 안에 임의의 데이터를 보낼 수 있다는 뜻이다. 다른 한편으로 TPU는 (NVLink 스위치가 비싸기 때문에) 극적으로 싸고, 배선이 단순하며, 디바이스당 링크 수와 디바이스당 bandwidth가 상수라서 훨씬 큰 topology로 확장할 수 있다. 더 자세한 내용은 [여기](/scaling-book/gpus/)를 읽어 보라.
+**이 nearest-neighbor 연결이 TPU와 GPU의 핵심 차이다.** GPU는 TPU처럼 로컬 연결을 쓰는 대신, 모든 GPU 사이의 point-to-point 연결을 근사하는 스위치 계층으로 연결된다. 보통 한 노드 안의 GPU(H100은 8개, B200 NVL72는 최대 72개)는 직접 연결되고, 더 큰 topology에서는 GPU 사이에 O(log(N)) 홉이 필요하다. 한편으로 GPU는 적은 홉 수 안에 임의의 데이터를 보낼 수 있다. 다른 한편으로 TPU는 (NVLink 스위치가 비싸기 때문에) 극적으로 싸고, 배선이 단순하며, 디바이스당 링크 수와 디바이스당 bandwidth가 상수라서 훨씬 큰 topology로 확장할 수 있다. 더 자세한 내용은 [여기](/scaling-book/gpus/)를 읽어 보라.
 
 **ICI는 DCN에 비해 매우 빠르지만, HBM bandwidth보다는 여전히 느리다.** 예컨대 [TPU v5p](https://cloud.google.com/tpu/docs/v5p#system_architecture)는:
 
@@ -117,7 +117,7 @@ TPU v5e와 Trillium pod는 단일 `16x16` 2D torus로 구성되며, 크기 16인
 * 축당 `9e10` bytes/s (90 GB/s)의 ICI bandwidth를 가지며, 칩당 3개의 축이 있다.[^7]
 * TPU당 `6.25e9` bytes/s (6.25 GB/s)의 DCN (egress) bandwidth를 갖는다(host당 1-2개의 NIC 경유).[^8]
 
-즉 모델을 여러 칩에 걸쳐 나눌 때는 더 느린 디바이스 간 통신이 MXU의 병목이 되지 않도록 조심해야 한다.
+그래서 모델을 여러 칩에 걸쳐 나눌 때는 더 느린 디바이스 간 통신이 MXU의 병목이 되지 않도록 조심해야 한다.
 
 **Multi-slice 학습:** ICI로 연결된 TPU 집합을 **slice**라고 부른다. 서로 다른 slice는 DCN으로 연결될 수 있다. 예컨대 서로 다른 pod에 있는 slice들을 잇는 경우다. DCN은 ICI보다 훨씬 느린 연결이므로, 연산이 DCN에서 오는 데이터를 기다리는 일을 최대한 줄여야 한다. DCN은 host-to-host이므로, DCN을 통해 TPU에서 TPU로 버퍼를 옮기려면 먼저 PCIe로 host로 옮기고, 네트워크로 egress한 뒤, 대상 host의 네트워크로 ingress하고, 다시 PCIe로 HBM에 넣어야 한다.
 
@@ -131,7 +131,7 @@ TPU v5e와 Trillium pod는 단일 `16x16` 2D torus로 구성되며, 크기 16인
   * PCIe bandwidth: CPU host와 그에 딸린 칩 tray(들) 사이.
   * DCN bandwidth: 여러 CPU host 사이, 보통 ICI로 연결되지 않은 host들 사이.
 
-* **slice 안에서 TPU는 ICI를 통해 nearest neighbor하고만 연결된다.** 즉 slice 안의 멀리 떨어진 칩 사이의 ICI 통신은 중간의 칩들을 먼저 거쳐야 한다.
+* **slice 안에서 TPU는 ICI를 통해 nearest neighbor하고만 연결된다.** slice 안의 멀리 떨어진 칩 사이의 ICI 통신은 중간의 칩들을 먼저 거쳐야 한다.
 
 * **weight 행렬은 MXU를 채우기 위해 양쪽 차원 모두 최소 크기 128**(TPU v6e에서는 256)**로 패딩되어야 한다** (실제로는 더 작은 축이 128로 패딩된다).
 
@@ -176,7 +176,7 @@ PCIe bandwidth는 보통 TPU당 초당 약 `1.6e10` bytes(TPU v6e는 `3.2e10`)�
 <details>
 <summary>정답 보기</summary>
 
-**정답:** 32개 칩에 걸쳐 `sizeof(bf16) * 200e9 = 400e9` 바이트를 로드한다. 즉 칩당 12.5e9 바이트이고, 각 칩의 HBM bandwidth는 1.23e12이다. 따라서 로드에는 약 10ms가 걸린다.
+**정답:** 32개 칩에 걸쳐 `sizeof(bf16) * 200e9 = 400e9` 바이트를 로드한다. 칩당으로는 12.5e9 바이트이고, 각 칩의 HBM bandwidth는 1.23e12이다. 따라서 로드에는 약 10ms가 걸린다.
 
 꽤 멋진 결과다. *이것이 모델 샘플링 latency의 합리적인 하한*이기 때문이다. 각 샘플링 스텝은 모든 파라미터를 HBM에서 로드해야 하므로 10ms보다 빠를 수 없다. 실전에서는 작은 batch size일 때 이 값에 근접할 수 있다.
 
@@ -222,13 +222,13 @@ $$
 <details>
 <summary>정답 보기</summary>
 
-**정답:** (1) 수행해야 하는 연산 수는 $2 \cdot 4096 \cdot 16384 \cdot B = 1.3 \times 10^{8} \cdot B$이다. 따라서 $T_{\text{math}} = (1.3 \times 10^{8} \cdot B) / 3.94 \times 10^{14}$ 초다. HBM에서 VMEM으로 $16384 \cdot 4096 + 4096 \cdot B$ 바이트를 로드하고, VMEM에서 HBM으로 $16384 \cdot B$ 바이트를 다시 써야 한다. 즉 $T_{\text{comms}} = (6.7 \times 10^{7} + 2 \times 10^{4} \cdot B) / 8.2 \times 10^{11}$ 초다. 통신과 연산을 최대한 겹친다고 가정하면 전체 곱셈에는 대략 다음의 시간이 걸린다.
+**정답:** (1) 수행해야 하는 연산 수는 $2 \cdot 4096 \cdot 16384 \cdot B = 1.3 \times 10^{8} \cdot B$이다. 따라서 $T_{\text{math}} = (1.3 \times 10^{8} \cdot B) / 3.94 \times 10^{14}$ 초다. HBM에서 VMEM으로 $16384 \cdot 4096 + 4096 \cdot B$ 바이트를 로드하고, VMEM에서 HBM으로 $16384 \cdot B$ 바이트를 다시 써야 한다. 곧 $T_{\text{comms}} = (6.7 \times 10^{7} + 2 \times 10^{4} \cdot B) / 8.2 \times 10^{11}$ 초다. 통신과 연산을 최대한 겹친다고 가정하면 전체 곱셈에는 대략 다음의 시간이 걸린다.
 
 $$
 \max\{T_{\text{math}}, T_{\text{comms}}\} = \max\left\{\frac{1.3 \times 10^{8} \cdot B}{3.94 \times 10^{14}}, \frac{6.7 \times 10^{7} + 2 \times 10^{4} \cdot B}{8.2 \times 10^{11}}\right\}
 $$
 
-$\frac{6.7 \times 10^{7} + 2 \times 10^{4} \cdot B}{8.2 \times 10^{11}} < \frac{1.3 \times 10^{8} \cdot B}{3.94 \times 10^{14}}$일 때, 즉 $B > 267$일 때 FLOPs-bound가 된다. [1장](/scaling-book/roofline/)에서 유도한 240보다 약간 큰 값인데, $D$와 $F$의 영향을 전부 반영했기 때문이다.
+$\frac{6.7 \times 10^{7} + 2 \times 10^{4} \cdot B}{8.2 \times 10^{11}} < \frac{1.3 \times 10^{8} \cdot B}{3.94 \times 10^{14}}$일 때, 즉 $B > 267$일 때 FLOPs-bound가 된다. $D$와 $F$의 영향을 전부 반영했기 때문에 [1장](/scaling-book/roofline/)에서 유도한 240보다 약간 큰 값이다.
 
 (2) 대신 VMEM에서 로드한다면, MXU로의 VMEM bandwidth를 HBM $\leftrightarrow$ VMEM bandwidth의 22배로 잡자. 그러면 데이터 로딩의 분모가 8.2e11에서 1.80e13이 되고, $B > 11$을 얻는다. 실전에서는 VMEM bandwidth 전부를 weight 행렬 로딩에 쓸 수 없으므로, 실제로는 20에 가까울 것이다.
 
@@ -242,7 +242,7 @@ $\frac{6.7 \times 10^{7} + 2 \times 10^{4} \cdot B}{8.2 \times 10^{11}} < \frac{
 <details>
 <summary>정답 보기</summary>
 
-**정답:** TPU v5e는 2D 연결이다. `4x4` slice뿐이라(크기 16인 축이 없어서) wraparound 연결이 없다. 따라서 대상 칩이 데이터를 받을 수 있는 포트가 2개이고, 마찬가지로 소스 칩이 데이터를 보낼 수 있는 포트도 2개다. 전송해야 하는 데이터양은 `2 * 8 * 128 * 8192 = 1.7e7` 바이트다. 양쪽 포트에서 동시에 전송할 수 있으므로(즉 배열의 절반은 오른쪽으로, 절반은 아래로 보내면) 초당 `2 * 4.5e10 = 9e10` 바이트를 전송하고, (bandwidth bound라고 가정하면) 전체 배열을 통과시키는 데 약 `1.7e7 / 9e10 = 188us`가 걸린다. `4x4` slice에서 칩 $(0, 0)$과 $(3, 3)$ 사이의 홉은 여섯 개인데, 칩이 16개 미만인 축에는 wraparound 링크가 없기 때문이다. 홉당 latency가 약 $1\mu s$이므로 첫 바이트는 약 `6us` 만에 도착하고, 전체 전송은 약 `188 + 6 = 194us`가 걸린다. 마지막 바이트 역시 소스를 떠난 뒤 여섯 홉을 거쳐야 하기 때문이다(일반적으로 latency 항과 bandwidth 항은 더해지는데, 여기서 latency는 작은 보정일 뿐이다).
+**정답:** TPU v5e는 2D 연결이다. `4x4` slice뿐이라(크기 16인 축이 없어서) wraparound 연결이 없다. 따라서 대상 칩이 데이터를 받을 수 있는 포트가 2개이고, 마찬가지로 소스 칩이 데이터를 보낼 수 있는 포트도 2개다. 전송해야 하는 데이터양은 `2 * 8 * 128 * 8192 = 1.7e7` 바이트다. 양쪽 포트에서 동시에 전송할 수 있으므로(즉 배열의 절반은 오른쪽으로, 절반은 아래로 보내면) 초당 `2 * 4.5e10 = 9e10` 바이트를 전송하고, (bandwidth bound라고 가정하면) 전체 배열을 통과시키는 데 약 `1.7e7 / 9e10 = 188us`가 걸린다. 칩이 16개 미만인 축에는 wraparound 링크가 없어서, `4x4` slice에서 칩 $(0, 0)$과 $(3, 3)$ 사이의 홉은 여섯 개다. 홉당 latency가 약 $1\mu s$이므로 첫 바이트는 약 `6us` 만에 도착하고, 전체 전송은 약 `188 + 6 = 194us`가 걸린다. 마지막 바이트 역시 소스를 떠난 뒤 여섯 홉을 거쳐야 하기 때문이다(일반적으로 latency 항과 bandwidth 항은 더해지는데, 여기서 latency는 작은 보정일 뿐이다).
 
 </details>
 
@@ -267,13 +267,13 @@ $\frac{6.7 \times 10^{7} + 2 \times 10^{4} \cdot B}{8.2 \times 10^{11}} < \frac{
 
 1. **PCIe 로드**: 16GB의 청크를 16개의 PCIe 링크로 로드하며, 각 링크의 bandwidth는 `1.6e10` bytes/s다. 따라서 약 63ms가 걸린다.
 
-2. **ICI 복사:** 이제 각 TPU는 배열의 16GB / 16 = 1GB를 갖고 있다. ICI bandwidth는 링크당 *양방향* 9e10 bytes/s인데, 위 다이어그램을 보면 이 topology에서 TPU{0,0}은 TPU v5e의 ICI 링크 4개 중 2개만 사용한다. TPU{0,0}은 총 15GB를 2개의 축을 따라 링크당 `4.5e10` bytes/s로 받아야 하므로, 시간의 하한은 `15e9 / (4.5e10 * 2) = 167ms`다. 실전에서는 로드가 매우 불균등해서 아마 달성하기 어렵겠지만, 2배 이내일 것이다. 3장에서 보겠지만 full AllGather를 수행해도 대략 `16e9 / (4.5e10 * 2)`가 걸리므로, 이는 최적에 가깝다.
+2. **ICI 복사:** 이제 각 TPU는 배열의 16GB / 16 = 1GB를 갖고 있다. ICI bandwidth는 링크당 *양방향* 9e10 bytes/s인데, 위 다이어그램을 보면 이 topology에서 TPU{0,0}은 TPU v5e의 ICI 링크 4개 중 2개만 사용한다. TPU{0,0}은 총 15GB를 2개의 축을 따라 링크당 `4.5e10` bytes/s로 받아야 하므로, 시간의 하한은 `15e9 / (4.5e10 * 2) = 167ms`다. 실전에서는 로드가 매우 불균등해서 아마 달성하기 어렵겠지만, 2배 이내일 것이다. 3장에서 보겠지만 full AllGather를 수행해도 대략 `16e9 / (4.5e10 * 2)`가 걸리므로 최적에 가깝다.
 
-3. **HBM $\rightarrow$ MXU 로드:** 마지막 matmul을 수행하려면 이 16e9 바이트에 더해 bf16[8, 128 \* 1024] 배열(추가 2MB이므로 무시 가능)을 HBM bandwidth로 MXU에 로드해야 하는데, 이는 `16e9 / 8.2e11 = 20ms`가 걸린다.
+3. **HBM $\rightarrow$ MXU 로드:** 마지막 matmul을 수행하려면 이 16e9 바이트에 더해 bf16[8, 128 \* 1024] 배열(추가 2MB이므로 무시 가능)을 HBM bandwidth로 MXU에 로드해야 하는데, 여기에 `16e9 / 8.2e11 = 20ms`가 걸린다.
 
 4. **FLOPs:** 총 $$2 \cdot 8 \cdot 128 \cdot 1024 \cdot 128 \cdot 1024 = 2.7 \times 10^{11}$$ FLOPs를 수행하며, `1.97e14` bf16 FLOPs/s를 수행할 수 있으므로 1.4ms가 걸린다.
 
-총 시간의 상한은 이 시간들의 합이지만, TPU는 보통 이 연산들을 겹칠 수 있으므로 가장 느린 조각이 병목이 되는 pipelining 문제로 생각할 수 있다. 그렇다고 가정하면 답은 최소 167ms이고, 겹침이 불완전하면 200ms에 가까울 것이다.
+총 시간의 상한은 이 시간들의 합이지만, TPU는 보통 이 연산들을 겹칠 수 있으므로 가장 느린 조각이 병목이 되는 pipelining 문제로 생각하면 된다. 그렇다고 가정하면 답은 최소 167ms이고, 겹침이 불완전하면 200ms에 가까울 것이다.
 
 </details>
 
@@ -304,13 +304,13 @@ VPU는 TPU의 벡터 산술 코어다. VPU는 vadd(벡터 덧셈)나 vmax(원소
 <details>
 <summary>정답 보기</summary>
 
-*정답*: 사이클마다 각 코어는 `8 * 128`개의 ALU에서 벡터 명령 4개를 실행할 수 있다. 즉 코어당 `8 * 128 * 4` FLOPs/cycle, 곧 `8 * 128 * 4 * 1.75e9 = 7e12 FLOPs/s`다. 코어당 약 `2e14`인 MXU FLOPs/s보다 얼마나 작은지 보라(대략 30배).
+*정답*: 사이클마다 각 코어는 `8 * 128`개의 ALU에서 벡터 명령 4개를 실행할 수 있다. 코어당 `8 * 128 * 4` FLOPs/cycle, 곧 `8 * 128 * 4 * 1.75e9 = 7e12 FLOPs/s`다. 코어당 약 `2e14`인 MXU FLOPs/s보다 얼마나 작은지 보라(대략 30배).
 
 </details>
 
 **Reduction:** 일반적으로 sublane 차원을 가로지르는 통신이나 reduction이 lane 차원을 가로지르는 것보다 쉽다. 예컨대 VPU는 크기 8인 축을 따라 약 한 사이클 만에 roll할 수 있는 intra-lane shuffle 연산을 지원한다. 이를 이용해 sublane 차원의 효율적인 reduction을 수행할 수 있다(4, 2, 1씩 shuffle하며 세 번의 원소별 합을 하면 된다).
 
-lane을 가로지르는 reduction은 훨씬 어렵고, XLU 즉 "cross lane unit"이라는 별도의 하드웨어 유닛을 거치는데, 이는 느리고 꽤 비싸다.
+lane을 가로지르는 reduction은 훨씬 어렵고, XLU 즉 "cross lane unit"이라는 별도의 하드웨어 유닛을 거치는데, 느리고 꽤 비싸다.
 
 **GPU와의 비교:** NVIDIA GPU에 익숙한 독자라면, VPU의 각 ALU는 CUDA core에 해당하고, VPU lane 하나는 "Warp Scheduler" — 즉 SIMD 산술을 수행하는 (보통 32개의) CUDA Core 집합 — 에 해당한다. lane 안에서의 reduction은 꽤 쉽지만, lane을 가로질러야 한다면 최소한 VMEM/XLU/SMEM을 거쳐야 해서 훨씬 느리다. 자세한 내용은 [GPU 장](/scaling-book/gpus/)을 보라.
 
@@ -355,7 +355,7 @@ weight(RHS)와 activation(LHS)이 로드되는 동안 초기 pipeline bubble이 
 
 이를 효율적으로 pipeline하면 너무 큰 pipeline bubble 없이 큰 행렬들을 곱할 수 있다. 그렇긴 해도 행렬의 shape이 MXU의 변 크기(일반적으로 128x128)보다 큰 것이 중요하다. 일부 TPU는 (TPU v3부터) MXU를 여러 개 갖는데 TPU v3는 2개, TPU v4/5는 4개이므로, tiling 차원이 128 * MXU 수보다 크도록 해야 한다. [여기](https://www.youtube.com/watch?v=sJltBQ4MOHA)에 이를 잘 보여주는 애니메이션이 있다.
 
-Trillium(TPU v6e)은 `256x256` systolic array를 가져서 사이클당 4배의 FLOPs를 수행할 수 있다. 이는 MXU를 온전히 활용하려면 텐서의 차원도 두 배로 커야 한다는 뜻이기도 하다.
+Trillium(TPU v6e)은 `256x256` systolic array를 가져서 사이클당 4배의 FLOPs를 수행할 수 있다. MXU를 온전히 활용하려면 텐서의 차원도 두 배로 커야 한다는 말이기도 하다.
 
 [이 블로그 포스트](https://fleetwood.dev/posts/domain-specific-architectures#google-tpu)에는 고정된 weight 행렬에 대한 systolic array 곱셈을 보여주는 또 하나의 훌륭한 애니메이션이 있다.
 
@@ -367,5 +367,5 @@ Trillium(TPU v6e)은 `256x256` systolic array를 가져서 사이클당 4배의 
 [^6]: `2x2x4`에는 wraparound가 전혀 없다는 점에 유의하라. wraparound는 완전한 큐브에서만 제공되는 optical switch가 만들어 주기 때문이다. 반면 TPU v5e 8x16은 재구성 가능한 optical 네트워킹을 쓰지 않으므로 긴 축에 wraparound가 *있다*.
 [^7]: 위 페이지에는 100 GB/s의 bandwidth로 적혀 있어 여기 수치와 약간 다르다. TPU ICI 링크는 수행하는 연산에 따라 bandwidth가 조금씩 다르다. 이 문서의 수치는 대체로 걱정 없이 사용해도 된다.
 [^8]: TPU v6e와 TPU7x는 12.5e9 bytes/s, v5e는 3.125e9 bytes/s다.
-[^9]: bidi(양방향) bandwidth란 하나의 링크를 따라 양쪽 방향으로 보낼 수 있는 총 바이트 수, 또는 똑같은 말로, 두 링크를 모두 효율적으로 쓸 수 있다고 가정할 때 특정 축을 따라 단일 TPU에서 나가는 총 바이트 수를 뜻한다. 이는 ring이 제대로 동작할 때, 즉 해당 축에 wraparound 연결이 있을 때 성립한다. 추론 칩에서는 완전한 크기 16의 축이 있을 때, 학습 칩(v*p)에서는 축이 4의 배수일 때 그렇다. 양방향 통신이 관련된 계산에 자주 등장하기 때문에 우리는 양방향 bandwidth를 선호한다.
+[^9]: bidi(양방향) bandwidth란 하나의 링크를 따라 양쪽 방향으로 보낼 수 있는 총 바이트 수, 또는 똑같은 말로, 두 링크를 모두 효율적으로 쓸 수 있다고 가정할 때 특정 축을 따라 단일 TPU에서 나가는 총 바이트 수를 뜻한다. 이는 ring이 제대로 동작할 때, 즉 해당 축에 wraparound 연결이 있을 때 성립한다. 추론 칩에서는 완전한 크기 16의 축이 있을 때, 학습 칩(v*p)에서는 축이 4의 배수일 때 그렇다. 양방향 통신이 관련된 계산에 자주 등장하기 때문에 양방향 bandwidth를 선호한다.
 [^10]: 이 표기가 낯설다면: bfloat16 원소를 가진 `8x128` 행렬과 bfloat16 원소를 가진 `128x128` 행렬을 곱해, 결과를 float32 원소를 가진 `8x128` 행렬에 저장한다는 뜻이다.

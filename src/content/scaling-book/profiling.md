@@ -51,7 +51,7 @@ ROOT %dot.4 = f32[16,128]{1,0} dot(f32[256,16]{1,0} %convert.3, f32[128,256]{1,0
 
 ## JAX Profiler: 다목적 TPU profiler
 
-JAX는 프로그램이 실행될 때 TPU에서 무슨 일이 일어나는지 이해할 수 있게 해 주는 유용한 도구를 잔뜩 갖춘 다목적 TPU profiler를 제공한다. `jax.profiler` 모듈로 실행 중인 프로그램을 trace해서 각 하위 구성 요소의 소요 시간, 각 프로그램의 HLO, 메모리 사용량 등 온갖 것을 기록할 수 있다. 예를 들어 아래 코드는 trace를 `/tmp/tensorboard`의 파일로 남기고, 이는 TensorBoard에서 볼 수 있다([여기](https://docs.jax.dev/en/latest/profiling.html#tensorboard-profiling)에 단계별 가이드가 있다).
+JAX는 프로그램이 실행될 때 TPU에서 무슨 일이 일어나는지 이해할 수 있게 해 주는 유용한 도구를 잔뜩 갖춘 다목적 TPU profiler를 제공한다. `jax.profiler` 모듈로 실행 중인 프로그램을 trace해서 각 하위 구성 요소의 소요 시간, 각 프로그램의 HLO, 메모리 사용량 등 온갖 것을 기록할 수 있다. 예를 들어 아래 코드는 trace를 `/tmp/tensorboard`의 파일로 남기고, TensorBoard에서 볼 수 있다([여기](https://docs.jax.dev/en/latest/profiling.html#tensorboard-profiling)에 단계별 가이드가 있다).
 
 ```py
 import jax
@@ -96,11 +96,11 @@ profile을 공유하기는 약간 까다롭지만, 간단한 Transformer에 대�
   <img src="https://jax-ml.github.io/scaling-book/assets/img/trace-viewer.png" alt="Trace Viewer에서 본 간단한 Transformer의 타임라인" loading="lazy" />
 </figure>
 
-Trace Viewer는 각 TPU 코어에서 일어나는 모든 동작의 시간순 타임라인을 보여준다. 여기서는 TPU:0만 보고 있는데, 보통 모든 TPU가 같은 명령을 실행하기 때문이다. 핵심 몇 가지:
+Trace Viewer는 각 TPU 코어에서 일어나는 모든 동작의 시간순 타임라인을 보여준다. 보통 모든 TPU가 같은 명령을 실행하므로 여기서는 TPU:0만 본다. 핵심 몇 가지:
 
 1. 맨 윗줄(XLA Ops)은 실제 TPU 연산을 보여준다(이름은 HLO 이름이다). 나머지는 전부 `jax.named_scope`, `jax.named_call`, Python 스택 트레이스에 기반한 근사적인 trace다.
 2. 반복되는 블록을 눈여겨보면 여기서 레이어 하나를 분리해 낼 수 있다. 또 (코드를 보거나 Transformer의 동작 방식을 이해하고 있다면) 어느 부분이 attention이고 어느 부분이 MLP인지도 알 수 있다.
-3. XLA op을 클릭하면 그 op이 코드의 어디에서 왔는지 볼 수 있고(trace를 이해하는 데 유용하다) Graph Viewer로 가는 링크도 볼 수 있다.
+3. XLA op을 클릭하면 그 op이 코드의 어디에서 왔는지 볼 수 있고(trace를 이해하는 데 유용하다) Graph Viewer로 가는 링크도 나온다.
 
 <div class="takeaway">
 
@@ -121,36 +121,36 @@ HLO는 사실 그렇게 읽기 어렵지 않고, 위 trace의 특정 부분이 �
 * **Op Name**: fusion.3
   * dot 또는 fusion op은 최대 1개의 행렬 곱셈과, 경우에 따라 그에 딸린 여러 pointwise VPU-op을 담은 연산 집합이다.
 * **Shape**: `bf16[32,32,4096]`
-  * 이 op의 출력 shape이다. dtype이 bf16(원소당 2바이트)이고 shape이 `[32,32,4096]`임을 알 수 있다.
+  * 이 op의 출력 shape이다. dtype이 bf16(원소당 2바이트)이고 shape이 `[32,32,4096]`이다.
 * **Layout:** `{2,1,0:T(8,128)(2,1)}`
   * `{2,1,0:T(8,128)(2,1)}`은 메모리에서 축들의 순서(column-major, row-major 등)와 배열 padding을 알려준다. 아래에서 더 다룬다.
 * **Memory location:** S(1)
   * S(1)은 이 배열이 VMEM에 있다는 뜻이다. S(0)(생략되기도 한다)은 HBM이다. S(2)와 S(3)은 다른 메모리 공간이다.
 * **Arguments**: `bf16[32,32,8192]{2,1,0:T(8,128)(2,1)S(1)} %fusion.32`
-  * 이 op에는 입력이 하나 있는데, 특정 shape을 가진 fusion.32라는 bf16 배열이다. 이를 통해 어떤 함수가 이 op으로 이어지는지 알 수 있다.
+  * 이 op에는 입력이 하나 있는데, 특정 shape을 가진 fusion.32라는 bf16 배열이다. 여기서 어떤 함수가 이 op으로 이어지는지 알 수 있다.
 
 이 표기법을 조금 더 이해해 보자. 간단한 예로 다음을 보자:
 
 `f32[3,5]{1,0:T(2,2)}`
 
-이는 이 op이 shape `[3, 5]`의 float32 배열을 특정 tiling `{1,0:T(2,2)}`으로 반환한다는 뜻이다. tiling이 *아주* 중요하지는 않지만 짧게 말하면, tiling은 N차원 배열이 메모리에 순차적으로 어떻게 배치되는지를 알려준다. 이 배열이 어떻게 배치되는지 보여주는 그림이다:
+이 op이 shape `[3, 5]`의 float32 배열을 특정 tiling `{1,0:T(2,2)}`으로 반환한다는 말이다. tiling이 *아주* 중요하지는 않지만 짧게 말하면, tiling은 N차원 배열이 메모리에 순차적으로 어떻게 배치되는지를 알려준다. 이 배열이 어떻게 배치되는지 보여주는 그림이다:
 
 <figure>
   <img src="https://jax-ml.github.io/scaling-book/assets/img/tiling.png" alt="f32[3,5] 배열의 (2,2) tiling 배치도" loading="lazy" />
 </figure>
 
 `{1,0:T(2,2)}`에서 `1,0` 부분은 물리 메모리에서 배열 차원들의 순서를 가장 minor한 것부터 가장 major한 것 순으로 알려준다. 이 부분을 오른쪽에서 왼쪽으로 읽으면서 `f32[3,5]`의 해당 차원을 짚어 보면 배열의 물리적 layout을 알아낼 수 있다. 이 예시에서 물리적 layout은 논리적 shape과 동일한 `[3,5]`다.
-그다음 `T(2,2)`는 배열이 `(2, 2)` 청크 단위로 tiling되어 있고, 각 청크 안에서는 행이 먼저(**row-major**), 그다음 열 순서라는 것을 알려준다. 즉 `(0, 0)` 다음에 `(0, 1)`이 오고, 그다음 `(1, 0)`과 `(1, 1)`이 온다. `T(2, 2)` tiling 때문에 배열은 `[4, 6]`으로 padding되어 메모리 사용량이 약 1.6배로 늘어난다. 위에서 본 큰 bf16 배열 `bf16[32,32,8192]{2,1,0:T(8,128)(2,1)S(1)}`의 경우 `T(8,128)(2,1)`인데, 이는 배열의 tiling이 두 단계라는 뜻이다 — 바깥쪽 `(8, 128)` tiling과 그 단위 안의 안쪽 `(2, 1)` tiling(bf16에 쓰여서 로드가 항상 4바이트의 배수가 되게 한다)이다. 예를 들어 `bf16[4,8]{1,0:T(2,4)(2,1)}`은 다음과 같다(색깔은 (2,4) 타일, 빨간 상자는 (2,1) 타일):
+그다음 `T(2,2)`는 배열이 `(2, 2)` 청크 단위로 tiling되어 있고, 각 청크 안에서는 행이 먼저(**row-major**), 그다음 열 순서라는 것을 알려준다. 즉 `(0, 0)` 다음에 `(0, 1)`이 오고, 그다음 `(1, 0)`과 `(1, 1)`이 온다. `T(2, 2)` tiling 때문에 배열은 `[4, 6]`으로 padding되어 메모리 사용량이 약 1.6배로 늘어난다. 위에서 본 큰 bf16 배열 `bf16[32,32,8192]{2,1,0:T(8,128)(2,1)S(1)}`의 경우 `T(8,128)(2,1)`인데, 배열의 tiling이 두 단계다 — 바깥쪽 `(8, 128)` tiling과 그 단위 안의 안쪽 `(2, 1)` tiling(bf16에 쓰여서 로드가 항상 4바이트의 배수가 되게 한다)이다. 예를 들어 `bf16[4,8]{1,0:T(2,4)(2,1)}`은 다음과 같다(색깔은 (2,4) 타일, 빨간 상자는 (2,1) 타일):
 
 <figure>
   <img src="https://jax-ml.github.io/scaling-book/assets/img/tiling2.png" alt="bf16[4,8] 배열의 2단계 tiling" class="img-small" loading="lazy" />
 </figure>
 
-tiling은 텐서의 청크를 VMEM으로 얼마나 효율적으로 로드할 수 있는지에 영향을 줄 수 있고, XLA는 프로그램 안에서 텐서를 "retile"하거나 "re-layout"하는 복사를 끼워 넣기도 하는데 그 오버헤드가 무시할 수 없는 수준일 때도 있다.[^2]
+tiling은 텐서의 청크를 VMEM으로 얼마나 효율적으로 로드할 수 있는지에 영향을 주고, XLA는 프로그램 안에서 텐서를 "retile"하거나 "re-layout"하는 복사를 끼워 넣기도 하는데 그 오버헤드가 무시할 수 없는 수준일 때도 있다.[^2]
 
 ### Graph Viewer
 
-위의 fusion들 중 일부는 복잡해 보일 수 있지만, XLA Graph Viewer를 쓰면 해석하기가 더 쉬워진다. 예를 들어 꽤 복잡한 fusion을 Graph Viewer로 본 모습이다:
+위의 fusion들 중 일부는 복잡해 보이지만, XLA Graph Viewer를 쓰면 해석하기가 더 쉬워진다. 예를 들어 꽤 복잡한 fusion을 Graph Viewer로 본 모습이다:
 
 <figure>
   <img src="https://jax-ml.github.io/scaling-book/assets/img/graph-viewer.png" alt="복잡한 fusion의 Graph Viewer 화면" loading="lazy" />
@@ -172,7 +172,7 @@ profile을 보면서 각 부분이 무엇을 하는지 제대로 이해해 보�
   <img src="https://jax-ml.github.io/scaling-book/assets/img/transformer-ffw.png" alt="FFW 블록을 확대한 profile" loading="lazy" />
 </figure>
 
-FFW 블록을 확대한 모습이다. up-projection op은 입력이 `bf16[8, 1024, 8192]`와 `bf16[8192, 16384]`, 출력이 `bf16[8, 1024, 16384]`인 fusion(matmul)임을 볼 수 있다. (이 코드를 내가 썼기 때문에) 이것이 4-way DP, 2-way MP로 sharding된 matmul의 로컬 뷰라는 것을 아는데, 실제로 수행하는 연산은 다음과 같다
+FFW 블록을 확대한 모습이다. up-projection op은 입력이 `bf16[8, 1024, 8192]`와 `bf16[8192, 16384]`, 출력이 `bf16[8, 1024, 16384]`인 fusion(matmul)이다. (이 코드를 내가 썼기 때문에) 이것이 4-way DP, 2-way MP로 sharding된 matmul의 로컬 뷰라는 것을 아는데, 실제로 수행하는 연산은 다음과 같다
 
 **X:** `bf16[32, 1024, 8192]` \* **W<sub>in</sub>**: `bf16[8192, 32768]` -> **Tmp**: `bf16[32, 1024, 32768]`
 
@@ -186,7 +186,7 @@ Google Colab은 더 이상 TPU v2-8 slice를 제공하지 않는다는 점에 �
 %fusion.1 = bf16[8,1024,4096]{2,1,0:T(8,128)(2,1)} fusion(bf16[8,1024,8192]{2,1,0:T(8,128)(2,1)} %fusion.31), kind=kCustom, calls=%all-reduce-scatter.1
 ```
 
-이는 본질적으로 작은 ReduceScatter다(Graph Viewer로 본 모습은 다음과 같다):
+본질적으로 작은 ReduceScatter다(Graph Viewer로 본 모습은 다음과 같다):
 
 <figure>
   <img src="https://jax-ml.github.io/scaling-book/assets/img/reduce-scatter-xprof.png" alt="ReduceScatter fusion의 Graph Viewer 화면" loading="lazy" />
@@ -204,7 +204,7 @@ Q projection op을 클릭한 상태인데, 이 op은 shape이 [d<sub>model</sub>
 
 ### Memory Profile
 
-Memory Profile을 쓰면 시간에 따른 프로그램 메모리 사용량을 쉽게 볼 수 있다. OOM을 디버깅할 때 유용하다. 여기서는 모델 파라미터에 약 7.5GB가 할당되어 있고 약 8.5GB가 비어 있는 것을 볼 수 있다. 즉 메모리에 훨씬 더 많은 것을 넣을 수 있다.
+Memory Profile을 쓰면 시간에 따른 프로그램 메모리 사용량을 쉽게 볼 수 있다. OOM을 디버깅할 때 유용하다. 여기서는 모델 파라미터에 약 7.5GB가 할당되어 있고 약 8.5GB가 비어 있다. 즉 메모리에 훨씬 더 많은 것을 넣을 수 있다.
 
 <figure>
   <img src="https://jax-ml.github.io/scaling-book/assets/img/memory-viewer.png" alt="시간에 따른 메모리 사용량을 보여주는 Memory Profile" loading="lazy" />
@@ -234,7 +234,7 @@ reduce 하나, 큰 fusion 두 개, all-reduce 하나가 보일 것이다. 첫 �
 %fusion.1 = bf16[4096]{0:T(1024)(128)(2,1)} fusion(bf16[4096,8192]{1,0:T(8,128)(2,1)} %param.1, bf16[8192]{0:T(1024)(128)(2,1)} %reduce.6), kind=kLoop, calls=%fused_computation.1
 ```
 
-이는 shard당 shape이 (8192 차원에 대한 축약으로) `bf16[8192] * bf16[4096, 8192] -> bf16[4096]`이라는 것을 알려준다. 마지막 AllReduce의 `replica_groups={{0,16,32,48,64,80,96,112}, ...}`를 관찰하면 8-way model parallelism을 하고 있음을 알 수 있고, 따라서 실제 shape은 `bf16[8, 8192] * bf16[32768, 8192] -> bf16[8, 32768]`이다.
+shard당 shape은 (8192 차원에 대한 축약으로) `bf16[8192] * bf16[4096, 8192] -> bf16[4096]`이다. 마지막 AllReduce의 `replica_groups={{0,16,32,48,64,80,96,112}, ...}`를 관찰하면 8-way model parallelism을 하고 있음을 알 수 있고, 따라서 실제 shape은 `bf16[8, 8192] * bf16[32768, 8192] -> bf16[8, 32768]`이다.
 
 </details>
 
@@ -257,4 +257,4 @@ reduce 하나, 큰 fusion 두 개, all-reduce 하나가 보일 것이다. 첫 �
 
 [^1]: 이 HLO를 얻으려면 `jax.jit(f).lower(*args, **kwargs).compile().as_text()`를 실행하면 된다.
 [^2]: JAX는 이 문제를 우회하기 위한 [실험적 기능](https://docs.jax.dev/en/latest/notebooks/layout.html)을 제공하는데, XLA가 프로그램 입력에 대해 "선호하는" layout을 계산하게 해 주는 것이다. `jax.jit`으로 프로그램을 "just-in-time" 컴파일할 때는 보통 JAX에 어떤 shape과 dtype을 기대할지 알려주는 "mock" 입력을 넘긴다. 이 입력들은 최적이 아닐 수도 있는 tiling 정보도 함께 담고 있다. 대신 입력 layout을 AUTO로 지정하면 `jax.jit`이 jit된 프로그램이 선호하는 layout을 반환한다. 그러면 그 layout대로 텐서를 명시적으로 로드해서 프로그램 안에서 복사가 유발되는 것을 피할 수 있다.
-[^3]: 가짜 문제로 sharding만 가지고 놀고 싶다면 `import jax; jax.config.update("jax_num_cpu_devices", 8)`로 CPU에서 device 8개를 흉내 낼 수도 있다(jax >= 0.4.27쯤 필요). 그다음 `print(jax.devices())`로 확인하면 된다. 이는 장난감 문제에서만 동작하며 실제 성능을 반영하지 않는다.
+[^3]: 가짜 문제로 sharding만 가지고 놀고 싶다면 `import jax; jax.config.update("jax_num_cpu_devices", 8)`로 CPU에서 device 8개를 흉내 낼 수도 있다(jax >= 0.4.27쯤 필요). 그다음 `print(jax.devices())`로 확인하면 된다. 장난감 문제에서만 동작하며 실제 성능을 반영하지 않는다.

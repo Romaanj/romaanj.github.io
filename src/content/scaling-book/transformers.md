@@ -8,7 +8,7 @@ date: 2026-08-20
 published: true
 ---
 
-> 여기서는 Transformer 아키텍처를 빠르게 복습한다. 특히 FLOPs, 바이트 수를 비롯해 우리가 관심 있는 여러 양을 어떻게 계산하는지 살펴본다.
+> 여기서는 Transformer 아키텍처를 빠르게 복습한다. 특히 FLOPs, 바이트 수를 비롯해 관심 있는 여러 양을 어떻게 계산하는지 살펴본다.
 
 ## 내적 개수 세기
 
@@ -52,7 +52,7 @@ AB         & 2NPM & NP + PM \\
 \end{array}
 $$
 
-행렬-행렬 곱에서는 *연산량*이 세제곱 $$O(N^3)$$으로 늘어나는 반면 데이터 이동은 제곱 $$O(N^2)$$으로만 늘어난다는 사실을 눈여겨보자. 이는 matmul 크기를 키울수록 compute-포화 한계에 도달하기가 오히려 *쉬워진다*는 뜻이다. 이는 극히 이례적인 성질이며, 우리가 행렬 곱셈이 지배하는 아키텍처를 쓰는 이유를 상당 부분 설명해 준다 — scaling에 적합하기 때문이다!
+행렬-행렬 곱에서는 *연산량*이 세제곱 $$O(N^3)$$으로 늘어나는 반면 데이터 이동은 제곱 $$O(N^2)$$으로만 늘어난다는 사실을 눈여겨보자. 곧 matmul 크기를 키울수록 compute-포화 한계에 도달하기가 오히려 *쉬워진다*. 극히 이례적인 성질이며, 행렬 곱셈이 지배하는 아키텍처를 쓰는 이유를 상당 부분 설명해 준다 — scaling에 적합하기 때문이다!
 
 <figure>
   <img src="https://jax-ml.github.io/scaling-book/assets/img/matmul-flops.gif" alt="matmul 크기에 따른 FLOPs와 데이터 이동의 스케일링" loading="lazy" />
@@ -62,7 +62,7 @@ $$
 
 학습 중에는 어떤 행렬 곱셈의 결과 자체에는 별로 관심이 없다. 정말 관심 있는 것은 그 미분이다. 그런데 그 미분을 계산하는 비용은 matmul 자체를 수행하는 것보다 약 3배 크다.
 
-**B**가 더 큰 네트워크 안의 행렬 하나이고 **A**가 우리의 입력 activation이며 **C = A B**라고 하면, loss **L**의 **B**에 대한 미분은 연쇄 법칙(chain rule)으로 주어진다:
+**B**가 더 큰 네트워크 안의 행렬 하나이고 **A**가 입력 activation이며 **C = A B**라고 하면, loss **L**의 **B**에 대한 미분은 연쇄 법칙(chain rule)으로 주어진다:
 
 $$
 \frac{\partial L}{\partial B} = \frac{\partial L}{\partial C}\frac{\partial C}{\partial B} = A^T \left(\frac{\partial L}{\partial C}\right)
@@ -183,13 +183,13 @@ $$
 \small{\frac{\textrm{attention FLOPs}}{\textrm{matmul FLOPs}} = \frac{12BT^2NH}{18BTDF + 24BTDNH} = \frac{12BT^2D}{4*18 BTD^2 + 24 BTD^2} = \frac{12BT^2D}{96 BTD^2} = \frac{T}{8D}}
 $$
 
-결론은 **학습 중 dot-product attention FLOPs는 T>8D가 되어야 비로소 지배적이 된다**는 것이다. D ~ 8k라면 약 64K 토큰에 해당한다. 어느 정도 말이 되는 것이, MLP 크기가 커질수록 attention FLOPs의 중요도가 떨어진다는 뜻이기 때문이다. 큰 모델에서 attention의 제곱 비용은 사실 긴 컨텍스트 학습에 그리 큰 장애물이 아니다. 하지만 더 작은 모델, 예컨대 D=4608인 Gemma-27B에서는 시퀀스 길이 37k 근처부터 attention이 지배적이 된다.[^2] Flash Attention 역시 긴 컨텍스트의 비용을 완화하는 데 도움이 되는데, 이는 아래 부록 A에서 간단히 다룬다.
+결론은 **학습 중 dot-product attention FLOPs는 T>8D가 되어야 비로소 지배적이 된다**는 것이다. D ~ 8k라면 약 64K 토큰에 해당한다. MLP 크기가 커질수록 attention FLOPs의 중요도가 떨어진다는 뜻이니 어느 정도 말이 된다. 큰 모델에서 attention의 제곱 비용은 사실 긴 컨텍스트 학습에 그리 큰 장애물이 아니다. 하지만 더 작은 모델, 예컨대 D=4608인 Gemma-27B에서는 시퀀스 길이 37k 근처부터 attention이 지배적이 된다.[^2] Flash Attention 역시 긴 컨텍스트의 비용을 완화하는 데 도움이 되는데, 아래 부록 A에서 간단히 다룬다.
 
 ## 기타 수학
 
 ### Sparsity와 Mixture-of-Experts
 
-Mixture of Experts(MoE) 모델(Shazeer et al. 2017)을 짧게라도 짚고 넘어가지 않을 수 없다. MoE는 표준 Transformer의 단일 dense MLP 블록을, 동적으로 라우팅할 수 있는 독립적인 MLP들의 집합으로 바꾼 것이다. 1차 근사로는 **MoE는 레이어당 MLP 블록이 1개가 아니라 E개인 평범한 dense 모델일 뿐이다**. 각 토큰은 이 expert들 중 $k$개를 활성화하며, 보통 $k \ll E$다. 비율 $E / k$를 sparsity라고 부르며 대개 8과 64 사이다(예: [DeepSeek v3](https://arxiv.org/pdf/2412.19437)는 사실상 $k=8$, $E=256$). dense 버전과 비교하면 이는 파라미터 수를 $O(E)$배로 늘리는 한편, 토큰당 총 활성 파라미터 수를 $k$배로 만든다.
+Mixture of Experts(MoE) 모델(Shazeer et al. 2017)을 짧게라도 짚고 넘어가지 않을 수 없다. MoE는 표준 Transformer의 단일 dense MLP 블록을, 동적으로 라우팅할 수 있는 독립적인 MLP들의 집합으로 바꾼 것이다. 1차 근사로는 **MoE는 레이어당 MLP 블록이 1개가 아니라 E개인 평범한 dense 모델일 뿐이다**. 각 토큰은 이 expert들 중 $k$개를 활성화하며, 보통 $k \ll E$다. 비율 $E / k$를 sparsity라고 부르며 대개 8과 64 사이다(예: [DeepSeek v3](https://arxiv.org/pdf/2412.19437)는 사실상 $k=8$, $E=256$). dense 버전과 비교하면 파라미터 수를 $O(E)$배로 늘리는 한편, 토큰당 총 활성 파라미터 수를 $k$배로 만든다.
 
 <figure>
   <img src="https://jax-ml.github.io/scaling-book/assets/img/moe.png" alt="MoE 레이어 예시" class="img-small" loading="lazy" />
@@ -211,7 +211,7 @@ $$
 \frac{df}{dx} = \exp(g(x)) \cdot \frac{dg}{dx}
 $$
 
-이므로, 재계산을 피하려면 forward pass의 $$g(x)$$와 $$\exp(g(x))$$를 저장해 둬야 한다. 이만큼의 메모리를 쓰지 않으려면 중간 activation의 일부만 저장하는 선택을 할 수 있다. 우리가 쓰는 전략 몇 가지는 다음과 같다.
+이므로, 재계산을 피하려면 forward pass의 $$g(x)$$와 $$\exp(g(x))$$를 저장해 둬야 한다. 이만큼의 메모리를 쓰지 않으려면 중간 activation의 일부만 저장하는 선택지도 있다. 우리가 쓰는 전략 몇 가지는 다음과 같다.
 
 * **Block remat**: 각 레이어의 입력만 저장한다. 우리가 쓰는 방법 중 가장 공격적인 것으로, 레이어당 checkpoint를 1개만 저장한다. 위 예시라면 4.2TB만 저장하게 된다. 대신 backward pass에서 forward pass FLOPs를 사실상 전부 다시 계산해야 하므로, FLOPs가 $$6 \cdot \text{num params} \cdot \text{num tokens}$$에서 대략 $$8 \cdot \text{num params} \cdot \text{num tokens}$$로 늘어난다.
 * **큰 matmul만 저장:** 또 다른 단순한 정책은 큰 matmul의 출력만 저장하는 것이다. 이렇게 하면 backward pass에서 큰 matmul을 다시 계산하는 일은 피할 수 있지만, 다른 활성 함수들과 attention의 일부는 여전히 다시 계산해야 한다. 이 방식은 위의 레이어당 20을 7 근처로 줄여 준다.
@@ -225,7 +225,7 @@ $$
 * **Prefill**은 긴 프롬프트를 처리하고 그 attention activation — 구체적으로는 attention 블록의 key-value projection — 을 generation에서 쓸 수 있도록 Key-Value Cache(KV Cache)에 저장한다.
 * **Generation**은 이런 KV cache 여러 개를 배치로 묶어 각각에서 토큰을 샘플링한다.
 
-각 KV cache는 사실상 크기 $[2, S, L, K, H]$의 배열이며, 여기서 2는 key와 value의 몫이다. 이는 꽤 크다! int8 기준 Key-Value cache의 총 크기는 $2SLKH$이다. 8k 컨텍스트 길이, 64개 레이어, $KH = NH = D = 8192$인 중간 크기 모델이라면 이는 $2 \cdot 8192 \cdot 64 \cdot 8192 = 8\text{GiB}$이다. $K \ll N$인 GMQA를 쓰고 싶어지는 이유를 알 수 있다.
+각 KV cache는 사실상 크기 $[2, S, L, K, H]$의 배열이며, 여기서 2는 key와 value의 몫이다. 꽤 크다! int8 기준 Key-Value cache의 총 크기는 $2SLKH$이다. 8k 컨텍스트 길이, 64개 레이어, $KH = NH = D = 8192$인 중간 크기 모델이라면 $2 \cdot 8192 \cdot 64 \cdot 8192 = 8\text{GiB}$이다. $K \ll N$인 GMQA를 쓰고 싶어지는 이유를 알 수 있다.
 
 ## 이 장에서 무엇을 얻어 가야 하는가?
 
@@ -255,7 +255,7 @@ $$
 
 * MLP 블록의 파라미터 수가 전체 파라미터 수를 지배하며, 시퀀스 길이가 $T < 8D$인 한 FLOPs 예산 역시 MLP 블록이 지배한다.
 * 학습 중 총 FLOPs 예산은 합리적인 컨텍스트 길이에서 $$6 \cdot \text{num\_params} \cdot \text{num\_tokens}$$로 잘 근사된다.
-* 추론 중 KV cache는 cache 하나당 대략 $$2 \cdot S \cdot L \cdot K \cdot H$$이다(K는 KV head 수). 다만 아키텍처 수정으로 이를 줄일 수 있는 경우가 많다.
+* 추론 중 KV cache는 cache 하나당 대략 $$2 \cdot S \cdot L \cdot K \cdot H$$이다(K는 KV head 수). 다만 흔히 아키텍처 수정으로 이를 줄인다.
 
 ## 연습 문제
 
@@ -265,7 +265,7 @@ $$
 <summary>정답 보기</summary>
 
 1. 총 파라미터 수는 대략 $$L \cdot (3DF + 4DNH + 2D) + 2DV$$이다(레이어당 layernorm 2개까지 센 것). 주어진 수치로는 $$64 \cdot (3 \cdot 4e3 \cdot 16e3 + 4 \cdot 4e3 \cdot 4e3 + 2 \cdot 4e3) + 2 \cdot 4e3 \cdot 32e3 = 16e9$$, 즉 16B 파라미터다.
-2. attention 파라미터 대 전체 파라미터의 비는 일반적으로 $$4DNH / (4DNH + 3DF) = 4D^2 / (4D^2 + 12D^2) = 1/4$$이다. 즉 파라미터의 약 1/4이 attention에 쓰인다.
+2. attention 파라미터 대 전체 파라미터의 비는 일반적으로 $$4DNH / (4DNH + 3DF) = 4D^2 / (4D^2 + 12D^2) = 1/4$$이다. 곧 파라미터의 약 1/4이 attention에 쓰인다.
 3. 토큰당 KV cache는 int8로 $$2 \cdot L \cdot N \cdot H = 2 \cdot 64 \cdot 4096$$, 즉 `512 KiB / token`이다.
 
 </details>
@@ -318,7 +318,7 @@ $$
 <details>
 <summary>정답 보기</summary>
 
-이는 순전히 $$24BTDNH = 12BT^2NH$$가 언제 성립하는가의 문제다. 정리하면 $$2D = T$$이므로, 예컨대 $$D=4096$$이면 $$8192$$가 된다. 즉 웬만한 합리적인 컨텍스트 길이에서는 matmul FLOPs가 더 크다는 것을 알 수 있다.
+순전히 $$24BTDNH = 12BT^2NH$$가 언제 성립하는가의 문제다. 정리하면 $$2D = T$$이므로, 예컨대 $$D=4096$$이면 $$8192$$가 된다. 곧 웬만한 합리적인 컨텍스트 길이에서는 matmul FLOPs가 더 크다.
 
 </details>
 
@@ -442,7 +442,7 @@ $$
 d(q_i \cdot k_j) = (dS_{ij} - S_{ij} \cdot_j dS_{ij}) S_{ij}
 $$
 
-가 나오는데, 여기서 우리는 큰 key **길이(length)** 차원에 대한 축약을 국소적인 feature **깊이(depth)** 차원에 대한 축약으로 맞바꿀 수 있게 해 주는 항등식을 이용한다.
+가 나오는데, 여기서 큰 key **길이(length)** 차원에 대한 축약을 국소적인 feature **깊이(depth)** 차원에 대한 축약으로 맞바꿀 수 있게 해 주는 항등식을 이용한다.
 
 $$
 \begin{align*}

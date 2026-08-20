@@ -12,9 +12,9 @@ published: true
 
 ## 스케일링이란 무엇을 뜻하는가?
 
-"모델 스케일링"의 목표는 학습이나 추론에 쓰는 칩 수를 늘렸을 때 throughput이 그에 비례해 선형으로 증가하게 만드는 것이다(이를 *strong scaling*이라고 부른다). 단일 칩에서의 성능은 메모리 bandwidth와 FLOPs 사이의 트레이드오프에 달려 있지만, 클러스터 수준의 성능은 칩 간 통신을 유용한 FLOPs와 겹쳐서 숨기는 데 달려 있다. 이는 쉽지 않은 일인데, 칩 수를 늘리면 통신 부담은 커지는 반면 통신을 숨기는 데 쓸 수 있는 디바이스당 연산량은 줄어들기 때문이다. [3장](/scaling-book/sharding/)에서 보았듯이 sharding된 행렬 곱셈은 비싼 AllGather나 ReduceScatter를 자주 요구하고, 이것이 TPU가 유용한 일을 하지 못하게 막을 수 있다. 이 장의 목표는 이 통신이 언제 *너무 비싸지는지* 알아내는 것이다.
+"모델 스케일링"의 목표는 학습이나 추론에 쓰는 칩 수를 늘렸을 때 throughput이 그에 비례해 선형으로 증가하게 만드는 것이다(이를 *strong scaling*이라고 부른다). 단일 칩에서의 성능은 메모리 bandwidth와 FLOPs 사이의 트레이드오프에 달려 있지만, 클러스터 수준의 성능은 칩 간 통신을 유용한 FLOPs와 겹쳐서 숨기는 데 달려 있다. 칩 수를 늘리면 통신 부담은 커지는 반면 통신을 숨기는 데 쓸 수 있는 디바이스당 연산량은 줄어들므로, 쉽지 않은 일이다. [3장](/scaling-book/sharding/)에서 보았듯이 sharding된 행렬 곱셈은 비싼 AllGather나 ReduceScatter를 자주 요구하고, 이것이 TPU가 유용한 일을 하지 못하게 막을 수 있다. 이 장의 목표는 이 통신이 언제 *너무 비싸지는지* 알아내는 것이다.
 
-이 장에서는 네 가지 흔한 병렬화 전략을 다룬다: (순수) **data parallelism**, **fully-sharded data parallelism**(FSDP / ZeRO sharding), **tensor parallelism**(model parallelism이라고도 부른다), 그리고 (간략하게) **pipeline parallelism**이다. 각 전략에 대해 어떤 통신 비용이 발생하는지, 그리고 그 비용이 어느 시점부터 연산 비용을 병목하기 시작하는지 보인다.[^1] 이 장에서는 칩 간 통신 비용에만 집중하면 되는데, 단일 칩의 batch size가 충분히 크기만 하면 HBM에서 MXU로의 데이터 전송은 이미 연산과 겹쳐지기 때문이다.
+이 장에서는 네 가지 흔한 병렬화 전략을 다룬다: (순수) **data parallelism**, **fully-sharded data parallelism**(FSDP / ZeRO sharding), **tensor parallelism**(model parallelism이라고도 부른다), 그리고 (간략하게) **pipeline parallelism**이다. 각 전략에 대해 어떤 통신 비용이 발생하는지, 그리고 그 비용이 어느 시점부터 연산 비용을 병목하기 시작하는지 보인다.[^1] 단일 칩의 batch size가 충분히 크기만 하면 HBM에서 MXU로의 데이터 전송은 이미 연산과 겹쳐지므로, 이 장에서는 칩 간 통신 비용에만 집중하면 된다.
 
 이 장 전체에서 계산을 단순하게 만들기 위해 다음 표기를 쓴다.
 
@@ -66,7 +66,7 @@ published: true
 
 </details>
 
-다음은 우리가 다룰 4가지 병렬화 전략이다. 각 전략은 위 다이어그램의 **In**, **W<sub>in</sub>, W<sub>out</sub>, Out**에 대한 sharding으로 유일하게 정의된다고 생각할 수 있다.
+다음은 우리가 다룰 4가지 병렬화 전략이다. 각 전략은 위 다이어그램의 **In**, **W<sub>in</sub>, W<sub>out</sub>, Out**에 대한 sharding으로 유일하게 정의된다고 보면 된다.
 
 **1. Data parallelism:** *activation을 batch를 따라 shard하고, 파라미터와 optimizer state는 각 디바이스에 복제한다. 통신은 backward pass에서만 일어난다.*
 
@@ -100,7 +100,7 @@ $$
 
 <figure>
   <img src="https://jax-ml.github.io/scaling-book/assets/img/data-parallelism.png" alt="순수 data parallelism 다이어그램" loading="lazy" />
-  <figcaption><b>그림:</b> 순수 data parallelism의 다이어그램(forward pass). activation(왼쪽)은 batch 차원을 따라 완전히 shard되고 weight는 완전히 복제되어, 각 TPU가 동일한 weight 사본을 가진다. 이는 weight의 총 메모리가 N배로 늘어난다는 뜻이지만, forward pass에는 통신이 전혀 필요 없다.</figcaption>
+  <figcaption><b>그림:</b> 순수 data parallelism의 다이어그램(forward pass). activation(왼쪽)은 batch 차원을 따라 완전히 shard되고 weight는 완전히 복제되어, 각 TPU가 동일한 weight 사본을 가진다. weight의 총 메모리는 N배로 늘어나지만, forward pass에는 통신이 전혀 필요 없다.</figcaption>
 </figure>
 
 <details>
@@ -132,11 +132,11 @@ loss 함수의 세부는 무시하고 $\text{Tmp} = W_\text{in} \cdot \text{In}$
 
 </details>
 
-forward pass에는 통신이 없다는 점에 주목하라 — **전부 backward pass에 있다**! backward pass에는 또 하나의 훌륭한 성질이 있는데, AllReduce들이 "critical path"에 있지 않다는 것이다. 즉 각 AllReduce는 편한 시점에 아무 때나 수행할 수 있고, 이후 연산의 수행을 막지 않는다. 전체 통신 비용이 총 연산 비용을 넘어서면 _여전히 병목이 될 수는 있지만_, 구현 관점에서는 훨씬 너그럽다. model/tensor parallelism에는 이 성질이 없다는 것을 곧 보게 된다.
+forward pass에는 통신이 없다는 점에 주목하라 — **전부 backward pass에 있다**! backward pass에는 또 하나의 훌륭한 성질이 있는데, AllReduce들이 "critical path"에 있지 않다는 것이다. 각 AllReduce는 편한 시점에 아무 때나 수행할 수 있고, 이후 연산의 수행을 막지 않는다. 전체 통신 비용이 총 연산 비용을 넘어서면 _여전히 병목이 될 수는 있지만_, 구현 관점에서는 훨씬 너그럽다. model/tensor parallelism에는 이 성질이 없다는 것을 곧 보게 된다.
 
 **왜 쓰는가?** 순수 data parallelism은 activation을 batch 차원으로 쪼개 activation 메모리 부담을 줄이므로, batch 차원을 나눠 담을 칩만 더 있으면 batch size를 거의 마음대로 키울 수 있다. 특히 학습 중에는 activation이 메모리 사용량을 지배하는 경우가 많아 매우 유용하다.
 
-**왜 쓰지 않는가?** 순수 data parallelism은 모델 파라미터나 optimizer state의 메모리 부담은 전혀 줄여 주지 않는다. 즉 파라미터 + optimizer state가 단일 TPU에 들어가지 않는, 규모 있는 흥미로운 모델에는 순수 data parallelism이 유용한 경우가 드물다. 규모 감각을 위해: bf16 파라미터와 Adam의 fp32 optimizer state로 학습하면[^2] 담을 수 있는 가장 큰 모델은 $$\text{TPU memory} / 10$$ 파라미터이므로, 예컨대 96GB HBM의 TPUv5p 칩에서 순수 data parallelism이면 약 9B 파라미터다.
+**왜 쓰지 않는가?** 순수 data parallelism은 모델 파라미터나 optimizer state의 메모리 부담은 전혀 줄여 주지 않는다. 그러니 파라미터 + optimizer state가 단일 TPU에 들어가지 않는, 규모 있는 흥미로운 모델에는 순수 data parallelism이 유용한 경우가 드물다. 규모 감각을 위해: bf16 파라미터와 Adam의 fp32 optimizer state로 학습하면[^2] 담을 수 있는 가장 큰 모델은 $$\text{TPU memory} / 10$$ 파라미터이므로, 예컨대 96GB HBM의 TPUv5p 칩에서 순수 data parallelism이면 약 9B 파라미터다.
 
 <div class="takeaway">
 
@@ -146,7 +146,7 @@ forward pass에는 통신이 없다는 점에 주목하라 — **전부 backward
 
 *학습에서 실제 모델에 유용해지려면, 모델 파라미터나 optimizer를 적어도 부분적으로는 shard해야 한다.*
 
-**언제 통신에 의해 병목이 걸리는가?** 위에서 보았듯이 레이어당 AllReduce가 두 번 있고, 각각의 크기는 (bf16 weight 기준) $$2DF$$다. data parallelism은 언제 우리를 communication-bound로 만드는가?
+**언제 통신에 의해 병목이 걸리는가?** 위에서 보았듯이 레이어당 AllReduce가 두 번 있고, 각각의 크기는 (bf16 weight 기준) $$2DF$$다. data parallelism은 언제 communication-bound가 되는가?
 
 위 표에서처럼 $C$ = 칩당 FLOPs, $W_{\text{ici}}$ = **양방향** 네트워크 bandwidth, $X$ = batch를 분할하는 shard 수라고 하자[^4]. 관련 matmul을 수행하는 데 필요한 시간 $$T_\text{math}$$와 필요한 통신 시간 $$T_\text{comms}$$를 계산해 보자. 이 병렬화 전략은 forward pass에 통신이 없으므로 backward pass에 대해서만 이 값들을 계산하면 된다.
 
@@ -183,9 +183,9 @@ $$
 \end{align}
 $$
 
-요컨대 data parallelism으로 compute-bound를 유지하려면 디바이스당 batch size $$B / X$$가 ICI operational intensity $C / W_\text{ici}$를 넘어야 한다. 이는 결국 연산 시간은 디바이스당 batch size에 비례해 커지는 반면 (모델 weight를 전송하므로) 통신 시간은 이 값과 무관하다는 사실의 귀결이다. $B/X > C/W_\text{ici}$ 조건이 단일 디바이스의 compute-bound 규칙 $B > 240$과 닮았다는 점에 주목하라. 그 경우에도 규칙은 연산 시간이 batch size에 비례하는 반면 데이터 전송량은 ($B \ll F, D$ 영역에서) batch size와 무관하다는 사실에서 나왔다.
+요컨대 data parallelism으로 compute-bound를 유지하려면 디바이스당 batch size $$B / X$$가 ICI operational intensity $C / W_\text{ici}$를 넘어야 한다. 연산 시간은 디바이스당 batch size에 비례해 커지는 반면 (모델 weight를 전송하므로) 통신 시간은 이 값과 무관하다는 사실의 귀결이다. $B/X > C/W_\text{ici}$ 조건이 단일 디바이스의 compute-bound 규칙 $B > 240$과 닮았다는 점에 주목하라. 그 경우에도 규칙은 연산 시간이 batch size에 비례하는 반면 데이터 전송량은 ($B \ll F, D$ 영역에서) batch size와 무관하다는 사실에서 나왔다.
 
-감을 잡기 위해 실제 수치를 넣어 보자. TPUv5p에서 ICI를 통한 1D data parallelism이면 `C=4.6e14`, `W=2 * 9e10`이므로 **communication-bound를 피하려면 칩당 batch size가 최소 2,550이어야 한다**. data parallelism은 여러 axis에 걸쳐 할 수 있으므로, TPUv5p pod의 세 axis 전부를 순수 data parallelism에 바치면 bandwidth $W_\text{ici}$가 3배가 되어 TPU당 BS=850, 즉 (8960칩) pod당 배치 7.6M 토큰까지 내려갈 수 있다! **이는 순수 data parallelism으로는 병목에 걸리기가 꽤 어렵다는 것을 말해 준다!**
+감을 잡기 위해 실제 수치를 넣어 보자. TPUv5p에서 ICI를 통한 1D data parallelism이면 `C=4.6e14`, `W=2 * 9e10`이므로 **communication-bound를 피하려면 칩당 batch size가 최소 2,550이어야 한다**. data parallelism은 여러 axis에 걸쳐 할 수 있으므로, TPUv5p pod의 세 axis 전부를 순수 data parallelism에 바치면 bandwidth $W_\text{ici}$가 3배가 되어 TPU당 BS=850, 즉 (8960칩) pod당 배치 7.6M 토큰까지 내려갈 수 있다! **순수 data parallelism으로는 병목에 걸리기가 꽤 어렵다는 이야기다!**
 
 <div class="takeaway">
 
@@ -206,10 +206,10 @@ Fully-sharded data parallelism(흔히 FSDP 또는 ZeRO-sharding이라고 부른�
 
 <figure>
   <img src="https://jax-ml.github.io/scaling-book/assets/img/fsdp.png" alt="FSDP 다이어그램" loading="lazy" />
-  <figcaption><b>그림:</b> FSDP는 W<sub>in</sub>의 contracting 차원과 W<sub>out</sub>의 출력 차원을 data 차원을 따라 shard한다. 이는 메모리를 줄이지만 (3장에서 보았듯) matmul을 수행하기 전에 W의 weight를 gather하도록 강제한다. activation(왼쪽)은 <i>contracting 차원을 따라 shard되어 있지 않으며</i>, 바로 이것이 우리가 gather를 해야 하는 이유다. <b>weight의 optimizer state도 마찬가지로 contracting 차원을 따라 shard된다는 점에 유의하라.</b></figcaption>
+  <figcaption><b>그림:</b> FSDP는 W<sub>in</sub>의 contracting 차원과 W<sub>out</sub>의 출력 차원을 data 차원을 따라 shard한다. 메모리는 줄지만 (3장에서 보았듯) matmul을 수행하기 전에 W의 weight를 gather하도록 강제한다. activation(왼쪽)은 <i>contracting 차원을 따라 shard되어 있지 않으며</i>, 바로 이것이 gather를 해야 하는 이유다. <b>weight의 optimizer state도 마찬가지로 contracting 차원을 따라 shard된다는 점에 유의하라.</b></figcaption>
 </figure>
 
-([3장](/scaling-book/sharding/)에서) AllReduce가 AllGather와 ReduceScatter로 분해될 수 있다는 것을 기억할 것이다. 이는 표준 data parallelism처럼 전체 gradient AllReduce를 하는 대신, weight와 optimizer state를 칩들에 shard해 두고 forward pass에서 레이어마다 AllGather하고 backward pass에서 weight에 대해 ReduceScatter해도 추가 비용이 전혀 없다는 뜻이다.
+([3장](/scaling-book/sharding/)에서) AllReduce가 AllGather와 ReduceScatter로 분해될 수 있다는 것을 기억할 것이다. 덕분에 표준 data parallelism처럼 전체 gradient AllReduce를 하는 대신, weight와 optimizer state를 칩들에 shard해 두고 forward pass에서 레이어마다 AllGather하고 backward pass에서 weight에 대해 ReduceScatter해도 추가 비용이 전혀 없다.
 
 <details>
 <summary>FSDP의 전체 알고리즘 보기</summary>
@@ -242,11 +242,11 @@ Fully-sharded data parallelism(흔히 FSDP 또는 ZeRO-sharding이라고 부른�
 
 </details>
 
-이는 "ZeRO Sharding"이라고도 불리는데, 불필요한 연산이나 불필요한 state 저장을 전혀 하지 않는다는 뜻의 "Zero Redundancy Optimizer"에서 온 이름이다. ZeRO-{1,2,3}은 각각 optimizer state, gradient, weight를 이런 식으로 shard하는 것을 가리킨다. 셋 다 통신 비용이 같으므로[^5] 기본적으로 항상 ZeRO-3 sharding을 하면 되고, 이는 파라미터·gradient·optimizer state를 디바이스 집합에 걸쳐 shard한다.
+이 방식은 "ZeRO Sharding"이라고도 불리는데, 불필요한 연산이나 불필요한 state 저장을 전혀 하지 않는다는 뜻의 "Zero Redundancy Optimizer"에서 온 이름이다. ZeRO-{1,2,3}은 각각 optimizer state, gradient, weight를 이런 식으로 shard하는 것을 가리킨다. 셋 다 통신 비용이 같으므로[^5] 기본적으로 항상 ZeRO-3 sharding을 하면 되고, 이는 파라미터·gradient·optimizer state를 디바이스 집합에 걸쳐 shard한다.
 
 **왜 이렇게 하는가?** 표준 data parallelism에는 중복 작업이 많다. 각 TPU가 전체 gradient를 AllReduce한 다음, 전체 optimizer state를 업데이트하고(모든 TPU에서 동일한 작업), 파라미터를 업데이트한다(역시 완전히 중복). ZeRO sharding(gradient/optimizer state를 shard)이라면, AllReduce 대신 gradient를 ReduceScatter하고, 자신의 optimizer state shard만 업데이트하고, 파라미터의 shard 하나를 업데이트한 뒤, forward pass에 필요해질 때 파라미터를 AllGather하면 된다.
 
-**언제 통신에 의해 병목이 걸리는가?** FLOPs 대 통신의 상대 비용은 순수 data parallelism과 정확히 같다. backward pass의 각 AllReduce가 AllGather + ReduceScatter로 바뀌었을 뿐이기 때문이다. AllReduce는 각각 비용이 절반인 AllGather와 ReduceScatter로 구현된다는 것을 기억하라. 여기서는 forward pass를 모델링하는데, backward pass와 FLOPs 대 통신 비율이 같기 때문이다:
+**언제 통신에 의해 병목이 걸리는가?** FLOPs 대 통신의 상대 비용은 순수 data parallelism과 정확히 같다. backward pass의 각 AllReduce가 AllGather + ReduceScatter로 바뀌었을 뿐이기 때문이다. AllReduce는 각각 비용이 절반인 AllGather와 ReduceScatter로 구현된다는 것을 기억하라. backward pass와 FLOPs 대 통신 비율이 같으므로 여기서는 forward pass를 모델링한다:
 
 $$
 \begin{aligned}
@@ -257,7 +257,7 @@ T &\approx 4 \cdot D \cdot F \cdot \max\left(\frac{B}{X \cdot C}, \frac{1}{W_\te
 \end{aligned}
 $$
 
-따라서 순수 data parallelism과 마찬가지로 $$B / X > C / W_\text{ici}$$일 때, 즉 디바이스당 batch size $B/X$가 "ICI operational intensity" $C/W_\text{ici}$(v5p에서 `4.59e14 / 1.8e11 = 2550`)를 넘을 때 compute-bound다. 이는 아주 좋은 소식인데, 순수 data parallelism에서 compute-bound가 될 만큼 디바이스당 batch size가 크다면 — compute-bound 영역을 벗어날 걱정 없이 — 그냥 FSDP로 업그레이드해서 파라미터와 optimizer state 메모리를 어마어마하게 아낄 수 있다는 뜻이기 때문이다! forward pass에 통신을 더하긴 했지만, 이 비용은 forward pass의 FLOPs와 그냥 겹쳐지므로 문제가 되지 않는다.
+따라서 순수 data parallelism과 마찬가지로 $$B / X > C / W_\text{ici}$$일 때, 즉 디바이스당 batch size $B/X$가 "ICI operational intensity" $C/W_\text{ici}$(v5p에서 `4.59e14 / 1.8e11 = 2550`)를 넘을 때 compute-bound다. 아주 좋은 소식이다. 순수 data parallelism에서 compute-bound가 될 만큼 디바이스당 batch size가 크다면 — compute-bound 영역을 벗어날 걱정 없이 — 그냥 FSDP로 업그레이드해서 파라미터와 optimizer state 메모리를 어마어마하게 아낄 수 있다는 뜻이다! forward pass에 통신을 더하긴 했지만, 이 비용은 forward pass의 FLOPs와 그냥 겹쳐지므로 문제가 되지 않는다.
 
 <div class="takeaway">
 
@@ -279,14 +279,14 @@ $$
 
 **문법:** $$\text{In}[B, D_Y] \cdot_D W_\text{in}[D, F_Y] \cdot_F W_\text{out}[F_Y, D] \rightarrow \text{Out}[B, D_Y]$$ (나중에 FSDP와 조합하기 위해 $$Y$$를 쓴다)
 
-fully-sharded data parallelism의 AllReduce에서는 weight를 칩 사이에서 옮긴다. 대신 모델의 feedforward 차원을 shard하고 레이어 도중에 activation을 옮길 수도 있다 — 이를 "1D model parallelism" 또는 Megatron sharding (Shoeybi et al. 2019)이라고 부른다. 이는 pod당 효율적인 batch size를 더 작게 만들어 줄 수 있다. 아래 그림은 행렬 하나를 이런 식으로 shard한 예다:
+fully-sharded data parallelism의 AllReduce에서는 weight를 칩 사이에서 옮긴다. 대신 모델의 feedforward 차원을 shard하고 레이어 도중에 activation을 옮길 수도 있다 — 이를 "1D model parallelism" 또는 Megatron sharding (Shoeybi et al. 2019)이라고 부른다. 이렇게 하면 pod당 효율적인 batch size를 더 작게 만들 수 있다. 아래 그림은 행렬 하나를 이런 식으로 shard한 예다:
 
 <figure>
   <img src="https://jax-ml.github.io/scaling-book/assets/img/model-parallelism.png" alt="기본적인 tensor parallelism의 예" loading="lazy" />
   <figcaption><b>그림:</b> 기본적인 tensor parallelism의 예. activation을 Y에 대해서만 shard하므로(X에 대해 shard하는 FSDP와 달리) activation은 X에 대해 복제된다. 표준 문법으로 쓰면 <b>A</b>[B, D<sub>Y</sub>] * <b>B</b>[D, F<sub>Y</sub>] -> <b>C</b>[B, F<sub>Y</sub>]이다. contracting 차원 중 하나만 shard되어 있으므로, 보통 matmul 전에 activation <b>A</b>를 AllGather한다.</figcaption>
 </figure>
 
-앞서 언급했듯, **In\[B, D<sub>Y</sub>\] \*<sub>D</sub> W<sub>in</sub>\[D, F<sub>Y</sub>\] \*<sub>F</sub> W<sub>out</sub>\[F<sub>Y</sub>, D\] \-\> Out\[B, D<sub>Y</sub>\]는 첫 matmul 전에 activation을 gather해야 한다는 뜻이다. 이는 activation이 weight보다 작을 때 ZeRO sharding보다 싸다.** 이는 보통 어느 정도의 ZeRO sharding이 더해져 있을 때만 성립한다(gather의 크기를 줄여 주기 때문이다). 우리가 ZeRO sharding과 tensor parallelism을 섞어 쓰는 경향이 있는 이유 중 하나다.
+앞서 언급했듯, **In\[B, D<sub>Y</sub>\] \*<sub>D</sub> W<sub>in</sub>\[D, F<sub>Y</sub>\] \*<sub>F</sub> W<sub>out</sub>\[F<sub>Y</sub>, D\] \-\> Out\[B, D<sub>Y</sub>\]는 첫 matmul 전에 activation을 gather해야 한다는 뜻이다. 이는 activation이 weight보다 작을 때 ZeRO sharding보다 싸다.** 이 이점은 보통 어느 정도의 ZeRO sharding이 더해져 있을 때만 성립한다(gather의 크기를 줄여 주기 때문이다). ZeRO sharding과 tensor parallelism을 섞어 쓰는 경향이 있는 이유 중 하나다.
 
 <details>
 <summary>tensor parallelism의 알고리즘 보기</summary>
@@ -318,7 +318,7 @@ fully-sharded data parallelism의 AllReduce에서는 weight를 칩 사이에서 
 
 </details>
 
-tensor parallelism의 좋은 점 하나는 Transformer forward pass의 두 행렬과 잘 맞물린다는 것이다. 순진하게 하면 두 행렬 각각 뒤에 AllReduce를 하게 될 것이다. 하지만 여기서는 먼저 **In[B, D<sub>Y</sub>] \* W<sub>in</sub>[D, F<sub>Y</sub>] -> Tmp[B, F<sub>Y</sub>]**를 하고, 그다음 **Tmp[B, F<sub>Y</sub>] \* W<sub>out</sub>[F<sub>Y</sub>, D] -> Out[B, D<sub>Y</sub>]**를 한다. 즉 AllReduce를 하는 대신, 처음에 **In**을 AllGather하고 끝에 **Out**을 ReduceScatter하면 된다.
+tensor parallelism의 좋은 점 하나는 Transformer forward pass의 두 행렬과 잘 맞물린다는 것이다. 순진하게 하면 두 행렬 각각 뒤에 AllReduce를 하게 될 것이다. 하지만 여기서는 먼저 **In[B, D<sub>Y</sub>] \* W<sub>in</sub>[D, F<sub>Y</sub>] -> Tmp[B, F<sub>Y</sub>]**를 하고, 그다음 **Tmp[B, F<sub>Y</sub>] \* W<sub>out</sub>[F<sub>Y</sub>, D] -> Out[B, D<sub>Y</sub>]**를 한다. AllReduce를 하는 대신, 처음에 **In**을 AllGather하고 끝에 **Out**을 ReduceScatter하면 된다.
 
 **비용은 얼마나 드는가?** forward pass만 모델링하자 — backward pass는 여기 나오는 각 연산의 transpose일 뿐이다. 1D tensor parallelism에서는 첫 matmul 전에 activation을 AllGather하고 두 번째 matmul 후에 ReduceScatter하며, 한 번에 2바이트(bf16)씩 보낸다. 언제 통신에 병목이 걸리는지 알아보자.
 
@@ -365,13 +365,13 @@ $$
 
 * TPUv5p에서 $$D = 8192,$$ $$F \approx 30,000$$인 LLaMA 3-70B는 8-way tensor parallelism은 무리 없이 할 수 있지만, 16-way tensor parallelism에서는 communication bound가 된다. 8-way model sharding에 필요한 F는 20k다.
 
-* Gemma 7B는 $$F \approx 50k$$이므로 19-way tensor parallelism에서야 communication bound가 된다. 즉 16-way까지는 여전히 좋은 성능을 볼 수 있을 것이다.
+* Gemma 7B는 $$F \approx 50k$$이므로 19-way tensor parallelism에서야 communication bound가 된다. 16-way까지는 여전히 좋은 성능을 볼 수 있을 것이다.
 
 ### FSDP와 Tensor Parallelism 조합하기
 
 **문법:** $$\text{In}[B_X, D_Y] \cdot_D W_\text{in}[D_X, F_Y] \cdot_F W_\text{out}[F_Y, D_X] \rightarrow \text{Out}[B_X, D_Y]$$
 
-FSDP와 tensor parallelism의 좋은 점은 둘을 조합할 수 있다는 것이다. **W<sub>in</sub>**과 **W<sub>out</sub>**을 두 axis 모두를 따라 shard하면 메모리와 연산을 둘 다 아낀다. B를 X를 따라 shard하므로 model-parallel AllGather의 크기가 줄고, F를 Y를 따라 shard하므로 FSDP의 통신 오버헤드가 준다. 즉 둘을 조합하면 위에서 본 것보다 더 낮은 유효 batch size까지 갈 수 있다.
+FSDP와 tensor parallelism의 좋은 점은 둘을 조합할 수 있다는 것이다. **W<sub>in</sub>**과 **W<sub>out</sub>**을 두 axis 모두를 따라 shard하면 메모리와 연산을 둘 다 아낀다. B를 X를 따라 shard하므로 model-parallel AllGather의 크기가 줄고, F를 Y를 따라 shard하므로 FSDP의 통신 오버헤드가 준다. 둘을 조합하면 위에서 본 것보다 더 낮은 유효 batch size까지 갈 수 있다.
 
 <figure>
   <img src="https://jax-ml.github.io/scaling-book/assets/img/mixed-fsdp-model-parallelism.png" alt="FSDP와 tensor parallelism을 조합한 다이어그램" loading="lazy" />
@@ -412,7 +412,7 @@ FSDP와 tensor parallelism의 좋은 점은 둘을 조합할 수 있다는 것�
 
 </details>
 
-**FSDP와 TP의 올바른 조합은 무엇인가?** 단순하지만 핵심적인 격언은, FSDP는 weight를 옮기고 tensor parallelism은 activation을 옮긴다는 것이다. 즉 batch size가 줄어들수록(특히 data parallelism을 더 할수록) shard당 activation이 작아져 tensor parallelism이 싸진다.
+**FSDP와 TP의 올바른 조합은 무엇인가?** 단순하지만 핵심적인 격언은, FSDP는 weight를 옮기고 tensor parallelism은 activation을 옮긴다는 것이다. batch size가 줄어들수록(특히 data parallelism을 더 할수록) shard당 activation이 작아져 tensor parallelism이 싸진다.
 
 * Tensor parallelism은 $$\mathbf{AllGather}_Y([B_X, D_Y])$$를 수행하는데, 이는 $$X$$가 커질수록 작아진다.
 * FSDP는 $$\mathbf{AllGather}_X([D_X, F_Y])$$를 수행하는데, 이는 $$Y$$가 커질수록 작아진다.
@@ -470,7 +470,7 @@ $$
 \max\left(T_\text{FSDP comms}, T_\text{TP comms}\right) < T_\text{math}
 $$
 
-$\alpha \equiv C / W_\text{ici}$, 즉 ICI arithmetic intensity로 두면 다음처럼 단순화할 수 있다:
+$\alpha \equiv C / W_\text{ici}$, 즉 ICI arithmetic intensity로 두면 다음처럼 단순화된다:
 
 $$
 \max\left(\frac{F}{Y \cdot M_X}, \frac{B}{X \cdot M_Y}\right) < \frac{B \cdot F}{N \cdot \alpha}
@@ -504,7 +504,7 @@ $$
 
 <div class="takeaway">
 
-**요점(Takeaway):** tensor parallelism과 FSDP를 조합하면 $B/N$을 $$2550^2 / 2F$$까지 낮출 수 있다. 이는 칩당 배치를 100 정도까지 감당할 수 있다는 뜻으로, FSDP만으로 가능한 것보다 대략 8배 작다.
+**요점(Takeaway):** tensor parallelism과 FSDP를 조합하면 $B/N$을 $$2550^2 / 2F$$까지 낮출 수 있다. 칩당 배치를 100 정도까지 감당할 수 있다는 뜻으로, FSDP만으로 가능한 것보다 대략 8배 작다.
 
 </div>
 
@@ -523,7 +523,7 @@ $$
   <figcaption><b>그림:</b> 서로 다른 병렬화 방식에서 통신에 걸리는 시간. 검은 점선은 행렬 곱셈 FLOPs에 걸리는 시간이므로, 이 선보다 위에 있는 곡선은 모두 comms-bound다. 모든 전략이 batch size 6e5 아래에서 comms-bound가 되는데, 이는 예상값 4096 * 2550^2 / (2 * 8192 * 4) = 4e5와 부합한다.</figcaption>
 </figure>
 
-검은 곡선은 모델 FLOPs에 쓰는 시간이므로, 이것이 모든 통신 비용보다 낮은 batch size에서는 엄격히 comms bound다. 검은 곡선이 초록 곡선과 약 `4e5`에서 교차하는 것을 볼 수 있는데, 예측한 그대로다.
+검은 곡선은 모델 FLOPs에 쓰는 시간이므로, 이것이 모든 통신 비용보다 낮은 batch size에서는 엄격히 comms bound다. 검은 곡선은 초록 곡선과 약 `4e5`에서 교차하는데, 예측한 그대로다.
 
 다음은 여러 batch size에 대한 총 연산 시간과 통신 시간을 직접 만져 볼 수 있는 인터랙티브 애니메이션이다:
 
@@ -531,7 +531,7 @@ $$
   <iframe src="https://jax-ml.github.io/scaling-book/assets/plotly/training-roofline.html" frameborder="0" scrolling="no" height="400px" width="100%"></iframe>
 </div>
 
-대체로 위 내용과 일치한다는 것을 볼 수 있다(최솟값이 FSDP=256, TP=16 부근). 각 전략의 axis 수가 조금씩 달라서 약간의 오차는 있다.
+대체로 위 내용과 일치한다(최솟값이 FSDP=256, TP=16 부근). 각 전략의 axis 수가 조금씩 달라서 약간의 오차는 있다.
 
 ### Pipelining
 
@@ -603,7 +603,7 @@ for i in range(num_layers - 1, -1, -1):
 
 ### Pod를 넘어 스케일링하기
 
-가능한 가장 큰 TPU 슬라이스는 8960칩(호스트 2240개)의 TPU v5p SuperPod다. 이 크기를 넘어 스케일하고 싶으면 Data-Center Networking(DCN) 경계를 건너야 한다. 각 TPU 호스트에는 호스트를 이더넷으로 다른 TPU v5p pod들에 연결하는 NIC(Network Interface Card)가 하나 이상 달려 있다. [TPU 장](/scaling-book/tpus/)에서 언급했듯 각 호스트는 약 200Gbps(25GB/s)의 full-duplex DCN bandwidth를 가지며, 이는 TPU당 약 6.25GB/s의 full-duplex(egress) bandwidth다.
+가능한 가장 큰 TPU 슬라이스는 8960칩(호스트 2240개)의 TPU v5p SuperPod다. 이 크기를 넘어 스케일하고 싶으면 Data-Center Networking(DCN) 경계를 건너야 한다. 각 TPU 호스트에는 호스트를 이더넷으로 다른 TPU v5p pod들에 연결하는 NIC(Network Interface Card)가 하나 이상 달려 있다. [TPU 장](/scaling-book/tpus/)에서 언급했듯 각 호스트의 full-duplex DCN bandwidth는 약 200Gbps(25GB/s)로, TPU당으로는 약 6.25GB/s의 full-duplex(egress) bandwidth다.
 
 보통 단일 pod를 넘어 스케일할 때는 ICI 도메인 안에서 어떤 형태의 model parallelism이나 FSDP를 하고, 여러 pod에 걸쳐서는 순수 data parallelism을 한다. $N$을 스케일하려는 TPU 수, $M$을 ICI로 연결된 슬라이스당 TPU 수라고 하자. DCN 위에서 AllReduce를 하려면 pod들의 집합에 대해 ring-reduction을 하면 되고, (backward pass에서) 다음을 얻는다:
 
@@ -615,7 +615,7 @@ $$
 T_\text{comms} = \frac{2 \cdot 2 \cdot 2 \cdot DF}{M \cdot W_\text{dcn}}
 $$
 
-통신 bandwidth는 $M$에 비례해 커지는데, ICI와 달리 ICI 도메인을 키우면 NIC를 더 많이 확보해 총 bandwidth가 커지기 때문이다. 단순화하면 $T_\text{math} > T_\text{comms}$는 다음일 때다
+ICI와 달리 ICI 도메인을 키우면 NIC를 더 많이 확보해 총 bandwidth가 커지므로, 통신 bandwidth는 $M$에 비례해 커진다. 단순화하면 $T_\text{math} > T_\text{comms}$는 다음일 때다
 
 $$
 \frac{B}{\text{slice}} > \frac{C}{W_\text{dcn}}
@@ -629,7 +629,7 @@ TPU v5p에서 $\frac{C}{W_\text{dcn}}$은 약 `4.59e14 / 6.25e9 = 73,440`이다.
 * FSDP는 $B / N > 2550 / M_X$인 한 할 수 있다. 즉 BS=2M과 3개 axis의 data parallelism으로 학습한다면 최대 $\approx 2400$칩, 대략 TPU v5p pod의 1/4까지만 쓸 수 있다.
 * FSDP + Tensor Parallelism을 조합하면 $B / N < 2550^2 / (2 \cdot 30000) = 108$일 때 comms-bound가 되므로, 대략 18k칩까지 스케일할 수 있다! 하지만 TPU v5p pod의 최대 크기는 8k칩이므로, 그 너머로는 DCN을 써야 한다.
 
-요약하면, BS=1M으로는 대략 X (FSDP) = 1024, Y (TP) = 8을 쓰는 좋은 학습 레시피가 있지만, BS=2M이면 DCN을 써야 한다. 위에서 언급했듯 DCN arithmetic intensity는 $\text{73,440}$이므로, ICI 도메인당 batch size가 이보다 크도록만 하면 된다. 이건 우리에게 식은 죽 먹기다. pod 2개면 pod당 BS가 1M이고 TPU당 batch size가 111이니 훌륭하다(약간 아슬아슬할 수는 있지만 이론적으로는 건전하다).
+요약하면, BS=1M으로는 대략 X (FSDP) = 1024, Y (TP) = 8을 쓰는 좋은 학습 레시피가 있지만, BS=2M이면 DCN을 써야 한다. 위에서 언급했듯 DCN arithmetic intensity는 $\text{73,440}$이므로, ICI 도메인당 batch size가 이보다 크도록만 하면 된다. 이건 식은 죽 먹기다. pod 2개면 pod당 BS가 1M이고 TPU당 batch size가 111이니 훌륭하다(약간 아슬아슬할 수는 있지만 이론적으로는 건전하다).
 
 <div class="takeaway">
 
@@ -639,7 +639,7 @@ TPU v5p에서 $\frac{C}{W_\text{dcn}}$은 약 `4.59e14 / 6.25e9 = 73,440`이다.
 
 ## TPU에서의 LLM 학습 요점 정리
 
-* 병렬화를 늘리거나 batch size를 줄이면 칩당 수행되는 연산량이 줄어들기 때문에, 둘 다 우리를 더 communication-bound로 만드는 경향이 있다.
+* 병렬화를 늘리거나 batch size를 줄이면 칩당 수행되는 연산량이 줄어들기 때문에, 둘 다 더 communication-bound에 가까워지는 경향이 있다.
 
 * 적당한 context 길이(~32k)까지는 Transformer를 MLP 블록의 스택으로 모델링해도 무방하며, 여러 병렬화 전략 각각을 레이어당 두세 개의 주요 matmul을 어떻게 shard하는지로 정의할 수 있다.
 
@@ -683,11 +683,11 @@ $$
 \end{array}
 $$
 
-* 순수 data parallelism은 모델과 optimizer state가 파라미터 수의 10배 바이트를 쓰기 때문에 유용한 경우가 드물다. 즉 몇 B 파라미터 이상을 메모리에 담을 수 있는 경우가 드물다.
+* 순수 data parallelism은 모델과 optimizer state가 파라미터 수의 10배 바이트를 쓰기 때문에 유용한 경우가 드물다. 몇 B 파라미터 이상을 메모리에 담을 수 있는 경우가 드물다는 말이다.
 
 * Data parallelism과 FSDP는 $$\text{batch size per shard} < C / W$$, 즉 네트워크의 arithmetic intensity보다 작아지면 comms bound가 된다. ICI에서 이 값은 2,550이고 DCN에서는 약 71,000이다. 병렬 axis를 늘리면 이 값을 키울 수 있다.
 
-* Tensor parallelism은 $$\lvert Y\rvert > F / 2550$$이면 comms bound가 된다. **대부분의 모델에서 8~16-way 정도다.** 이는 batch size와 무관하다.
+* Tensor parallelism은 $$\lvert Y\rvert > F / 2550$$이면 comms bound가 된다. **대부분의 모델에서 8~16-way 정도다.** 이 한계는 batch size와 무관하다.
 
 * 혼합 FSDP + tensor parallelism은 batch size를 $$2550^2 / 2F \approx 100$$까지 낮출 수 있게 해 준다. 놀랄 만큼 낮은 값이다.
 
@@ -743,9 +743,9 @@ LLaMA-2는 별도의 embedding·출력 행렬과 gated MLP 블록을 가진다.
 
 우선 수치 몇 개를 적어 보자. 32k 시퀀스 길이와 3M batch size면 시퀀스 단위 batch size는 96이다. TPU v5p 16x16x16 슬라이스에는 `393TB`의 HBM이 있다.
 
-1. 순수 data parallelism은 쓸 수 없다. 파라미터와 optimizer state를 각 칩에 복제하는데, 이것만 이미 (Q2에서) 약 130GB로 칩당 HBM(96GB)보다 크기 때문이다.
+1. 순수 data parallelism은 쓸 수 없다. 파라미터와 optimizer state를 각 칩에 복제하는데 이것만 이미 (Q2에서) 약 130GB로 칩당 HBM(96GB)보다 크기 때문이다.
 
-2. 우선 메모리만 보자. Q2에서 BS=16M을 3M으로 바꾸면 checkpoint activation 총량은 `~7.86e12`가 되고, optimizer state 1.3e11을 더하면 거의 정확히 8e12 = 8TB다. TPUv5p 슬라이스에는 총 `393TB`의 HBM이 있으므로 HBM 한도는 안전하게 밑돈다. 다음으로 comms-bound인지 compute-bound인지 보자. 4096칩과 3개 axis의 병렬화면 최소 batch size는 `850 * 4096 = 3.48M` 토큰이다. 우리의 3M batch size보다 약간 크다. 즉 실제로는 comms-bound가 되고 만다. 슬프다. 따라서 일반적인 답은 **아니오, FSDP만으로는 안 된다**.
+2. 우선 메모리만 보자. Q2에서 BS=16M을 3M으로 바꾸면 checkpoint activation 총량은 `~7.86e12`가 되고, optimizer state 1.3e11을 더하면 거의 정확히 8e12 = 8TB다. TPUv5p 슬라이스에는 총 `393TB`의 HBM이 있으므로 HBM 한도는 안전하게 밑돈다. 다음으로 comms-bound인지 compute-bound인지 보자. 4096칩과 3개 axis의 병렬화면 최소 batch size는 `850 * 4096 = 3.48M` 토큰이다. 우리의 3M batch size보다 약간 크다. 실제로는 comms-bound가 되고 만다. 슬프다. 따라서 일반적인 답은 **아니오, FSDP만으로는 안 된다**.
 
 3. 이제 주된 걱정이 comms-bound라는 것을 알았으니 수치를 넣어 보자. 우선 위로부터, 혼합 FSDP + tensor parallelism의 칩당 batch size는 여기서 $2550^2 / 2F = 235$보다 커야 한다. 즉 이론상 가능하다! 각각을 얼마나 할지 알아보자.
 
@@ -765,7 +765,7 @@ $X_{opt} = \sqrt{(B / F) \cdot (M_X / M_Y) \cdot N}$ 규칙이 있으므로, 여
 
 위에서 Transformer 레이어의 forward pass를 Out[B, D] = In[B, D] \*<sub>D</sub> W<sub>in</sub>[D, F] \*<sub>F</sub> W<sub>out</sub>[F, D]로 단순화했다. backward pass에 필요한 통신은 어떻게 유도할까?
 
-이는 앞 장에서 본 단일 matmul **Y = X * A**에 대한 규칙에서 꽤 자연스럽게 따라 나온다:
+앞 장에서 본 단일 matmul **Y = X * A**에 대한 규칙에서 꽤 자연스럽게 따라 나온다:
 
 $$
 \frac{dL}{dA} = \frac{dL}{dY}\frac{dY}{dA} = X^T \left(\frac{dL}{dY}\right)
@@ -786,10 +786,10 @@ $$
 
 </div>
 
-이 공식들은 수학적 진술이며 sharding에 대한 언급이 전혀 없다는 점에 유의하라. backward pass가 할 일은 이 네 값을 계산하는 것이다. 따라서 필요한 통신을 알아내려면, 위 네 식에서 matmul될 값들(Tmp, dOut, W<sub>out</sub>, W<sub>in</sub>)의 sharding — 우리의 병렬화 방식이 지정한다 — 을 가져다가, sharded matmul의 규칙을 적용해 어떤 통신을 해야 하는지 알아내면 된다. dOut은 Out과 같은 방식으로 shard된다는 점에 유의하라.
+이 공식들은 수학적 진술이며 sharding에 대한 언급이 전혀 없다는 점에 유의하라. backward pass가 할 일은 이 네 값을 계산하는 것이다. 따라서 필요한 통신을 알아내려면, 위 네 식에서 matmul될 값들(Tmp, dOut, W<sub>out</sub>, W<sub>in</sub>)의 sharding — 병렬화 방식이 지정한다 — 을 가져다가, sharded matmul의 규칙을 적용해 어떤 통신을 해야 하는지 알아내면 된다. dOut은 Out과 같은 방식으로 shard된다는 점에 유의하라.
 
-[^1]: 여기서는 통신 한계에 집중한다 — 메모리 용량 제약도 중요하지만, pre-training에서 rematerialization(activation checkpointing)과 아주 많은 수의 칩을 쓸 때는 보통 우리를 제약하지 않기 때문이다. 또한 MoE를 위한 expert parallelism은 설계 공간을 크게 넓히므로 여기서는 다루지 않고, dense Transformer라는 기본 경우만 다룬다.
+[^1]: 여기서는 통신 한계에 집중한다 — 메모리 용량 제약도 중요하지만, pre-training에서 rematerialization(activation checkpointing)과 아주 많은 수의 칩을 쓸 때는 보통 제약이 되지 않기 때문이다. 또한 MoE를 위한 expert parallelism은 설계 공간을 크게 넓히므로 여기서는 다루지 않고, dense Transformer라는 기본 경우만 다룬다.
 [^2]: Adam은 파라미터와 1차·2차 accumulator를 저장한다. 파라미터는 bfloat16이고 optimizer state는 float32이므로 파라미터당 `2 + 8 = 10` 바이트가 된다.
-[^3]: 이는 gradient checkpoint를 포함하지 않으므로 실제로 유용한 수치는 아니다. batch가 1 토큰일 때의 절대적 하한이다.
+[^3]: 이 값은 gradient checkpoint를 포함하지 않으므로 실제로 유용한 수치는 아니다. batch가 1 토큰일 때의 절대적 하한이다.
 [^4]: 이 분할이 ICI mesh 위에서 이루어진다고 가정하므로, 관련된 네트워크 bandwidth는 $W_\text{ici}$다.
 [^5]: 엄밀히는 FSDP가 순수 DP에는 없는 통신을 forward pass에 더하지만, 이는 backward pass와 같은 비율이므로 통신 roofline에는 영향이 없다. 핵심은 ZeRO-3가 backward pass의 AllReduce를 AllGather와 ReduceScatter로 바꾸는데, 이 둘의 총 통신량이 AllReduce와 같다는 것이다.

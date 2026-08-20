@@ -32,7 +32,7 @@ H100 SM을 더 자세히 들여다보자:
 
 * **CUDA Core:** 각 subpartition에는 SIMD/SIMT 벡터 연산을 수행하는 CUDA Core라는 ALU 집합이 있다. 각 ALU는 일반적으로 사이클당 1개의 산술 연산(예: f32.add)을 수행할 수 있다.[^4] 각 subpartition에는 32개의 fp32 코어(그리고 더 적은 수의 int32, fp64 코어)가 있고, 이들은 매 사이클 같은 명령을 실행한다. TPU의 VPU처럼 CUDA core는 ReLU, pointwise 벡터 연산, reduction(합산)을 담당한다.[^5]
 
-* **Tensor Core (TC):** 각 subpartition은 자체 Tensor Core를 가지는데, 이는 TPU의 MXU 같은 전용 행렬 곱셈 유닛이다. Tensor Core는 GPU FLOPs/s의 압도적 대부분을 차지한다(예: H100은 990 bf16 TC TFLOP/s인데 CUDA core는 겨우 66 TFLOPs/s다).
+* **Tensor Core (TC):** 각 subpartition은 자체 Tensor Core를 가지는데, TPU의 MXU 같은 전용 행렬 곱셈 유닛이다. Tensor Core는 GPU FLOPs/s의 압도적 대부분을 차지한다(예: H100은 990 bf16 TC TFLOP/s인데 CUDA core는 겨우 66 TFLOPs/s다).
   * [990 bf16 TFLOPs/s](https://www.nvidia.com/en-us/data-center/h100/)를 1.76GHz로 도는 132개의 SM으로 나누면, 각 H100 TC는 사이클당 `7.5e12 / 1.76e9 / 4 ~ 1024` bf16 FLOPs, 대략 8x8x8 matmul을 수행할 수 있다.[^6]
   * TPU처럼 GPU도 더 낮은 정밀도의 matmul을 더 높은 처리량으로 수행할 수 있다(예: H100의 fp8 FLOPs/s는 fp16의 2배). 저정밀도 학습·서빙은 눈에 띄게 빨라질 수 있다.
   * Volta 이후 각 GPU 세대는 이전 세대보다 TC 크기를 키워 왔다([이 주제에 관한 좋은 글](https://semianalysis.com/2025/06/23/nvidia-tensor-core-evolution-from-volta-to-blackwell/)). B200에 이르러 TC가 너무 커져 입력이 SMEM에 더 이상 들어가지 않게 되었고, 그래서 B200은 TMEM이라는 새 메모리 공간을 도입한다.[^7]
@@ -59,7 +59,7 @@ H100 SM을 더 자세히 들여다보자:
 
 * **L2 캐시:** 모든 SM은 약 50MB의 비교적 큰 L2 캐시를 공유하며[^9], 주 메모리 접근을 줄이는 데 쓴다.
   * 크기는 TPU의 VMEM과 비슷하지만 **훨씬** 느리고 프로그래머가 제어할 수 없다. 그래서 L2 캐시가 잘 활용되도록 프로그래머가 메모리 접근 패턴을 손봐야 하는, 일종의 "유령 같은 원격 작용(spooky action at a distance)"이 생긴다.[^10]
-  * NVIDIA는 자사 칩의 L2 bandwidth를 공개하지 않지만, [측정](https://chipsandcheese.com/p/nvidias-h100-funny-l2-and-tons-of-bandwidth)에 따르면 약 5.5TB/s다. 이는 HBM bandwidth의 약 1.6배지만 full-duplex이므로 실효 양방향 bandwidth는 3배에 가깝다. 이에 비해 TPU의 VMEM은 2배 크고 bandwidth도 훨씬 크다(약 40TB/s).
+  * NVIDIA는 자사 칩의 L2 bandwidth를 공개하지 않지만, [측정](https://chipsandcheese.com/p/nvidias-h100-funny-l2-and-tons-of-bandwidth)에 따르면 약 5.5TB/s다. HBM bandwidth의 약 1.6배지만 full-duplex이므로 실효 양방향 bandwidth는 3배에 가깝다. 이에 비해 TPU의 VMEM은 2배 크고 bandwidth도 훨씬 크다(약 40TB/s).
 
 * **HBM:** GPU의 주 메모리로, 모델 weight, gradient, activation 등을 저장한다.
   * HBM 크기는 Volta의 32GB에서 Blackwell(B200)의 192GB까지 크게 늘었다.
@@ -114,11 +114,11 @@ GPU는 비디오 게임 렌더링에서 출발했지만, 2010년대에 딥러닝
 |           레지스터           | 벡터 레지스터 (VRegs) |  32MB  |   256kB   |
 |          Tensor Core          |           MXU            |  528   |     8     |
 
-이 모듈성의 차이 덕분에 TPU는 만들기 훨씬 싸고 이해하기 단순하지만, 그만큼 컴파일러가 옳은 일을 해야 한다는 부담이 커진다. TPU는 제어 스레드가 하나뿐이고 VPU 폭 전체에 걸친 벡터화된 명령만 지원하므로, 컴파일러가 모든 메모리 로드와 MXU/VPU 작업을 stall이 없도록 수동으로 pipeline해야 한다. GPU 프로그래머는 그냥 수십 개의 서로 다른 kernel을 띄우면 되고, 각각이 완전히 독립적인 SM에서 돈다. 그 대신 그 kernel들은 L2 캐시를 서로 짓밟거나(thrashing) 메모리 로드를 모으지(coalesce) 못해 끔찍한 성능을 낼 수도 있다. 하드웨어가 런타임의 너무 많은 부분을 통제하기 때문에 뒤에서 무슨 일이 벌어지는지 추론하기 어려워진다. 그 결과 TPU는 대체로 더 적은 노력으로 peak roofline 성능에 더 가까이 갈 수 있다.
+이 모듈성의 차이 덕분에 TPU는 만들기 훨씬 싸고 이해하기 단순하지만, 그만큼 컴파일러가 옳은 일을 해야 한다는 부담이 커진다. TPU는 제어 스레드가 하나뿐이고 VPU 폭 전체에 걸친 벡터화된 명령만 지원하므로, 컴파일러가 모든 메모리 로드와 MXU/VPU 작업을 stall이 없도록 수동으로 pipeline해야 한다. GPU 프로그래머는 그냥 수십 개의 서로 다른 kernel을 띄우면 되고, 각각이 완전히 독립적인 SM에서 돈다. 그 대신 그 kernel들은 L2 캐시를 서로 짓밟거나(thrashing) 메모리 로드를 모으지(coalesce) 못해 끔찍한 성능을 낼 수도 있다. 하드웨어가 런타임의 너무 많은 부분을 통제하기 때문에 뒤에서 무슨 일이 벌어지는지 추론하기 어려워진다. 그 결과 TPU는 대체로 더 적은 노력으로 peak roofline 성능에 더 가까이 간다.
 
 **역사적으로 개별 GPU는 비슷한 TPU보다 강력하고 비싸다:** H200 한 장은 TPU v5p의 거의 2배 FLOPs/s와 1.5배 HBM을 가진다. 그러면서 Google Cloud 정가는 H200이 시간당 약 10달러, TPU v5p가 약 4달러다. TPU는 일반적으로 여러 칩을 네트워크로 묶는 데 GPU보다 더 크게 의존한다.
 
-**TPU는 빠른 캐시 메모리가 훨씬 많다.** TPU의 VMEM은 GPU의 SMEM(+TMEM)보다 훨씬 크고, 이 메모리에 weight와 activation을 저장해 두면 극도로 빠르게 로드해 쓸 수 있다. 모델 weight를 VMEM에 상주시키거나 꾸준히 prefetch할 수 있다면 LLM 추론에서 TPU가 더 빨라질 수 있는 이유다.
+**TPU는 빠른 캐시 메모리가 훨씬 많다.** TPU의 VMEM은 GPU의 SMEM(+TMEM)보다 훨씬 크고, 이 메모리에 weight와 activation을 저장해 두면 극도로 빠르게 로드해 쓸 수 있다. 모델 weight를 VMEM에 상주시키거나 꾸준히 prefetch할 수 있다면 LLM 추론에서 TPU가 더 빨라지는 이유다.
 
 ### 퀴즈 1: GPU 하드웨어
 
@@ -147,7 +147,7 @@ GPU는 비디오 게임 렌더링에서 출발했지만, 2010년대에 딥러닝
 <details>
 <summary>정답 보기</summary>
 
-**정답:** H100은 peak 990e12 fp16 FLOPs와 3.35e12 bytes/s의 bandwidth를 가진다. 따라서 임계 intensity는 `990e12 / 3.35e12 = 295`로, TPU의 240과 꽤 비슷하다. B200은 `2250e12 / 8e12 = 281`로 매우 비슷하다. 즉 TPU와 마찬가지로, matmul에서 compute-bound가 되려면 batch size가 280 안팎이어야 한다.
+**정답:** H100은 peak 990e12 fp16 FLOPs와 3.35e12 bytes/s의 bandwidth를 가진다. 따라서 임계 intensity는 `990e12 / 3.35e12 = 295`로, TPU의 240과 꽤 비슷하다. B200은 `2250e12 / 8e12 = 281`로 매우 비슷하다. TPU와 마찬가지로, matmul에서 compute-bound가 되려면 batch size가 280 안팎이어야 한다.
 
 H100과 B200 모두 fp8 FLOPs는 정확히 2배이므로 peak intensity도 각각 590과 562로 2배가 된다. 다만 weight도 fp8로 로드될 가능성이 높다는 점을 감안하면 어떤 의미에서는 그대로라고 볼 수 있다.
 
@@ -187,7 +187,7 @@ H100과 B200 모두 fp8 FLOPs는 정확히 2배이므로 peak intensity도 각�
 
 **정답:** 먼저, 두 `fp32[N]` 벡터의 덧셈은 N FLOPs를 수행하고, `4 * N * 2` 바이트를 로드하고 4 * N 바이트를 다시 써야 하므로 총 `3 * 4 * N = 12N` 바이트다. 비율을 구하면 `총 FLOPs / 총 바이트 = N / 12N = 1 / 12`로, 꽤 처참하다.
 
-위에서 계산했듯 FMA를 무시하면 boost 시 약 33.5 TFLOPs/s를 낼 수 있다. 이는 모든 CUDA core가 쓰일 때 얘기다. `N = 1024`라면 *많아야* 1024개의 CUDA core, 즉 8개의 SM밖에 쓸 수 없어 더 오래 걸린다(compute-bound라고 가정하면 대략 16배). 메모리 bandwidth는 3.35e12 bytes/s다. 따라서 peak 하드웨어 intensity는 `33.5e12 / 3.35e12 = 10`이다.[^13] 그러니 끔찍하게 comms-bound가 된다. 실행 시간은 그냥
+위에서 계산했듯 FMA를 무시하면 boost 시 약 33.5 TFLOPs/s를 낼 수 있다. 모든 CUDA core가 쓰일 때 얘기다. `N = 1024`라면 *많아야* 1024개의 CUDA core, 즉 8개의 SM밖에 쓸 수 없어 더 오래 걸린다(compute-bound라고 가정하면 대략 16배). 메모리 bandwidth는 3.35e12 bytes/s다. 따라서 peak 하드웨어 intensity는 `33.5e12 / 3.35e12 = 10`이다.[^13] 그러니 끔찍하게 comms-bound가 된다. 실행 시간은 그냥
 
 $$
 T = \max(T_\text{comms}, T_\text{math}) = \frac{12 \cdot N}{\text{3.35e12}} = \frac{N}{\text{2.8e11}}
@@ -199,7 +199,7 @@ $$
 
 ## 네트워킹
 
-네트워킹은 GPU와 TPU가 가장 크게 갈라지는 영역 중 하나다. 앞서 봤듯 TPU는 2D 또는 3D torus로 연결되며, 각 TPU는 이웃하고만 연결된다. 즉 두 TPU 사이의 메시지는 중간의 모든 TPU를 거쳐야 하고, mesh 위에서는 균일한 통신 패턴만 쓸 수밖에 없다. 어떤 면에서는 불편하지만, 그 덕에 TPU당 링크 수가 일정하고 bandwidth 손실 없이 임의로 큰 TPU "pod"로 확장할 수 있다.
+네트워킹은 GPU와 TPU가 가장 크게 갈라지는 영역 중 하나다. 앞서 봤듯 TPU는 2D 또는 3D torus로 연결되며, 각 TPU는 이웃하고만 연결된다. 두 TPU 사이의 메시지는 중간의 모든 TPU를 거쳐야 하고, mesh 위에서는 균일한 통신 패턴만 쓸 수밖에 없다. 어떤 면에서는 불편하지만, 그 덕에 TPU당 링크 수가 일정하고 bandwidth 손실 없이 임의로 큰 TPU "pod"로 확장할 수 있다.
 
 반면 GPU는 더 전통적인 계층적 트리 기반 스위칭 네트워크를 쓴다. 8개의 GPU 집합(GB200은 최대 72개[^14])인 **node**가 NVLink라는 고대역폭 인터커넥트로 서로 1 hop 안에 연결되고, 이 node들이 GPU마다 붙은 NIC을 통해 더 낮은 bandwidth의 InfiniBand(IB) 또는 Ethernet 네트워크로 더 큰 단위(**SU**, Scalable Unit)로 묶인다. 이들은 다시 상위 스위치들로 임의의 크기까지 연결될 수 있다.
 
@@ -275,7 +275,7 @@ node 수준을 넘어가면 GPU 네트워크의 토폴로지는 덜 표준화되
 
 **SuperPod:** 전체 SuperPod는 이런 SU 4개를 최상위 "spine" IB 스위치 16개로 연결한다. 그러면 GPU 1024개에 node 수준 NVSwitch 512개, leaf IB 스위치 32개, spine IB 스위치 16개 — 총 512 + 32 + 16 = 560개의 스위치다. leaf 스위치는 node 32개 단위로 node들과 연결되므로 GPU 256개 집합마다 leaf 스위치 8개가 있다. 모든 leaf 스위치는 모든 spine 스위치와 연결된다.
 
-**bandwidth는 얼마나 되는가?** InfiniBand 네트워크("scale-out 네트워크"라고 부른다)의 전체 토폴로지는 **fat tree**로, 케이블과 스위치가 node 수준 위에서 full bisection bandwidth(여기서는 400GB/s)를 보장한다. 즉 node들을 절반으로 나누면 각 node는 동시에 반대편 파티션의 node로 400GB/s를 egress할 수 있다. 더 중요한 것은, scale-out 네트워크에서 AllReduce bandwidth가 대략 일정하다는 뜻이라는 점이다! 실제 구현이 그렇지 않을 수는 있지만, scale-out 네트워크의 임의 개수 node에 대해 — 모든 node를 포함하는 ring을 만들 수 있으므로 — ring reduction을 한다고 상상해도 된다.
+**bandwidth는 얼마나 되는가?** InfiniBand 네트워크("scale-out 네트워크"라고 부른다)의 전체 토폴로지는 **fat tree**로, 케이블과 스위치가 node 수준 위에서 full bisection bandwidth(여기서는 400GB/s)를 보장한다. node들을 절반으로 나누면 각 node는 동시에 반대편 파티션의 node로 400GB/s를 egress할 수 있다. 더 중요하게는, scale-out 네트워크에서 AllReduce bandwidth가 대략 일정하다는 말이다! 실제 구현이 그렇지 않을 수는 있지만, scale-out 네트워크의 임의 개수 node에 대해 — 모든 node를 포함하는 ring을 만들 수 있으므로 — ring reduction을 한다고 상상해도 된다.
 
 | 계층 | GPU 수 | 단위당 스위치 수 | 스위치 종류 | 단위당 Bandwidth (TB/s, full-duplex) | GPU-to-GPU Bandwidth (GB/s, full-duplex) | Fat Tree Bandwidth (GB/s, full-duplex) |
 | :---: | :------------: | :-------------------------: | :---------: | :------------------------------------------: | :--------------------------------------: | :---: |
@@ -300,7 +300,7 @@ GPU 스위칭 패브릭은 이론상 스위치나 간접 계층을 더 얹어 �
   <figcaption><b>그림:</b> 576개 GPU로 이루어진 GB200 DGX SuperPod의 다이어그램. 맨 아래 계층의 각 rack은 72개의 GB200 GPU를 담는다.</figcaption>
 </figure>
 
-단일 node의 egress bandwidth(위 그림의 주황 선)를 세어 보면 leaf 계층으로 `4 * 18 * 400 / 8 = 3.6TB/s`가 나오는데, H100의 9배다(node가 담는 GPU 수도 정확히 9배다). 즉 임계 node egress bandwidth가 훨씬, _훨씬_ 높아지고, node 간 collective bandwidth가 node 내부보다 오히려 _낮아질_ 수도 있다. 자세한 논의는 아래 부록 A를 보라.
+단일 node의 egress bandwidth(위 그림의 주황 선)를 세어 보면 leaf 계층으로 `4 * 18 * 400 / 8 = 3.6TB/s`가 나오는데, H100의 9배다(node가 담는 GPU 수도 정확히 9배다). 임계 node egress bandwidth가 훨씬, _훨씬_ 높아지고, node 간 collective bandwidth가 node 내부보다 오히려 _낮아질_ 수도 있다. 자세한 논의는 아래 부록 A를 보라.
 
 |  Node 종류  | node당 GPU | GPU egress bandwidth | Node egress bandwidth |
 | :---------: | :-----------: | :------------------: | :-------------------: |
@@ -310,7 +310,7 @@ GPU 스위칭 패브릭은 이론상 스위치나 간접 계층을 더 얹어 �
 
 <div class="takeaway">
 
-**요점(Takeaway):** GB200 NVL72 SuperPod는 node 크기와 node egress bandwidth를 극적으로 키우며, 이는 roofline을 크게 바꾼다.
+**요점(Takeaway):** GB200 NVL72 SuperPod는 node 크기와 node egress bandwidth를 극적으로 키워 roofline을 크게 바꾼다.
 
 </div>
 
@@ -391,7 +391,7 @@ $$
 
 비용이 $B / (4W)$인 TPU와 비교해 보라. 단일 node 안에서는 이론상 실행 시간이 2배 빨라진다($B / 4W$ vs. $B / 8W$).
 
-Mixture of Expert(MoE) 모델에서는 *sparse 또는 ragged AllToAll*을 자주 쓴다. 출력 차원의 $N$개 shard 중 최대 $k$개만 0이 아님을 보장하는 경우로, $T_\text{AllToAll} \rightarrow K[B, N]$에서 각 axis의 $N$개 엔트리 중 최대 $k$개만 0이 아니라는 뜻이다. 이때 비용은 $k/N$배로 줄어 총 약 $\min(k/N, 1) \cdot B / (W \cdot N)$이다. MoE에서는 0이 아닌 값들을 독립적으로 무작위 선택하는 경우가 많아 $k$개보다 적게 나올 수도 있으므로, 근사적으로 $(N-1)/N \cdot \min(k/N, 1) \cdot B / (W \cdot N)$이다.[^19]
+Mixture of Expert(MoE) 모델에서는 *sparse 또는 ragged AllToAll*을 자주 쓴다. 출력 차원의 $N$개 shard 중 최대 $k$개만 0이 아님을 보장하는 경우로, $T_\text{AllToAll} \rightarrow K[B, N]$에서 각 axis의 $N$개 엔트리 중 최대 $k$개만 0이 아니게 된다. 이때 비용은 $k/N$배로 줄어 총 약 $\min(k/N, 1) \cdot B / (W \cdot N)$이다. MoE에서는 0이 아닌 값들을 독립적으로 무작위 선택하는 경우가 많아 $k$개보다 적게 나올 수도 있으므로, 근사적으로 $(N-1)/N \cdot \min(k/N, 1) \cdot B / (W \cdot N)$이다.[^19]
 
 <div class="takeaway">
 
@@ -412,7 +412,7 @@ Mixture of Expert(MoE) 모델에서는 *sparse 또는 ragged AllToAll*을 자주
 
 </div>
 
-**실측:** 다음은 8xH100 node에서의 AllReduce bandwidth 실측이다. Algo BW는 측정된 bandwidth(bytes / 실행 시간)이고, Bus BW는 $2 \cdot W \cdot (8 - 1) / 8$로 계산되며 이론상 실제 링크 bandwidth의 척도다. 450GB/s에는 못 미치지만 그런대로 가까운 370GB/s 근처까지는 도달하는 것을 볼 수 있는데, 이는 장치당 약 10GB나 되는 크기에서다. 즉 이 추정치들은 이론적으로는 맞지만, 실현하려면 큰 메시지가 필요하다.
+**실측:** 다음은 8xH100 node에서의 AllReduce bandwidth 실측이다. Algo BW는 측정된 bandwidth(bytes / 실행 시간)이고, Bus BW는 $2 \cdot W \cdot (8 - 1) / 8$로 계산되며 이론상 실제 링크 bandwidth의 척도다. 450GB/s에는 못 미치지만 그런대로 가까운 370GB/s 근처까지는 도달하는데, 그것도 장치당 약 10GB나 되는 크기에서다. 이 추정치들은 이론적으로는 맞지만, 실현하려면 큰 메시지가 필요하다.
 
 <figure>
   <img src="https://jax-ml.github.io/scaling-book/assets/gpu/gpu-all-reduce-bw.png" alt="8xH100 node AllReduce 처리량" loading="lazy" />
@@ -420,7 +420,7 @@ Mixture of Expert(MoE) 모델에서는 *sparse 또는 ragged AllToAll*을 자주
 
 *<b>그림:</b> SHARP를 끈 8xH100 node의 AllReduce 처리량. 파란 곡선은 실측으로부터 $2 * \text{bytes} * (N - 1) / (N * \text{runtime})$으로 계산한 경험적 링크 bandwidth다. 거대한 10GB 배열로도 공칭 bandwidth 450GB/s에 그다지 가까워지지 못한다는 점에 주목하라.*
 
-이는 실질적인 문제다. 우리가 세울 수 있는 이론적 주장을 의미 있게 복잡하게 만들기 때문이다. 예컨대 그럭저럭 큰 배열 — LLaMA-3 70B의 MLP(크기 `bf16[8192, 28672]`, 8-way 모델 sharding 시 `bf16[8192, 3584] = 58MB`) — 에 대한 AllReduce조차 peak 450GB/s 대비 약 150GB/s밖에 내지 못한다. 이에 비해 TPU는 훨씬 작은 메시지 크기에서 peak bandwidth에 도달한다(부록 B 참조).
+실질적인 문제다. 세울 수 있는 이론적 주장을 의미 있게 복잡하게 만들기 때문이다. 예컨대 그럭저럭 큰 배열 — LLaMA-3 70B의 MLP(크기 `bf16[8192, 28672]`, 8-way 모델 sharding 시 `bf16[8192, 3584] = 58MB`) — 에 대한 AllReduce조차 peak 450GB/s 대비 약 150GB/s밖에 내지 못한다. 이에 비해 TPU는 훨씬 작은 메시지 크기에서 peak bandwidth에 도달한다(부록 B 참조).
 
 <div class="takeaway">
 
@@ -428,14 +428,14 @@ Mixture of Expert(MoE) 모델에서는 *sparse 또는 ragged AllToAll*을 자주
 
 </div>
 
-**In-network reduction:** Hopper 세대부터 NVIDIA 스위치는 ["SHARP"(Scalable Hierarchical Aggregation and Reduction Protocol)](https://developer.nvidia.com/blog/advancing-performance-with-nvidia-sharp-in-network-computing/)를 지원해 "in-network reduction"이 가능하다. 즉 *네트워크 스위치 자체가* reduction 연산을 수행하고 그 결과를 여러 대상 GPU로 multiplex, 즉 "MultiCast"할 수 있다:
+**In-network reduction:** Hopper 세대부터 NVIDIA 스위치는 ["SHARP"(Scalable Hierarchical Aggregation and Reduction Protocol)](https://developer.nvidia.com/blog/advancing-performance-with-nvidia-sharp-in-network-computing/)를 지원해 "in-network reduction"이 가능하다. 말하자면 *네트워크 스위치 자체가* reduction 연산을 수행하고 그 결과를 여러 대상 GPU로 multiplex, 즉 "MultiCast"할 수 있다:
 
 <figure>
   <img src="https://jax-ml.github.io/scaling-book/assets/gpu/sharp-algorithm.png" alt="SHARP AllReduce 알고리즘" loading="lazy" />
   <figcaption><b>그림:</b> SHARP 없는 AllReduce는 각 GPU를 두 번 거쳐야 하므로 이론 비용이 2배다. 실전에서 speedup은 약 30%에 그친다(NCCL 2.27.5 기준).</figcaption>
 </figure>
 
-이론적으로 이는 AllReduce 비용을 거의 절반으로 줄인다. 각 GPU가 데이터를 최상위 스위치로 보내면 스위치가 스스로 reduction을 수행하고 결과를 각 GPU에 broadcast하므로, 각 GPU를 두 번 egress할 필요가 없어지고 네트워크 latency도 줄어들기 때문이다.
+이론적으로는 AllReduce 비용이 거의 절반으로 줄어든다. 각 GPU가 데이터를 최상위 스위치로 보내면 스위치가 스스로 reduction을 수행하고 결과를 각 GPU에 broadcast하므로, 각 GPU를 두 번 egress할 필요가 없어지고 네트워크 latency도 줄어들기 때문이다.
 
 $$
 T_\text{SHARP AR comms} = \frac{\text{bytes}}{\text{GPU egress bandwidth}}
@@ -443,7 +443,7 @@ $$
 
 이 식은 $1/N$ 인자 없이 정확하다는 점에 주목하라. 각 GPU가 먼저 $B \cdot (N - 1) / N$을 egress하고, 자기 로컬 shard의 부분 reduce 결과를 받고(ingress $B/N$), reduction을 마무리한 뒤 다시 $B/N$을 egress하고, 마지막으로 완전히 reduce된 결과를 ingress($B \cdot (N - 1) / N$)하므로, ingress가 정확히 $B$ 바이트가 된다.
 
-그러나 실전에서 SHARP를 켰을 때 보이는 bandwidth 증가는 예측치 75%가 아니라 약 30%다. 이는 실효 collective bandwidth를 겨우 약 480GB/s로 끌어올릴 뿐, 2배 근처에도 못 간다.
+그러나 실전에서 SHARP를 켰을 때 보이는 bandwidth 증가는 예측치 75%가 아니라 약 30%다. 실효 collective bandwidth를 겨우 약 480GB/s로 끌어올릴 뿐, 2배 근처에도 못 간다.
 
 <figure>
   <img src="https://jax-ml.github.io/scaling-book/assets/gpu/sharp-all-reduce-cost.png" alt="SHARP 유무에 따른 AllReduce bandwidth 실측" loading="lazy" />
@@ -458,7 +458,7 @@ $$
 
 ### node 간 collective
 
-node 수준을 넘어가면 비용이 조금 더 미묘해진다. 트리 위에서 reduction을 할 때는 아래에서 위로 — 먼저 node 안에서, 그다음 leaf 수준에서, 마지막으로 spine 수준에서 — 각 수준마다 통상의 알고리즘으로 reduce한다고 생각하면 된다. 특히 AllReduce의 경우 이렇게 하면 전체적으로 더 적은 데이터를 통신할 수 있는데, node 수준에서 AllReduce를 마치고 나면 leaf로는 $B * N$이 아니라 $B$ 바이트만 egress하면 되기 때문이다.
+node 수준을 넘어가면 비용이 조금 더 미묘해진다. 트리 위에서 reduction을 할 때는 아래에서 위로 — 먼저 node 안에서, 그다음 leaf 수준에서, 마지막으로 spine 수준에서 — 각 수준마다 통상의 알고리즘으로 reduce한다고 생각하면 된다. 특히 AllReduce의 경우, node 수준에서 AllReduce를 마치고 나면 leaf로는 $B * N$이 아니라 $B$ 바이트만 egress하면 되므로 전체적으로 더 적은 데이터를 통신하게 된다.
 
 **비용은 얼마나 드는가?** 1차 근사로, full bisection bandwidth가 있으므로 AllGather나 ReduceScatter의 비용은 *트리 reduction의 세부 사항과 무관하게* 버퍼 크기(바이트)를 node egress bandwidth(H100에서 400GB/s)로 나눈 값이 된다.
 
@@ -475,7 +475,7 @@ $$
 <details>
 <summary>더 정밀한 유도 보기</summary>
 
-더 정밀하게 말하면, 우리는 사실상 네트워크의 각 계층에서 ring reduction을 수행하고 있고 이들은 대부분 겹칠 수 있으므로:
+더 정밀하게 말하면, 사실상 네트워크의 각 계층에서 ring reduction을 수행하는 셈이고 이들은 대부분 겹칠 수 있으므로:
 
 $$
 T_\text{AG or RS comms} = \text{bytes} \cdot max_\text{depth i}\left[\frac{D_i - 1}{D_i \cdot W_\text{link i}}\right]
@@ -493,7 +493,7 @@ $$
 
 </details>
 
-**다른 collective들:** AllReduce는 SHARP가 켜져 있지 않으면 여전히 위 비용의 2배다. NVIDIA는 SHARP 지원 IB 스위치도 팔지만, 모든 provider가 갖고 있지는 않다. AllToAll은 node를 넘어가면 사정이 꽤 달라지는데, AllReduce처럼 "계층적"이지 않기 때문이다. 모든 GPU에서 다른 모든 GPU로 데이터를 보내야 한다면 node 수준의 full bisection bandwidth를 활용할 수 없다. 즉 $M = N / 8$개의 node에 걸친 N-way AllToAll의 비용은
+**다른 collective들:** AllReduce는 SHARP가 켜져 있지 않으면 여전히 위 비용의 2배다. NVIDIA는 SHARP 지원 IB 스위치도 팔지만, 모든 provider가 갖고 있지는 않다. AllToAll은 AllReduce처럼 "계층적"이지 않아서 node를 넘어가면 사정이 꽤 달라진다. 모든 GPU에서 다른 모든 GPU로 데이터를 보내야 한다면 node 수준의 full bisection bandwidth를 활용할 수 없다. $M = N / 8$개의 node에 걸친 N-way AllToAll의 비용은
 
 $$
 T_\text{AllToAll comms} = \frac{B \cdot (M - 1)}{M^2 \cdot W_\text{node egress}} \approx \frac{B}{M \cdot W_\text{node egress}}
@@ -545,14 +545,14 @@ $$
 T_\text{AR or RS comms} = \text{bytes} \cdot \max_{\text{depth } i}\left[\frac{D_i - 1}{D_i \cdot \max(Y, S_{i-1}) \cdot W_{\text{link } i}}\right]
 $$
 
-여기서 $S_i$는 트리에서 계층 i 아래의 subnode 크기, 즉 M * N * … 이다. 대략, 더 많은 GPU나 node에 걸칠수록 가용 bandwidth가 커지지만 그 node 안에서만 그렇다는 뜻이다.
+여기서 $S_i$는 트리에서 계층 i 아래의 subnode 크기, 즉 M * N * … 이다. 대략, 더 많은 GPU나 node에 걸칠수록 가용 bandwidth가 커지지만 그 node 안에서만 그렇다.
 
 **Pop Quiz 3 [두 axis에 걸친 sharding]:** 단일 SU(칩 256개)에서 $Y$가 안쪽 axis일 때 $\text{AllGather}_X(\text{bf16}[D_X, F_Y])$를 수행하고 싶다고 하자. $D$, $F$, $Y$의 함수로 얼마나 걸리는가?
 
 <details>
 <summary>정답 보기</summary>
 
-**정답:** Y <= 8인 경우와 Y > 8인 경우로 나눌 수 있다. $Y <= 8$이면 여전히 leaf 스위치에 묶이므로 답은 평소처럼 $T_\text{comms} = 2 * D * F * (32 - 1) / (32 * 400e9)$이다. Y > 8이면 위로부터 대략
+**정답:** Y <= 8인 경우와 Y > 8인 경우로 나뉜다. $Y <= 8$이면 여전히 leaf 스위치에 묶이므로 답은 평소처럼 $T_\text{comms} = 2 * D * F * (32 - 1) / (32 * 400e9)$이다. Y > 8이면 위로부터 대략
 
 $$
 T_\text{comms} = \frac{2 \cdot D \cdot F \cdot 256}{Y \cdot \text{12.8e12}} = \frac{2DF}{Y \cdot \text{50GB/s}}
@@ -636,7 +636,7 @@ spine 스위치 쪽 계산은 오히려 더 단순하다. $B / M$ 바이트가 M
 <details>
 <summary>정답 보기</summary>
 
-**정답:** node 수준에서는 $T_\text{comms} = B * 7 / (8 * \text{450e9}) = B / \text{514e9}$인 반면, 그 위에서는 실제로 $T_\text{comms} = B * (2 - 1) / (2 * \text{400e9}) = B / \text{800e9}$다. 즉 실제 병목은 leaf 수준이 아니라 node 수준 reduction이다! 이것이 2-way Data Parallelism을 쓰는 DeepSeek v3 같은 선택의 동기가 된다.
+**정답:** node 수준에서는 $T_\text{comms} = B * 7 / (8 * \text{450e9}) = B / \text{514e9}$인 반면, 그 위에서는 실제로 $T_\text{comms} = B * (2 - 1) / (2 * \text{400e9}) = B / \text{800e9}$다. 실제 병목은 leaf 수준이 아니라 node 수준 reduction인 것이다! 이것이 2-way Data Parallelism을 쓰는 DeepSeek v3 같은 선택의 동기가 된다.
 
 </details>
 
@@ -699,7 +699,7 @@ $$
 T_\text{comms} = \frac{2 \cdot 2 \cdot 2 \cdot EDF}{W_\text{collective}}
 $$
 
-즉 GPU당 토큰 batch size가 $E/k$배로 부풀어
+GPU당 토큰 batch size가 $E/k$배로 부풀어
 
 $$
 \frac{B}{X} > \frac{E}{k} \frac{C}{W_\text{collective}}
@@ -727,7 +727,7 @@ $$
 
 ### Tensor Parallelism
 
-Tensor parallelism은 activation에 대한 AllGather와 ReduceScatter를 수반하며, 이를 MLP FLOPs와 겹쳐야 한다. 즉 forward pass에서:
+Tensor parallelism은 activation에 대한 AllGather와 ReduceScatter를 수반하며, 이를 MLP FLOPs와 겹쳐야 한다. forward pass에서:
 
 $$
 T_\text{math} = \frac{2\cdot 2 \cdot BDF}{Y \cdot C}
@@ -747,7 +747,7 @@ node 안에서는 약 $F / 2200$, node를 넘어가면 $F / 2475$다. LLaMA-3처
 
 <div class="takeaway">
 
-**요점(Takeaway):** feed-forward 차원 F에 대해 크기 Y인 axis의 tensor parallelism은 $Y > F / 2475$이면 communication-bound가 된다. 이는 대체로 node 내부 TP, 많아야 2-node TP로 우리를 제한한다.
+**요점(Takeaway):** feed-forward 차원 F에 대해 크기 Y인 axis의 tensor parallelism은 $Y > F / 2475$이면 communication-bound가 된다. 그래서 대체로 node 내부 TP, 많아야 2-node TP로 제한된다.
 
 </div>
 
@@ -765,7 +765,7 @@ $$
 T_\text{comms} = \frac{4 \cdot B \cdot D \cdot (Z-8)}{W \cdot Z} \cdot \min\left(\frac{8 \cdot k}{Z}, 1\right)
 $$
 
-$K > Z/8$이면서 $F > \alpha \cdot (Z - 8)/k$이거나, 아니면 $Z \gg K$이면서 $F > 8 \cdot \alpha$여야 한다($\alpha = C/W$). 즉 expert parallelism이 가능한 영역이 두 개 있다. 하나는 적은 양의 expert parallelism(대략 2-node)과 작은 $F$의 조합이고, 다른 하나는 큰 $F$와 함께 $Z$를 얼마든지 키우는 것(E-way expert parallelism까지)이다.
+$K > Z/8$이면서 $F > \alpha \cdot (Z - 8)/k$이거나, 아니면 $Z \gg K$이면서 $F > 8 \cdot \alpha$여야 한다($\alpha = C/W$). 결국 expert parallelism이 가능한 영역이 두 개 있다. 하나는 적은 양의 expert parallelism(대략 2-node)과 작은 $F$의 조합이고, 다른 하나는 큰 $F$와 함께 $Z$를 얼마든지 키우는 것(E-way expert parallelism까지)이다.
 
 실전에서 두 경우 모두 보인다. DeepSeek v3처럼 F가 매우 작고 비교적 작고 제한된 cross-node expert parallelism을 쓰는 경우, 아니면 F가 큰 모델의 경우 — 이때는 TP와 함께 상당한 cross-node EP를 할 수 있다.
 
@@ -793,7 +793,7 @@ $N_\text{layers}$로 나누기 때문에 다른 어떤 비용보다도 압도적
 
 (1) **코드 복잡도:** pipelining은 다른 접근법만큼 자동 병렬화 프레임워크(XLA의 GSPMD 같은)에 깔끔하게 들어맞지 않는다. pipeline bubble을 숨기려 microbatching을 도입하면 프로그램 구조 자체가 바뀌고, 커스텀 zero-bubble pipeline 스케줄은 forward와 backward pass의 복잡한 interleaving을 요구해 문제를 더 키운다.
 
-(2) **pipelining은 data parallelism과 FSDP를 어렵게 만든다:** pipelining을 하지 않을 가장 큰 이유는 아마 FSDP·data parallelism과 궁합이 나쁘다는 점일 것이다. 특히 ZeRO-3 sharding이 잘 안 되는데, microbatch마다 weight를 AllGather해야 하는데 AllGather 비용을 상각할 토큰이 $B / N_\text{microbatches}$개뿐이면 성립하지 않기 때문이다. 게다가 backward pass에서는 *마지막 microbatch가 해당 stage를 통과할 때까지 gradient를 AllReduce나 ReduceScatter할 수 없어서, 겹치지 못한 통신 시간이 상당히 생긴다.*
+(2) **pipelining은 data parallelism과 FSDP를 어렵게 만든다:** pipelining을 하지 않을 가장 큰 이유는 아마 FSDP·data parallelism과 궁합이 나쁘다는 점일 것이다. 특히 ZeRO-3 sharding이 잘 안 된다. microbatch마다 weight를 AllGather해야 하는데 AllGather 비용을 상각할 토큰이 $B / N_\text{microbatches}$개뿐이면 성립하지 않기 때문이다. 게다가 backward pass에서는 *마지막 microbatch가 해당 stage를 통과할 때까지 gradient를 AllReduce나 ReduceScatter할 수 없어서, 겹치지 못한 통신 시간이 상당히 생긴다.*
 
 <figure>
   <img src="https://jax-ml.github.io/scaling-book/assets/gpu/pipeline-bubble.png" alt="2-stage 2-microbatch pipeline 예시" loading="lazy" />
@@ -809,7 +809,7 @@ $N_\text{layers}$로 나누기 때문에 다른 어떤 비용보다도 압도적
 
 이 문제들 각각에는 우회책이 있지만 구현이 복잡하고 유지보수가 어려운 경향이 있다. 그래도 pipelining은 다른 방법 대비 통신 비용이 낮은 기법으로 남아 있다.
 
-**latency에 관한 단서:** 앞서 언급했듯 GPU는 꽤 큰 메시지로도 full AllReduce bandwidth를 달성하기 어렵다. 즉 이론상 expert-parallel AllToAll을 여러 node로 확장할 수 있어도 실제로는 전체 bandwidth의 50%도 얻기 힘들 수 있다. 그래서 latency 오버헤드를 줄이기 위해 TP나 EP를 더 적은 수의 node 안에 담아 두려고 한다.
+**latency에 관한 단서:** 앞서 언급했듯 GPU는 꽤 큰 메시지로도 full AllReduce bandwidth를 달성하기 어렵다. 이론상 expert-parallel AllToAll을 여러 node로 확장할 수 있어도 실제로는 전체 bandwidth의 50%도 얻기 힘들 수 있다. 그래서 latency 오버헤드를 줄이기 위해 TP나 EP를 더 적은 수의 node 안에 담아 두려고 한다.
 
 ### 사례
 
@@ -819,7 +819,7 @@ $N_\text{layers}$로 나누기 때문에 다른 어떤 비용보다도 압도적
 * 16-way Pipeline Parallelism (PP)
 * 2-way ZeRO-1 Data Parallelism (DP)
 
-정상 상태(steady state) batch size는 `4096 * 15360 = 62,914,560` 토큰, GPU당 30k 토큰이었다. 이미 꽤 크다는 걸 알 수 있는데, 모델이 매우 sparse해서(k=8, E=256) 상당히 큰 batch size가 필요하다. 64-way EP와 16-way PP로 총 1024-way model parallelism이 되어 AllReduce가 spine 수준에서 수행되고, DP가 2-way뿐이라 실전에서 $2 / (2 - 1) = 2$배의 bandwidth를 얻는다. 이는 마지막 pipeline stage들과 겹치는 최종 data-parallel AllReduce의 비용을 줄이는 데도 도움이 된다.
+정상 상태(steady state) batch size는 `4096 * 15360 = 62,914,560` 토큰, GPU당 30k 토큰이었다. 이미 꽤 큰 수치인데, 모델이 매우 sparse해서(k=8, E=256) 상당히 큰 batch size가 필요하다. 64-way EP와 16-way PP로 총 1024-way model parallelism이 되어 AllReduce가 spine 수준에서 수행되고, DP가 2-way뿐이라 실전에서 $2 / (2 - 1) = 2$배의 bandwidth를 얻는다. 마지막 pipeline stage들과 겹치는 최종 data-parallel AllReduce의 비용을 줄이는 데도 도움이 된다.
 
 **LLaMA-3는 어떻게 하는가?** LLaMA-3는 16k GPU에서 BS 16M 토큰, GPU당 약 1k 토큰으로 학습한다. 구성은:
 
@@ -834,7 +834,7 @@ dense 모델이기도 해서 전반적으로 꽤 무난하다. 16-way PP가 data
 한 걸음 물러나 지금까지 배운 것을 총정리해 보자:
 
 * **Data parallelism 또는 FSDP(ZeRO-1/3)는 GPU당 약 2500 토큰의 로컬 batch size를 요구한다.** 다만 이론상 in-network reduction + 순수 DP로 이를 다소 낮출 수 있다.
-* **Tensor parallelism은 약 8-way까지 compute-bound**지만, 그 이상 확장하면 comms-bound가 되기 전에 bandwidth가 바닥난다. 이는 대체로 단일 NVLink 도메인(즉 단일 node이거나, GPU 최대 72개의 GB200NVL72가 필요)으로 제한한다.
+* **Tensor parallelism은 약 8-way까지 compute-bound**지만, 그 이상 확장하면 comms-bound가 되기 전에 bandwidth가 바닥난다. 대체로 단일 NVLink 도메인(즉 단일 node이거나, GPU 최대 72개의 GB200NVL72가 필요)으로 제한된다.
 * **여러 node에 걸치는 어떤 형태의 model parallelism이든 FSDP의 비용을 추가로 낮출 수 있다.** 그래서 PP + EP + TP를 섞어 여러 node에 걸치게 해서 FSDP 비용을 줄이는 경우가 많다.
 * **Pipeline parallelism은 zero-bubble pipelining의 코드 복잡도를 감당할 수 있고 data-parallel 병목을 피할 만큼 batch size를 꽤 크게 유지할 수 있다면 잘 작동한다.** pipelining은 대개 ZeRO-3를 불가능하게 만들지만(pipeline stage마다 AllGather해야 하므로) 대신 ZeRO-1을 쓸 수 있다.
 
@@ -872,8 +872,8 @@ dense 모델이기도 해서 전반적으로 꽤 무난하다. 16-way PP가 data
 2. 총 `6 * 70e9 * 15e12 = 6.3e24 bf16 FLOPs`가 필요하다. GPU당 `990e12` FLOPs이므로 45% MFU에서 1.8e18 FLOPs/s다. 따라서 전체는 3.5e6초, 즉 40일이다.
 3. node 안에서는 450GB/s의 bandwidth가 있으므로 한계는 대략 `F / 1995 = 28672 / 1995 = 14.372`다. 2개 node에 걸치지는 못하므로 현실적으로 8-way model parallelism까지다.
    1. 그러면 512-way DP를 해야 한다. 먼저 메모리가 충분한지 보자. 모델이 8-way로만 sharding되므로 `700GB / 8 = 87.5GB / GPU`인데, 들어가지 않는다. 따라서 불가!
-   2. ZeRO-3와 8-way TP를 쓰면 512-way ZeRO-3다. 모든 것을 공격적으로 sharding하므로 메모리 문제는 없다. GPU당 batch size는 `4e6 / 4096 = 976`이다. 이는 꽤 낮은 값으로 순수 DP 한계에도 못 미치는데, weight까지 옮겨야 하므로 실제 한계는 그 2배다. 따라서 불가.
-   3. 8-way pipelining을 하면 각 model parallel shard가 8개 node에 걸친다. 앞서 보았듯 이는 leaf 수준 AllGather의 비용을 8분의 1로 줄이므로, 그 지점의 전체 AllReduce/AllGather bandwidth가 400GB/s에서 `8 * 400GB/s = 3200GB/s`로 올라간다. 그러면 roofline은 `990e12 / 3200e9 = 309`이므로 문제없다! pipelining을 효율적으로 구현하기만 하면 된다.
+   2. ZeRO-3와 8-way TP를 쓰면 512-way ZeRO-3다. 모든 것을 공격적으로 sharding하므로 메모리 문제는 없다. GPU당 batch size는 `4e6 / 4096 = 976`이다. 꽤 낮은 값으로 순수 DP 한계에도 못 미치는데, weight까지 옮겨야 하므로 실제 한계는 그 2배다. 따라서 불가.
+   3. 8-way pipelining을 하면 각 model parallel shard가 8개 node에 걸친다. 앞서 보았듯 leaf 수준 AllGather의 비용이 8분의 1로 줄어들므로, 그 지점의 전체 AllReduce/AllGather bandwidth가 400GB/s에서 `8 * 400GB/s = 3200GB/s`로 올라간다. 그러면 roofline은 `990e12 / 3200e9 = 309`이므로 문제없다! pipelining을 효율적으로 구현하기만 하면 된다.
 
 </details>
 
@@ -894,7 +894,7 @@ sequence length는 모두 4096이다. 16B, 70B, 314B 모델 각각의 GPU당 토
 * **70B**: `384 * 4096 / 768 = 2048` 토큰/GPU
 * **314B**: `1536 * 4096 / 3072 = 2048` 토큰/GPU
 
-즉 첫 번째를 빼면 전부 배치당 2k 토큰 언저리인데, 이는 공교롭게도 우리가 계산한 FSDP 임계 근처다. spine 수준 reduction 기준으로 2,472 토큰/GPU를 계산했었고, 여기서 대략 그 한계가 작동한다. 다만 70B와 314B는 각각 16-way, 64-way model(PP + TP) sharding을 하므로 spine 수준에서 2배, 8배 더 나은 처리량을 얻고, 따라서 대략 1k와 300 토큰/step에서 compute-bound가 되어야 한다.
+첫 번째를 빼면 전부 배치당 2k 토큰 언저리인데, 공교롭게도 앞서 계산한 FSDP 임계 근처다. spine 수준 reduction 기준으로 2,472 토큰/GPU를 계산했었고, 여기서 대략 그 한계가 작동한다. 다만 70B와 314B는 각각 16-way, 64-way model(PP + TP) sharding을 하므로 spine 수준에서 2배, 8배 더 나은 처리량을 얻고, 따라서 대략 1k와 300 토큰/step에서 compute-bound가 되어야 한다.
 
 </details>
 
@@ -953,7 +953,7 @@ NVLink 4 스위치의 다이어그램이다. 총 64개의 NVLink4 포트(각각 
   <figcaption><b>그림:</b> 단일 NVLink4 스위치의 저수준 뷰.</figcaption>
 </figure>
 
-각 계층에서 우리는 가용 링크 bandwidth 또는 총 스위치 bandwidth에 병목이 걸릴 수 있다.
+각 계층에서는 가용 링크 bandwidth 또는 총 스위치 bandwidth에 병목이 걸릴 수 있다.
 
 * **node 수준:** node 수준에는 4 * 1.6TB/s = 6.4TB/s의 NVSwitch bandwidth가 있지만, 8개의 GPU 각각은 스위치로 450GB/s밖에 egress하지 못하므로 실제 peak bandwidth는 node 안에서 450e9 * 8 = 3.6TB/s(full-duplex)다.
 * **SU/leaf 수준:** SU 수준에는 32개 node를 1x400 Gbps InfiniBand로 all-to-all 연결하는 스위치 8개가 있다. node들로부터 8 * 32 * 400 / 8 = 12.8TB/s의 egress bandwidth가 나오고, 스위치 수준도 8 * 1.6TB/s = 12.8TB/s로 정확히 일치한다.
@@ -989,7 +989,7 @@ AllGather bandwidth도 보자:
 
 **AllToAll 비용에 관하여:**
 
-근사식 $\min(K / Z) * (Z - 1) / Z$를 참값 $(1 - ((Z - 1) / Z) ** K) * (Z - 1) / Z$와 비교할 수 있다. $Z$가 작은 경우를 빼면 둘은 비슷하다.
+근사식 $\min(K / Z) * (Z - 1) / Z$를 참값 $(1 - ((Z - 1) / Z) ** K) * (Z - 1) / Z$와 비교해 보자. $Z$가 작은 경우를 빼면 둘은 비슷하다.
 
 <figure>
   <img src="https://jax-ml.github.io/scaling-book/assets/gpu/all-to-all-approx.png" alt="ragged AllToAll 근사 대 참값 비교" loading="lazy" />
