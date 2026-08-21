@@ -98,9 +98,49 @@ const tracks = [
         figures: ['which channels you protect', 'the two rankings', 'one group, one scaled channel'],
         figures_ko: ['어느 채널을 보호하는가', '두 개의 순위', '그룹 하나, 스케일된 채널 하나'],
       },
+      {
+        kind: 'paper',
+        slug: 'quarot',
+        title: 'QuaRot',
+        title_ko: 'QuaRot',
+        subtitle: 'Outlier-Free 4-Bit Inference in Rotated LLMs',
+        venue: 'NeurIPS 2024',
+        arxiv: 'https://arxiv.org/abs/2404.00456',
+        date: '2026-08',
+        blurb:
+          'Where the per-channel scale runs out of travel, and what happens when the transform ' +
+          'is allowed to be any orthogonal matrix instead. The same hidden state before and ' +
+          'after one Hadamard, with the norm unchanged to the last digit.',
+        blurb_ko:
+          'per-channel scale이 어디서 끝까지 돌아가는지, 그리고 변환을 임의의 orthogonal ' +
+          '행렬로 열어주면 무슨 일이 벌어지는지. 같은 hidden state를 Hadamard 전후로 그렸고 ' +
+          'norm은 마지막 자리까지 그대로다.',
+        figures: ['the knob at 8 bits and at 4', 'one Hadamard on a real tensor', 'checking the invariance'],
+        figures_ko: ['8비트와 4비트에서의 같은 손잡이', '실제 tensor에 Hadamard 한 번', 'invariance 확인'],
+      },
+      {
+        kind: 'paper',
+        slug: 'spinquant',
+        title: 'SpinQuant',
+        title_ko: 'SpinQuant',
+        subtitle: 'LLM Quantization with Learned Rotations',
+        venue: 'ICLR 2025',
+        arxiv: 'https://arxiv.org/abs/2405.16406',
+        date: '2026-08',
+        blurb:
+          'An invariance is a parameter you have not chosen yet. Sixty-four rotations of one ' +
+          'real layer drawn as a distribution, and a Cayley-optimised rotation that finishes ' +
+          'below all of them without ever leaving the manifold.',
+        blurb_ko:
+          'invariance는 아직 고르지 않은 파라미터다. 실제 레이어 하나를 예순네 번 회전시켜 ' +
+          '분포로 그렸고, manifold를 벗어나지 않은 채 그 전부보다 아래에서 끝나는 ' +
+          'Cayley 최적화 회전까지.',
+        figures: ['sixty-four rotations', 'tailedness before and after', 'learning one rotation'],
+        figures_ko: ['예순네 번의 회전', '전과 후의 꼬리 두께', '회전 하나를 학습한다'],
+      },
     ],
-    next: 'Rotation-based quantization — QuaRot and SpinQuant, where the per-channel scale becomes a change of basis.',
-    next_ko: 'rotation 기반 양자화 — QuaRot과 SpinQuant. per-channel scale이 기저 변환으로 넓어지는 지점.',
+    next: 'Sub-4-bit and the KV cache — once the outliers are gone, what is left is ordinary rounding error.',
+    next_ko: '4비트 미만과 KV cache — outlier가 사라지고 나면 남는 것은 평범한 반올림 오차다.',
   },
   {
     id: 'architecture',
