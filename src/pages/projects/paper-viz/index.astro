@@ -58,9 +58,49 @@ const tracks = [
         figures: ['compensation on two weights', 'one cycle of real arithmetic', 'the OBQ column stepper'],
         figures_ko: ['weight 두 개로 배우는 보상', '실제 산술로 보는 한 사이클', 'OBQ 열 스테퍼'],
       },
+      {
+        kind: 'paper',
+        slug: 'smoothquant',
+        title: 'SmoothQuant',
+        title_ko: 'SmoothQuant',
+        subtitle: 'Accurate and Efficient Post-Training Quantization for Large Language Models',
+        venue: 'ICML 2023',
+        arxiv: 'https://arxiv.org/abs/2211.10438',
+        date: '2026-08',
+        blurb:
+          'How many of INT8\'s 256 levels a typical channel actually gets, why the obvious fix ' +
+          'is unexpressible rather than slow, and one knob that moves the difficulty from the ' +
+          'activations into the weights — drawn on both surfaces at once.',
+        blurb_ko:
+          'INT8의 256레벨 중 보통 채널이 실제로 받는 몫, 뻔한 해법이 왜 느린 게 아니라 표현이 ' +
+          '안 되는지, 그리고 difficulty를 activation에서 weight로 옮기는 손잡이 하나 — 두 표면 ' +
+          '위에서 동시에.',
+        figures: ['where the 256 levels go', 'the identity, on real channels', 'watch the difficulty move'],
+        figures_ko: ['256레벨이 어디로 가는가', '실제 채널 위의 항등식', 'difficulty가 옮겨가는 것'],
+      },
+      {
+        kind: 'paper',
+        slug: 'awq',
+        title: 'AWQ',
+        title_ko: 'AWQ',
+        subtitle: 'Activation-aware Weight Quantization for On-Device LLM Compression',
+        venue: 'MLSys 2024',
+        arxiv: 'https://arxiv.org/abs/2306.00978',
+        date: '2026-08',
+        blurb:
+          'The paper\'s own selection ablation, re-run on a real layer: protect 1% of channels ' +
+          'by activation magnitude and the error drops, protect them by weight norm and nothing ' +
+          'happens. Plus the group step Δ moving as you scale one channel.',
+        blurb_ko:
+          '논문의 선택 ablation을 실제 레이어에서 다시 돌렸다. activation 크기로 고른 1%를 ' +
+          '보호하면 오차가 떨어지고, weight norm으로 고르면 아무 일도 없다. 채널 하나를 ' +
+          '키울 때 그룹 간격 Δ가 움직이는 것까지.',
+        figures: ['which channels you protect', 'the two rankings', 'one group, one scaled channel'],
+        figures_ko: ['어느 채널을 보호하는가', '두 개의 순위', '그룹 하나, 스케일된 채널 하나'],
+      },
     ],
-    next: 'AWQ · SmoothQuant — the activation-outlier branch of the same chain.',
-    next_ko: 'AWQ · SmoothQuant — 같은 사슬에서 activation outlier 쪽으로 갈라지는 가지.',
+    next: 'Rotation-based quantization — QuaRot and SpinQuant, where the per-channel scale becomes a change of basis.',
+    next_ko: 'rotation 기반 양자화 — QuaRot과 SpinQuant. per-channel scale이 기저 변환으로 넓어지는 지점.',
   },
   {
     id: 'architecture',
