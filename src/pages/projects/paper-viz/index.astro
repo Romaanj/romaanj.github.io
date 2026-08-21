@@ -43,6 +43,22 @@ const papers = [
     figures: ['compensation on two weights', 'one cycle of real arithmetic', 'the OBQ column stepper'],
     figures_ko: ['weight 두 개로 배우는 보상', '실제 산술로 보는 한 사이클', 'OBQ 열 스테퍼'],
   },
+  {
+    slug: 'flashattention',
+    title: 'FlashAttention',
+    subtitle: 'Fast and Memory-Efficient Exact Attention with IO-Awareness',
+    venue: 'NeurIPS 2022',
+    arxiv: 'https://arxiv.org/abs/2205.14135',
+    date: '2026-08',
+    blurb:
+      'Why the GPU is a memory machine, why softmax looked untileable, and the online ' +
+      'rescaling that rebuilds the exact answer one block at a time — watched to 1e-16.',
+    blurb_ko:
+      'GPU가 왜 메모리 기계인지, softmax가 왜 tiling 불가능해 보였는지, 그리고 정확한 답을 ' +
+      '블록 하나씩 다시 세우는 online rescaling — 오차 1e-16까지 직접 확인.',
+    figures: ['online softmax, step by step', 'every trip to HBM', 'what is in SRAM right now'],
+    figures_ko: ['한 스텝씩 보는 online softmax', 'HBM으로 가는 모든 왕복', '지금 SRAM에 있는 것'],
+  },
 ];
 ---
 

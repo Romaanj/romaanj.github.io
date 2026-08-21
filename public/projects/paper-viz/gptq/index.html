@@ -32,27 +32,16 @@ body>.wrap>header{padding-top:44px}
 </script>
 <style>
 :root{
-  --bg:#F7F9F8; --surface:#FFFFFF; --ink:#1C2422; --ink-2:#4C5A56; --ink-3:#7A8783;
-  --line:#DCE3E0; --line-soft:#E9EEEC;
-  --draft:#0D9488; --draft-soft:#D9EFEC; --target:#B45309; --target-soft:#F5E6D4;
-  --good:#1A7A3E; --good-soft:#DCEFE2; --bad:#B3423A; --muted-chip:#EDF0EF;
-  --code-bg:#EFF3F1;
-}
-@media (prefers-color-scheme: dark){
-  :root:not([data-theme="light"]){
-    --bg:#111917; --surface:#18211F; --ink:#E8EDEB; --ink-2:#A7B4B0; --ink-3:#7C8A85;
-    --line:#2C3835; --line-soft:#222D2A;
-    --draft:#17A697; --draft-soft:#12332F; --target:#CC6F1A; --target-soft:#38281A;
-    --good:#3FA968; --good-soft:#16301F; --bad:#D3766E; --muted-chip:#232E2B;
-    --code-bg:#1D2825;
-  }
-}
-:root[data-theme="dark"]{
-  --bg:#111917; --surface:#18211F; --ink:#E8EDEB; --ink-2:#A7B4B0; --ink-3:#7C8A85;
-  --line:#2C3835; --line-soft:#222D2A;
-  --draft:#17A697; --draft-soft:#12332F; --target:#CC6F1A; --target-soft:#38281A;
-  --good:#3FA968; --good-soft:#16301F; --bad:#D3766E; --muted-chip:#232E2B;
-  --code-bg:#1D2825;
+  /* aligned with romaanj.github.io — warm editorial, light only (the site has no dark mode) */
+  --bg:#faf9f5; --surface:#ffffff; --surface-warm:#f0eee6;
+  --ink:#141413; --ink-2:#63615a; --ink-3:#87857c;
+  --line:#e5e3da; --line-soft:#efeee7; --line-strong:#d1cfc5;
+  --accent:#d97757; --accent-strong:#c15f3c; --accent-soft:#f3e0d8;
+  /* two data series, validated: CVD dE 18.1, normal 24.0, contrast >=3:1 on white */
+  --draft:#3d7fb8; --draft-soft:#e3edf6;
+  --target:#c15f3c; --target-soft:#f3e0d8;
+  --good:#4a6b3a; --good-soft:#e8eee2; --bad:#b3423a; --muted-chip:#f0eee6;
+  --code-bg:#f0eee6;
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);
@@ -137,6 +126,52 @@ header .eyebrow{font-size:.72rem}
 #st-narr{margin:0 0 12px;padding:8px 12px;background:var(--code-bg);border-radius:7px;
   font-size:.8rem;line-height:1.55}
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
+
+/* ============ site alignment layer (romaanj.github.io) ============ */
+@font-face{font-family:'Wanted Sans Variable';font-weight:100 900;font-style:normal;
+  font-display:swap;src:url('/fonts/WantedSansVariable.woff2') format('woff2-variations')}
+body{font-family:'Inter','Wanted Sans Variable',-apple-system,'Segoe UI',sans-serif;
+  font-size:16px;line-height:1.65;color:var(--ink);background:var(--bg);
+  -webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:'Source Serif 4','Wanted Sans Variable',Georgia,serif;
+  font-weight:500;letter-spacing:-.01em;line-height:1.15}
+h1{font-size:2.55rem}
+h2{font-size:1.72rem}
+a{color:var(--accent-strong)}
+.byline{color:var(--ink-2);font-size:.95rem}
+.qeye{display:flex;align-items:center;gap:.6em;margin-top:3.4em;
+  font-family:'Inter','Wanted Sans Variable',sans-serif;font-size:.78rem;font-weight:600;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3)}
+.qeye::before{content:'';width:26px;height:2px;background:var(--accent);flex:none}
+.qeye::after{content:none}
+.qeye+h2{margin-top:.3em}
+.qans{font-family:'Source Serif 4','Wanted Sans Variable',Georgia,serif;
+  font-size:1.18rem;font-weight:500;line-height:1.5;letter-spacing:-.005em;
+  border-left:3px solid var(--accent);color:var(--ink);padding-left:1.1rem}
+.fig{border-radius:14px;border:1px solid var(--line);
+  box-shadow:0 1px 2px rgba(20,20,19,.04);padding:1.5rem 1.5rem 1.35rem}
+.fig h3{font-family:'Inter','Wanted Sans Variable',sans-serif;font-weight:600;color:var(--ink)}
+.fig .sub,.fig .cap{color:var(--ink-3)}
+button{border-radius:999px;border:1px solid var(--line-strong);background:var(--surface);
+  color:var(--ink-2);font-family:'Inter','Wanted Sans Variable',sans-serif;
+  font-size:.74rem;font-weight:500;padding:.3em .95em}
+button:hover{border-color:var(--accent);color:var(--accent-strong)}
+button.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-strong)}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.badge{border-radius:999px;font-weight:500;font-size:.7rem;padding:.2em .7em}
+.badge.ours{background:var(--draft-soft);color:#2f6389}
+.badge.paper{background:var(--accent-soft);color:var(--accent-strong)}
+.langtog{border-radius:999px;border:1px solid var(--line-strong);background:var(--surface);
+  box-shadow:0 1px 2px rgba(20,20,19,.06)}
+.langtog button{border:0;border-radius:999px}
+.langtog button.on{background:var(--accent-soft);color:var(--accent-strong)}
+.eyebrow{color:var(--ink-3)}
+.qbox{border-top:1px solid var(--line)}
+.qbox p{font-family:'Source Serif 4','Wanted Sans Variable',Georgia,serif;color:var(--ink-2)}
+code,.readout,.num{font-family:'JetBrains Mono','Wanted Sans Variable',monospace}
+input[type=range]{accent-color:var(--accent)}
+th{color:var(--ink-3)}
+td,th{border-bottom:1px solid var(--line-soft)}
 </style>
 
 <div class="langtog" role="group" aria-label="language">
@@ -384,7 +419,7 @@ Cholesky factor of H⁻¹. This is the paper's Algorithm 1, verbatim.</p>
     <span class="readout"><span id="t-col">column</span> <b id="r-col" class="num">0</b>/16</span>
   </div>
   <div class="stlegend" id="st-legend">
-    <span class="key"><span class="scalebar"></span><span id="lg-val">cell = one weight · colour = its value: blue-green −2.6 · blank 0 · orange +2.6 (hover any cell for the number)</span></span>
+    <span class="key"><span class="scalebar"></span><span id="lg-val">cell = one weight · colour = its value: blue −2.6 · blank 0 · orange +2.6 (hover any cell for the number)</span></span>
     <span class="key"><span class="colchip" style="border:1.5px solid var(--ink-3);opacity:.7"></span><span id="lg-locked">locked = quantized</span></span>
     <span class="key"><span class="colchip" style="border:2px solid var(--draft)"></span><span id="lg-cur">current column</span></span>
   </div>
@@ -393,7 +428,7 @@ Cholesky factor of H⁻¹. This is the paper's Algorithm 1, verbatim.</p>
   <div class="overflow" id="ubar"></div>
   <div class="hm-label" id="l-w">weight matrix W (rows = output neurons · columns = input features, as in ③ above) — columns lock onto the grid left to right</div>
   <div class="overflow" id="hm-w"></div>
-  <div class="hm-label" id="l-d">ΔW = how far each pending weight has been nudged from its original value (blue-green = pushed down, orange = pushed up; locked columns cleared)</div>
+  <div class="hm-label" id="l-d">ΔW = how far each pending weight has been nudged from its original value (blue = pushed down, orange = pushed up; locked columns cleared)</div>
   <div class="overflow" id="hm-d"></div>
   <div class="hm-label" id="l-e">layer output error ‖WX − ŴX‖² as columns are quantized</div>
   <div class="overflow" id="errchart"></div>
@@ -402,7 +437,7 @@ Cholesky factor of H⁻¹. This is the paper's Algorithm 1, verbatim.</p>
     &nbsp;·&nbsp; <span class="r">RTN</span>: <b id="r-rtn" class="num r">–</b>
     &nbsp;·&nbsp; <span id="t-ratio">ratio</span> <b id="r-ratio" class="num">–</b>
   </p>
-  <p class="cap" id="fig-cap">The <span class="ck ck-d"></span>blue-green curve (GPTQ) and <span class="ck ck-t"></span>orange curve (RTN) quantize the same
+  <p class="cap" id="fig-cap">The <span class="ck ck-d"></span>blue curve (GPTQ) and <span class="ck ck-t"></span>orange curve (RTN) quantize the same
   columns in the same order on the same grid — the ONLY difference is the compensation update
   after each column (Eq. 2). At 2 bits the gap is dramatic; try 4 bits to see why coarse grids
   are where compensation earns its keep. Reset re-draws W and X from a new seed.</p>
@@ -667,11 +702,9 @@ function narrText(){
 const CW=44,CH=30,PADL=8,PADT=4;
 function heat(v,vmax){ // diverging teal↔amber via mix with surface
   const t=Math.max(-1,Math.min(1,v/vmax));
-  const dark=document.documentElement.getAttribute('data-theme')==='dark'
-    ||(matchMedia('(prefers-color-scheme: dark)').matches
-       &&document.documentElement.getAttribute('data-theme')!=='light');
-  const base=dark?[24,33,31]:[255,255,255];
-  const teal=dark?[23,166,151]:[13,148,136], amber=dark?[204,111,26]:[180,83,9];
+  const dark=false;   // page is light-only, matching the site
+  const base=[255,255,255];               // card surface
+  const teal=[61,127,184], amber=[193,95,60];   // site palette: --draft / --target
   const c=t<0?teal:amber,a=Math.abs(t);
   const mix=base.map((b,i)=>Math.round(b+(c[i]-b)*a));
   return `rgb(${mix[0]},${mix[1]},${mix[2]})`;
@@ -910,11 +943,9 @@ document.querySelectorAll('.bitbtn').forEach(b=>b.onclick=()=>{
   const cell=15,P=26,W=P+DC2*cell+8,H=P+DC2*cell+8;
   const svg=el('svg',{viewBox:`0 0 ${W} ${H}`,role:'img','aria-label':'toy Hessian heatmap'},null);
   box.appendChild(svg);
-  const dark=document.documentElement.getAttribute('data-theme')==='dark'
-    ||(matchMedia('(prefers-color-scheme: dark)').matches
-       &&document.documentElement.getAttribute('data-theme')!=='light');
-  const base=dark?[24,33,31]:[255,255,255];
-  const tealC=dark?[23,166,151]:[13,148,136], amberC=dark?[204,111,26]:[180,83,9];
+  const dark=false;   // page is light-only, matching the site
+  const base=[255,255,255];               // card surface
+  const tealC=[61,127,184], amberC=[193,95,60]; // site palette: --draft / --target
   for(let a=0;a<DC2;a++)for(let b=0;b<DC2;b++){
     const v=Hm[a][b]/hmax, c=v<0?tealC:amberC, al=Math.min(1,Math.abs(v))**0.6;
     const mix=base.map((bb,i)=>Math.round(bb+(c[i]-bb)*al));
@@ -1521,14 +1552,14 @@ const KO={
   'ms-sub':'WikiText2 / C4 perplexity, OPT-125M. 논문 수치: Table 3·11 (A100-80GB — 우리와 같은 플랫폼 클래스).',
   'mq-l':'넘어가기 전에',
   'mq-q':`무작위 순서 하나에서는 perplexity가 거의 두 배로 뛰었는데, 그 런의 layer-로컬 오차는 평범했다. 어느 layer도 나빠지지 않았다면 피해는 어디에 쌓이고 있는 것인가. 그리고 왜 큰 layer(논문의 헤지)는 여기에 면역인가?`,
-  'l-d':`ΔW = 아직 안 잠긴 weight가 원래 값에서 얼마나 밀렸나 (청록 = 아래로, 주황 = 위로. 잠긴 열은 비움)`,
-  'lg-val':`셀 하나 = weight 하나 · 색 = 그 값: 청록 −2.6 · 흰색 0 · 주황 +2.6 (셀에 hover하면 숫자)`,
+  'l-d':`ΔW = 아직 안 잠긴 weight가 원래 값에서 얼마나 밀렸나 (파랑 = 아래로, 주황 = 위로. 잠긴 열은 비움)`,
+  'lg-val':`셀 하나 = weight 하나 · 색 = 그 값: 파랑 −2.6 · 흰색 0 · 주황 +2.6 (셀에 hover하면 숫자)`,
   'lg-locked':'잠김 = 양자화 완료',
   'lg-cur':'현재 열',
   'l-e':'열이 양자화됨에 따른 layer 출력 오차 ‖WX − ŴX‖²',
   't-obj':'최종 objective',
   't-ratio':'비율',
-  'fig-cap':`<span class="ck ck-d"></span>청록 곡선(GPTQ)과 <span class="ck ck-t"></span>주황 곡선(RTN)은 같은 열을 같은 순서로 같은 grid에 양자화한다. 유일한 차이는 열마다 뒤따르는 보상 업데이트(Eq. 2)뿐이다. 2-bit에서는 격차가 극적이고, 4-bit로 바꿔보면 보상이 왜 거친 grid에서 밥값을 하는지 보인다. Reset은 새 seed로 W와 X를 다시 뽑는다.`,
+  'fig-cap':`<span class="ck ck-d"></span>파랑 곡선(GPTQ)과 <span class="ck ck-t"></span>주황 곡선(RTN)은 같은 열을 같은 순서로 같은 grid에 양자화한다. 유일한 차이는 열마다 뒤따르는 보상 업데이트(Eq. 2)뿐이다. 2-bit에서는 격차가 극적이고, 4-bit로 바꿔보면 보상이 왜 거친 grid에서 밥값을 하는지 보인다. Reset은 새 seed로 W와 X를 다시 뽑는다.`,
   ql:'넘어가기 전에',
   qq:`마지막 몇 열까지 step을 눌러보고 ΔW를 보라. 왜 끝으로 갈수록 보상이 약해지는가. 그리고 그것이 "greedy 순서가 거의 중요하지 않다"는 논문의 관측과 어떻게 연결되는가?`,
   colophon:`데모는 Algorithm 1(공유 열 순서, 원본 weight로 고정한 per-row 비대칭 min–max grid, 1% dampening, H<sup>−1</sup>의 upper-Cholesky 행)을 JavaScript ~100줄로 구현했다. 이 페이지에는 arbitrary-order 실측, 실제 OPT-125M tensor 스냅샷(Hessian diagonal, weight grid), 논문 대비 perplexity scorecard가 이어서 추가된다 — 전부 우리 A100 런에서.`,

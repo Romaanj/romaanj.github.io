@@ -1,0 +1,1278 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="FlashAttention (NeurIPS 2022) read through the 13 questions — online softmax rebuilt block by block until it matches the full row exactly.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<title>FlashAttention, Reproduced — Junwon Lee</title>
+</head>
+<body>
+<div class="site-bar">
+  <a href="/projects/paper-viz/">&larr; Paper Visualizations</a>
+  <span class="site-bar-sep">/</span>
+  <a href="/">Junwon Lee</a>
+</div>
+<style>
+.site-bar{position:sticky;top:0;z-index:40;display:flex;align-items:center;gap:10px;
+  padding:9px 20px;font:600 .78rem Inter,system-ui,sans-serif;
+  background:var(--surface);border-bottom:1px solid var(--line);
+  backdrop-filter:saturate(1.1) blur(6px)}
+.site-bar a{color:var(--ink-2);text-decoration:none}
+.site-bar a:hover{color:var(--draft)}
+.site-bar-sep{color:var(--ink-3)}
+body .langtog{top:56px}
+body>.wrap{padding-top:0}
+body>.wrap>header{padding-top:44px}
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<script id="viz-data" type="application/json">{"config": {"batch": 1, "heads": 16, "dim": 64, "dtype": "bfloat16", "gpu": "NVIDIA A100-PCIE-40GB", "torch": "2.13.0+cu126", "timestamp": "2026-08-21T05:20:31+0000"}, "sweep": [{"seqlen": 512, "arm": "naive", "fwd": {"ms": 0.118, "peak_mb": 29.1, "attn_mb": 26.1}, "fwd_bwd": {"ms": 0.777, "peak_mb": 53.3, "attn_mb": 42.1}}, {"seqlen": 512, "arm": "flash", "fwd": {"ms": 0.039, "peak_mb": 21.3, "attn_mb": 2.0}, "fwd_bwd": {"ms": 0.39, "peak_mb": 27.3, "attn_mb": 8.1}}, {"seqlen": 512, "arm": "mem_efficient", "fwd": {"ms": 0.067, "peak_mb": 21.2, "attn_mb": 2.0}, "fwd_bwd": {"ms": 0.587, "peak_mb": 26.3, "attn_mb": 7.1}}, {"seqlen": 1024, "arm": "naive", "fwd": {"ms": 0.327, "peak_mb": 90.2, "attn_mb": 68.0}, "fwd_bwd": {"ms": 0.906, "peak_mb": 154.3, "attn_mb": 132.0}}, {"seqlen": 1024, "arm": "flash", "fwd": {"ms": 0.088, "peak_mb": 26.3, "attn_mb": 4.1}, "fwd_bwd": {"ms": 0.383, "peak_mb": 38.4, "attn_mb": 16.1}}, {"seqlen": 1024, "arm": "mem_efficient", "fwd": {"ms": 0.149, "peak_mb": 26.2, "attn_mb": 4.0}, "fwd_bwd": {"ms": 0.629, "peak_mb": 36.4, "attn_mb": 14.1}}, {"seqlen": 2048, "arm": "naive", "fwd": {"ms": 1.279, "peak_mb": 292.2, "attn_mb": 264.0}, "fwd_bwd": {"ms": 3.097, "peak_mb": 548.3, "attn_mb": 520.0}}, {"seqlen": 2048, "arm": "flash", "fwd": {"ms": 0.238, "peak_mb": 36.4, "attn_mb": 8.1}, "fwd_bwd": {"ms": 0.929, "peak_mb": 60.5, "attn_mb": 32.3}}, {"seqlen": 2048, "arm": "mem_efficient", "fwd": {"ms": 0.485, "peak_mb": 36.2, "attn_mb": 8.0}, "fwd_bwd": {"ms": 1.932, "peak_mb": 56.5, "attn_mb": 28.3}}, {"seqlen": 4096, "arm": "naive", "fwd": {"ms": 4.828, "peak_mb": 1080.2, "attn_mb": 1040.0}, "fwd_bwd": {"ms": 9.314, "peak_mb": 2104.3, "attn_mb": 2064.0}}, {"seqlen": 4096, "arm": "flash", "fwd": {"ms": 0.588, "peak_mb": 56.5, "attn_mb": 16.3}, "fwd_bwd": {"ms": 1.583, "peak_mb": 104.8, "attn_mb": 64.5}}, {"seqlen": 4096, "arm": "mem_efficient", "fwd": {"ms": 0.907, "peak_mb": 56.2, "attn_mb": 16.0}, "fwd_bwd": {"ms": 3.991, "peak_mb": 96.8, "attn_mb": 56.5}}, {"seqlen": 8192, "arm": "naive", "fwd": {"ms": 14.173, "peak_mb": 4192.2, "attn_mb": 4128.0}, "fwd_bwd": {"ms": 33.876, "peak_mb": 8288.3, "attn_mb": 8224.0}}, {"seqlen": 8192, "arm": "flash", "fwd": {"ms": 1.587, "peak_mb": 96.8, "attn_mb": 32.5}, "fwd_bwd": {"ms": 6.314, "peak_mb": 193.3, "attn_mb": 129.0}}, {"seqlen": 8192, "arm": "mem_efficient", "fwd": {"ms": 3.396, "peak_mb": 96.2, "attn_mb": 32.0}, "fwd_bwd": {"ms": 15.03, "peak_mb": 177.3, "attn_mb": 113.0}}, {"seqlen": 16384, "arm": "naive", "fwd": {"ms": 42.259, "peak_mb": 16560.2, "attn_mb": 16448.0}, "fwd_bwd": {"oom": true}}, {"seqlen": 16384, "arm": "flash", "fwd": {"ms": 6.537, "peak_mb": 177.3, "attn_mb": 65.0}, "fwd_bwd": {"ms": 24.927, "peak_mb": 370.3, "attn_mb": 258.0}}, {"seqlen": 16384, "arm": "mem_efficient", "fwd": {"ms": 14.547, "peak_mb": 176.2, "attn_mb": 64.0}, "fwd_bwd": {"ms": 59.586, "peak_mb": 338.3, "attn_mb": 226.1}}], "exactness": {"seqlen": 2048, "dtype": "bfloat16", "reference": "float32 naive", "flash": {"max_abs": 0.0008519589900970459, "rel_fro": 0.0022583361715078354}, "naive_bf16": {"max_abs": 0.003653690218925476, "rel_fro": 0.004484567791223526}}}</script>
+<style>
+:root{
+  /* aligned with romaanj.github.io — warm editorial, light only (the site has no dark mode) */
+  --bg:#faf9f5; --surface:#ffffff; --surface-warm:#f0eee6;
+  --ink:#141413; --ink-2:#63615a; --ink-3:#87857c;
+  --line:#e5e3da; --line-soft:#efeee7; --line-strong:#d1cfc5;
+  --accent:#d97757; --accent-strong:#c15f3c; --accent-soft:#f3e0d8;
+  /* two data series, validated: CVD dE 18.1, normal 24.0, contrast >=3:1 on white */
+  --draft:#3d7fb8; --draft-soft:#e3edf6;
+  --target:#c15f3c; --target-soft:#f3e0d8;
+  --good:#4a6b3a; --good-soft:#e8eee2; --bad:#b3423a; --muted-chip:#f0eee6;
+  --code-bg:#f0eee6;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:"Source Serif 4",Georgia,serif;font-size:1.06rem;line-height:1.65;}
+.wrap{max-width:860px;margin:0 auto;padding:0 20px 96px}
+.prose{max-width:66ch}
+h1,h2,h3{font-family:"Source Serif 4",Georgia,serif;line-height:1.15;text-wrap:balance}
+h1{font-size:2.7rem;font-weight:700;margin:.2em 0 .25em}
+h2{font-size:1.55rem;font-weight:700;margin:.5em 0 .5em}
+p{margin:.85em 0}
+a{color:var(--draft)}
+.eyebrow,.badge,button,.ctrlrow,.axis,.qbox-label,.hm-label,.stlegend{font-family:Inter,system-ui,sans-serif}
+.eyebrow{font-size:.72rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3)}
+header{padding-top:64px}
+.byline{color:var(--ink-2);font-size:.95rem;max-width:66ch}
+code{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:.86em;
+  background:var(--code-bg);padding:.08em .35em;border-radius:4px}
+.badge{display:inline-block;font-size:.68rem;font-weight:600;letter-spacing:.06em;
+  padding:2px 8px;border-radius:4px;vertical-align:middle}
+.badge.ours{background:var(--draft-soft);color:var(--draft)}
+.badge.paper{background:var(--target-soft);color:var(--target)}
+.ck{display:inline-block;width:.78em;height:.78em;border-radius:2px;
+  vertical-align:-.06em;margin-right:.3em;border:1px solid rgba(128,128,128,.35)}
+.ck-d{background:var(--draft)} .ck-t{background:var(--target)}
+.qeye{display:flex;align-items:center;gap:14px;margin-top:3.2em;
+  font-size:1.02rem;font-weight:700;letter-spacing:.08em;color:var(--draft);
+  text-transform:uppercase}
+.qeye::after{content:"";flex:1;height:1.5px;background:var(--line)}
+.qeye+h2{margin-top:.35em}
+header .eyebrow{font-size:.72rem}
+.qans{font-size:1.13rem;font-weight:600;line-height:1.55;max-width:66ch;
+  border-left:3px solid var(--draft);padding-left:14px;margin:.6em 0 1em}
+.fig{background:var(--surface);border:1px solid var(--line);border-radius:10px;
+  padding:20px 22px 16px;margin:26px 0}
+.fig h3{font-family:Inter,system-ui,sans-serif;font-size:.95rem;font-weight:600;margin:0 0 4px}
+.fig .sub{font-family:Inter,system-ui,sans-serif;font-size:.82rem;color:var(--ink-3);margin:0 0 14px}
+.fig .cap{font-family:Inter,system-ui,sans-serif;font-size:.82rem;color:var(--ink-3);
+  margin-top:10px;line-height:1.5}
+.hm-label{font-size:.74rem;font-weight:600;color:var(--ink-3);letter-spacing:.06em;
+  text-transform:uppercase;margin:12px 0 4px}
+button{cursor:pointer;border:1px solid var(--line);background:var(--surface);
+  color:var(--ink-2);font-size:.78rem;font-weight:600;padding:5px 11px;border-radius:6px}
+button:hover{border-color:var(--draft);color:var(--draft)}
+button:focus-visible{outline:2px solid var(--draft);outline-offset:2px}
+button.on{border-color:var(--draft);color:var(--draft);background:var(--draft-soft)}
+.ctrlrow{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:14px;
+  font-size:.8rem;color:var(--ink-2)}
+.ctrlrow .spacer{flex:1}
+.ctrlrow input[type=range]{accent-color:var(--draft)}
+.readout{font-family:"JetBrains Mono",monospace;font-size:.82rem;color:var(--ink-2)}
+.readout b{font-weight:500;color:var(--draft)}
+#os-math,#tile-out{margin:0 0 12px;padding:9px 13px;background:var(--code-bg);border-radius:7px;
+  font-size:.82rem;line-height:1.75}
+.eqwalk{display:grid;grid-template-columns:auto 1fr;gap:10px 18px;align-items:baseline;
+  font-size:.95rem;margin:14px 0}
+.eqwalk .eq{font-family:"JetBrains Mono",monospace;font-size:.88rem;background:var(--code-bg);
+  padding:6px 12px;border-radius:6px;white-space:nowrap;overflow-x:auto;max-width:100%}
+.eqwalk .why{font-family:Inter,system-ui,sans-serif;font-size:.85rem;color:var(--ink-2)}
+@media(max-width:640px){.eqwalk{grid-template-columns:1fr}}
+svg{display:block;max-width:100%}
+svg text{font-family:Inter,system-ui,sans-serif;fill:var(--ink-2)}
+.axis{font-size:11px;fill:var(--ink-3)}
+.gridline{stroke:var(--line-soft)}
+.overflow{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-family:Inter,system-ui,sans-serif;font-size:.85rem}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line-soft);vertical-align:top}
+th{font-size:.72rem;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+.qbox{border-top:1px solid var(--line);margin-top:26px;padding-top:10px;max-width:66ch}
+.qbox-label{font-size:.7rem;font-weight:600;letter-spacing:.12em;color:var(--ink-3);text-transform:uppercase}
+.qbox p{margin:.3em 0 0;font-style:italic;color:var(--ink-2)}
+.langtog{position:fixed;top:14px;right:16px;z-index:30;display:inline-flex;
+  border:1px solid var(--line);border-radius:999px;overflow:hidden;background:var(--surface);
+  box-shadow:0 1px 6px rgba(0,0,0,.08)}
+.langtog button{border:0;border-radius:0;padding:5px 12px;font-size:.75rem}
+.langtog button.on{background:var(--draft-soft);color:var(--draft)}
+.tooltip{position:fixed;pointer-events:none;background:var(--surface);border:1px solid var(--line);
+  border-radius:6px;padding:6px 10px;font:500 .75rem Inter,sans-serif;color:var(--ink);
+  box-shadow:0 2px 10px rgba(0,0,0,.12);opacity:0;transition:opacity .12s;z-index:10}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+
+/* ============ site alignment layer (romaanj.github.io) ============ */
+@font-face{font-family:'Wanted Sans Variable';font-weight:100 900;font-style:normal;
+  font-display:swap;src:url('/fonts/WantedSansVariable.woff2') format('woff2-variations')}
+body{font-family:'Inter','Wanted Sans Variable',-apple-system,'Segoe UI',sans-serif;
+  font-size:16px;line-height:1.65;color:var(--ink);background:var(--bg);
+  -webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:'Source Serif 4','Wanted Sans Variable',Georgia,serif;
+  font-weight:500;letter-spacing:-.01em;line-height:1.15}
+h1{font-size:2.55rem}
+h2{font-size:1.72rem}
+a{color:var(--accent-strong)}
+.byline{color:var(--ink-2);font-size:.95rem}
+.qeye{display:flex;align-items:center;gap:.6em;margin-top:3.4em;
+  font-family:'Inter','Wanted Sans Variable',sans-serif;font-size:.78rem;font-weight:600;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3)}
+.qeye::before{content:'';width:26px;height:2px;background:var(--accent);flex:none}
+.qeye::after{content:none}
+.qeye+h2{margin-top:.3em}
+.qans{font-family:'Source Serif 4','Wanted Sans Variable',Georgia,serif;
+  font-size:1.18rem;font-weight:500;line-height:1.5;letter-spacing:-.005em;
+  border-left:3px solid var(--accent);color:var(--ink);padding-left:1.1rem}
+.fig{border-radius:14px;border:1px solid var(--line);
+  box-shadow:0 1px 2px rgba(20,20,19,.04);padding:1.5rem 1.5rem 1.35rem}
+.fig h3{font-family:'Inter','Wanted Sans Variable',sans-serif;font-weight:600;color:var(--ink)}
+.fig .sub,.fig .cap{color:var(--ink-3)}
+button{border-radius:999px;border:1px solid var(--line-strong);background:var(--surface);
+  color:var(--ink-2);font-family:'Inter','Wanted Sans Variable',sans-serif;
+  font-size:.74rem;font-weight:500;padding:.3em .95em}
+button:hover{border-color:var(--accent);color:var(--accent-strong)}
+button.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-strong)}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.badge{border-radius:999px;font-weight:500;font-size:.7rem;padding:.2em .7em}
+.badge.ours{background:var(--draft-soft);color:#2f6389}
+.badge.paper{background:var(--accent-soft);color:var(--accent-strong)}
+.langtog{border-radius:999px;border:1px solid var(--line-strong);background:var(--surface);
+  box-shadow:0 1px 2px rgba(20,20,19,.06)}
+.langtog button{border:0;border-radius:999px}
+.langtog button.on{background:var(--accent-soft);color:var(--accent-strong)}
+.eyebrow{color:var(--ink-3)}
+.qbox{border-top:1px solid var(--line)}
+.qbox p{font-family:'Source Serif 4','Wanted Sans Variable',Georgia,serif;color:var(--ink-2)}
+code,.readout,.num{font-family:'JetBrains Mono','Wanted Sans Variable',monospace}
+input[type=range]{accent-color:var(--accent)}
+th{color:var(--ink-3)}
+td,th{border-bottom:1px solid var(--line-soft)}
+</style>
+
+<div class="langtog" role="group" aria-label="language">
+  <button id="lang-en" class="on">EN</button><button id="lang-ko">한국어</button>
+</div>
+<div class="wrap">
+<header>
+  <div class="eyebrow">replica · reproduction Nº 03</div>
+  <h1>FlashAttention, Reproduced</h1>
+  <p class="byline" id="byline"><em>FlashAttention: Fast and Memory-Efficient Exact Attention
+  with IO-Awareness</em> — Dao, Fu, Ermon, Rudra &amp; Ré, NeurIPS 2022
+  (<a href="https://arxiv.org/abs/2205.14135">arXiv:2205.14135</a>). Read top to bottom: the 13
+  reading questions, answered in one bold sentence each, with the mechanism drawn — and probed
+  on one A100 — in between.</p>
+</header>
+
+<section>
+<div class="eyebrow qeye" id="e-q1">Q1 · Background</div>
+<h2 id="h-q1">The GPU is a memory machine</h2>
+<p class="qans" id="a-q1">A modern GPU can do arithmetic far faster than it can fetch the
+numbers to work on, so most Transformer operations are limited by <em>bytes moved between
+memory levels</em>, not by floating-point work — and the levels differ by three orders of
+magnitude in both speed and size.</p>
+<p class="prose" id="p-q1">This is the fact the paper is built on, and it is worth looking at
+to scale before anything else. On-chip SRAM is roughly ten times faster than HBM and about two
+thousand times smaller. Any algorithm that keeps its working set in SRAM wins; any algorithm
+that spills to HBM pays.</p>
+<div class="fig">
+  <h3 id="f1-title">The memory hierarchy, drawn to scale</h3>
+  <p class="sub" id="f1-sub">A100 numbers as quoted in the paper. Bar length is bandwidth;
+  box area is capacity.</p>
+  <div class="overflow" id="v-hier"></div>
+  <p class="cap" id="f1-cap">The ratio that matters: SRAM is ~13× the bandwidth of HBM but
+  holds 0.05% as much. So the design question for any GPU kernel is not "how few FLOPs?" but
+  "how much work can I finish while the data is up there?"</p>
+</div>
+</section>
+
+<section>
+<div class="eyebrow qeye" id="e-q2">Q2 · Problem</div>
+<h2 id="h-q2">Attention writes a huge matrix nobody wants</h2>
+<p class="qans" id="a-q2">Standard attention computes an N×N score matrix, writes it to HBM,
+reads it back to softmax it, writes it again, and reads it once more to multiply by V — so its
+memory traffic grows quadratically with sequence length even though the answer, an N×d output,
+does not.</p>
+<p class="prose" id="p-q2">Softmax, masking and dropout are all cheap arithmetic on an
+enormous array; the GPU spends its time carrying that array back and forth. Follow the round
+trips below — the numbers are the paper's measurements for one GPT-2-medium attention layer.</p>
+<div class="fig">
+  <h3 id="f2-title">The matrix it deletes, and the tile that replaces it <span class="badge paper">paper Fig. 1–2</span></h3>
+  <p class="sub" id="f2-sub">Left: the N×N grid standard attention actually builds. Right: the
+  same grid, swept by one tile. The meters below are the paper's measured totals for one
+  GPT-2-medium layer.</p>
+  <div class="ctrlrow">
+    <button id="mx-step">▶ <span id="mx-t1">advance one tile</span></button>
+    <button id="mx-play"><span id="mx-t2">play</span></button>
+    <button id="mx-end"><span id="mx-t3">to the end</span></button>
+    <button id="mx-reset"><span id="mx-t4">reset</span></button>
+    <span class="spacer"></span>
+    <span class="readout"><span id="mx-t5">progress</span> <b id="mx-p">0%</b></span>
+  </div>
+  <div class="overflow" id="v-matrix"></div>
+  <p class="cap" id="f2-cap"></p>
+</div>
+</section>
+
+<section class="prose">
+<div class="eyebrow qeye" id="e-q3">Q3 · Existing limitations</div>
+<h2 id="h-q3">A decade of approximations optimised the wrong number</h2>
+<p class="qans" id="a-q3">Sparse and low-rank attention methods cut the FLOP count to near
+linear, but most showed no wall-clock speedup and never displaced standard attention — because
+they attacked arithmetic while the machine was paying for memory traffic.</p>
+<p id="p-q3">That sentence is the observation the whole paper turns on, and it is a
+methodological one rather than a technical one: the field had settled on a proxy metric. The
+same computation, re-scheduled so it never spills, turns out to beat approximations that do
+asymptotically less arithmetic — a result that is only surprising if you were counting FLOPs.</p>
+</section>
+
+<section class="prose">
+<div class="eyebrow qeye" id="e-q4">Q4 · Goal</div>
+<h2 id="h-q4">Exact attention, sub-quadratic traffic</h2>
+<p class="qans" id="a-q4">Compute the same attention output — bit-for-bit the same
+mathematics, no approximation — while never writing the N×N matrices to HBM at all, using
+memory linear in sequence length.</p>
+<p id="p-q4">Two obstacles stand in the way, and the rest of the paper is those two obstacles
+being removed. First: softmax needs a whole row before it can normalise anything. Second: the
+backward pass wants the very matrix we refuse to store.</p>
+</section>
+
+<section>
+<div class="eyebrow qeye" id="e-q5a">Q5 · Method — 1/4 · why tiling looks impossible</div>
+<h2 id="h-couple">Softmax couples the row</h2>
+<p class="prose" id="p-couple">Split a matrix multiply into blocks and you can add the partial
+results at the end; that is why tiling is standard practice. Softmax breaks the pattern,
+because every output depends on a sum over the entire row — including the entries you have not
+loaded yet. You cannot normalise until you have seen everything, and seeing everything is
+exactly what we are trying to avoid.</p>
+<div class="fig">
+  <h3 id="f3-title">What one output row needs</h3>
+  <p class="sub" id="f3-sub">One query, N keys. Each output is a ratio whose denominator runs
+  across the whole row.</p>
+  <div class="ctrlrow">
+    <span id="cp-t1">drag the score of key 11 (the last block)</span>
+    <input type="range" id="s-cp" min="-2" max="5" step="0.1" value="0.4" style="width:220px" aria-label="late score">
+    <b class="readout" id="v-cp">0.4</b>
+    <span class="spacer"></span>
+    <span class="readout" id="cp-read"></span>
+  </div>
+  <div class="overflow" id="v-couple"></div>
+  <p class="cap" id="f3-cap">The denominator is the problem. If a later block contains a larger
+  score than anything seen so far, both the max used for numerical stability and the sum change
+  — and every weight computed so far was computed against the wrong ones.</p>
+</div>
+</section>
+
+<section>
+<div class="eyebrow qeye" id="e-q5b">Q5 · Method — 2/4 · the core move</div>
+<h2 id="h-online">Online softmax: be wrong, then correct exactly</h2>
+<p class="qans" id="a-q5">Keep two running statistics per row — the maximum seen so far and the
+running sum of exponentials — and when a new block arrives with a larger maximum, rescale
+everything already accumulated by a single factor e^{m_old − m_new}; the result is not an
+approximation of the full softmax, it is identical to it.</p>
+<p class="prose" id="p-online">This is the whole idea, and it is easier to trust once you have
+watched it happen. Below, one query row meets its keys four at a time. Every step prints its
+own arithmetic: the new block's scores, the new maximum, the correction factor applied to
+everything already accumulated, and the running output. The bar at the bottom tracks the
+distance between the running answer and the answer a full-row softmax would give.</p>
+<div class="fig">
+  <h3 id="f4-title">One row, one block at a time <span class="badge ours">runs in your browser</span></h3>
+  <p class="sub" id="f4-sub">N = 12 keys in blocks of 4, d = 4, real numbers throughout. This is
+  Algorithm 1 lines 9–12 for a single row.</p>
+  <div class="ctrlrow">
+    <button id="os-step">▶ <span id="os-t1">load next K/V block</span></button>
+    <button id="os-auto"><span id="os-t2">auto</span></button>
+    <button id="os-reset"><span id="os-t3">new seed</span></button>
+    <span class="spacer"></span>
+    <span class="readout"><span id="os-t4">block</span> <b id="os-j">0</b>/3</span>
+  </div>
+  <p class="readout" id="os-math"></p>
+  <div class="overflow" id="v-online"></div>
+  <p class="cap" id="f4-cap">Notice what never exists: a row of 12 weights. At any moment the
+  kernel holds one block of scores, two scalars, and the running output — that is the entire
+  working set, and it does not grow with N. The correction factor is where the exactness comes
+  from: rescaling by e^{m_old − m_new} is algebraically the same as having known the true
+  maximum from the start.</p>
+</div>
+<div class="qbox"><div class="qbox-label" id="q1-l">Before moving on</div>
+<p id="q1-q">Step to a block whose maximum beats everything before it, and watch the correction
+factor drop below 1. What would happen to the running sum if you skipped that rescale — and why
+does that make it a correctness bug rather than a precision one?</p></div>
+</section>
+
+<section>
+<div class="eyebrow qeye" id="e-q5c">Q5 · Method — 3/4 · the loop and the tiles</div>
+<h2 id="h-loop">The kernel, and what is in SRAM while it runs</h2>
+<p class="prose" id="p-loop">Scale that row up to the whole matrix and you have Algorithm 1: an
+outer loop over blocks of K and V, an inner loop over blocks of Q, and O, ℓ, m updated in place.
+The block sizes are not tuned by hand — they fall out of one constraint, that Q, K, V and the
+score tile must fit in SRAM at once.</p>
+<div class="fig">
+  <h3 id="f5-title">One pass of the tiling loop</h3>
+  <p class="sub" id="f5-sub">Step through the beats. The panel on the right is the SRAM
+  occupancy at that moment; everything else is sitting in HBM, untouched.</p>
+  <div class="ctrlrow" id="loop-phases"></div>
+  <div class="overflow" id="v-loop"></div>
+  <p class="cap" id="loop-cap"></p>
+</div>
+<div class="fig">
+  <h3 id="f6-title">Where the block sizes come from</h3>
+  <p class="sub" id="f6-sub">Algorithm 1 line 1: B<sub>c</sub> = ⌈M / 4d⌉, B<sub>r</sub> =
+  min(⌈M / 4d⌉, d). Move the two knobs that the hardware and the model actually give you.</p>
+  <div class="ctrlrow">
+    <span id="tile-t1">SRAM per SM</span>
+    <input type="range" id="s-sram" min="16" max="256" step="16" value="192" style="width:150px" aria-label="sram KB">
+    <b class="readout" id="v-sram">192 KB</b>
+    <span id="tile-t2">head dim d</span>
+    <input type="range" id="s-dim" min="16" max="256" step="16" value="64" style="width:130px" aria-label="head dim">
+    <b class="readout" id="v-dim">64</b>
+    <span id="tile-t3">N</span>
+    <input type="range" id="s-n" min="512" max="16384" step="512" value="4096" style="width:130px" aria-label="seq len">
+    <b class="readout" id="v-n">4096</b>
+  </div>
+  <p class="readout" id="tile-out"></p>
+  <div class="overflow" id="v-tile"></div>
+  <p class="cap" id="f6-cap">The formula is just accounting: four arrays of one block each must
+  live in SRAM simultaneously. Its consequence is the paper's IO complexity — a bigger SRAM
+  means fewer, larger tiles, which means fewer passes over the data, which is why the traffic
+  scales as N²d²/M rather than N².</p>
+</div>
+</section>
+
+<section>
+<div class="eyebrow qeye" id="e-q5d">Q5 · Method — 4/4 · the backward pass</div>
+<h2 id="h-recomp">Recomputing is cheaper than remembering</h2>
+<p class="prose" id="p-recomp">The backward pass needs S and P — the very matrices we refused
+to store. FlashAttention keeps only the output O and the two statistics (m, ℓ), a few numbers
+per row, and rebuilds the score tiles on-chip when the gradient needs them. It does strictly
+more arithmetic than the standard backward pass and still finishes sooner, which is the
+paper's thesis stated as a single design decision.</p>
+<div class="fig">
+  <h3 id="f7-title">Two ways to get S back</h3>
+  <p class="sub" id="f7-sub">Same gradient, same result — different bill.</p>
+  <div class="overflow" id="v-recomp"></div>
+  <p class="cap" id="f7-cap">This is also why the trick is not just gradient checkpointing.
+  Checkpointing trades speed for memory; here the recomputation <em>is</em> the speedup,
+  because the thing it avoids is an HBM round trip rather than a matmul.</p>
+</div>
+</section>
+
+<section class="prose">
+<div class="eyebrow qeye" id="e-q6">Q6 · Core idea</div>
+<h2 id="h-core">IO-awareness as a first-class objective</h2>
+<p class="qans" id="a-q6">Treat reads and writes between SRAM and HBM as the quantity to
+minimise — then the algorithm, the block sizes and even the decision to recompute all follow
+from one budget, and the paper can prove the resulting traffic is optimal up to constants.</p>
+<p id="p-core">Stated as complexity: standard attention moves Θ(Nd + N²) words; FlashAttention
+moves Θ(N²d²M⁻¹). With A100 numbers (d = 64, M = 192 KB) that ratio is roughly 9×, and the
+paper proves no exact attention algorithm can do asymptotically better across all SRAM sizes —
+so this is not a clever implementation, it is the floor.</p>
+</section>
+
+<section class="prose">
+<div class="eyebrow qeye" id="e-q7">Q7 · Validation</div>
+<h2 id="h-q7">How the paper checks itself</h2>
+<p class="qans" id="a-q7">Three layers: microbenchmarks of the attention op alone (runtime and
+memory vs sequence length), end-to-end training speed on BERT and GPT-2 against the MLPerf and
+Megatron records, and model-quality results that are only reachable because longer sequences
+became affordable.</p>
+<p id="p-q7">Because the output is exact, quality can only change by way of what longer context
+enables — which is why the quality claims are all "same model, more sequence". The
+<span class="badge ours">probe</span> figures here are our own runs on one A100, measuring the
+two things a reader should not have to take on faith: that memory really is linear, and that
+the answer really is identical.</p>
+</section>
+
+<section id="sec-probe">
+<div class="eyebrow qeye" id="e-q8">Q8 · Results</div>
+<h2 id="h-res">What the paper measured, and what we measured</h2>
+<p class="qans" id="a-q8">On GPT-2-medium attention the paper trades 13% more arithmetic for
+9× less HBM traffic and comes out 5.7× faster, with memory linear in sequence length — and our
+own A100 probe reproduces the shape of both curves.</p>
+<div class="fig">
+  <h3 id="f8-title">The row that is the whole argument <span class="badge paper">paper Fig. 2 left</span></h3>
+  <p class="sub" id="f8-sub">One attention layer of GPT-2 medium on an A100, three quantities.</p>
+  <div class="overflow" id="v-tradeoff"></div>
+  <p class="cap" id="f8-cap">Read it left to right: FLOPs went <em>up</em>, traffic went down 9×,
+  and the clock followed the traffic. Any story in which FLOPs predict runtime has to explain
+  this row away.</p>
+</div>
+<div class="fig">
+  <h3 id="f9-title">Memory vs sequence length <span class="badge ours">probe · A100</span></h3>
+  <p class="sub" id="f9-sub"></p>
+  <div class="overflow" id="v-mem"></div>
+  <p class="cap" id="f9-cap"></p>
+</div>
+<div class="fig">
+  <h3 id="f10-title">Latency vs sequence length <span class="badge ours">probe · A100</span></h3>
+  <p class="sub" id="f10-sub"></p>
+  <div class="overflow" id="v-lat"></div>
+  <p class="cap" id="f10-cap"></p>
+</div>
+<div class="fig">
+  <h3 id="f11-title">Is it actually the same answer? <span class="badge ours">probe · A100</span></h3>
+  <p class="sub" id="f11-sub">The claim that separates this paper from every approximate
+  attention method. We checked it rather than trusting it.</p>
+  <div class="overflow" id="v-exact"></div>
+  <p class="cap" id="f11-cap"></p>
+</div>
+<div class="fig">
+  <h3 id="f12-title">End-to-end training <span class="badge paper">paper Tables 1–2</span></h3>
+  <p class="sub" id="f12-sub">Same models, same initialisation, same final quality — only the
+  attention kernel changed.</p>
+  <div class="overflow" id="v-train"></div>
+  <p class="cap" id="f12-cap">The BERT number is against NVIDIA's own MLPerf 1.1 record, which
+  is the honest comparison: not against a naive baseline, but against the best-tuned
+  implementation of the day.</p>
+</div>
+</section>
+
+<section class="prose">
+<div class="eyebrow qeye" id="e-q9">Q9 · Comparison</div>
+<h2 id="h-q9">Against exact, and against approximate</h2>
+<p class="qans" id="a-q9">Against exact baselines (PyTorch, Megatron) FlashAttention simply
+wins — up to 3× on common lengths; against approximate methods it wins below about 1K tokens
+despite doing asymptotically more arithmetic, and beyond that the honest answer is that
+Linformer and friends eventually get faster.</p>
+<p id="p-q9">That crossover is the paper being candid, and it is also the seam its own
+block-sparse variant is aimed at: apply the same IO-aware treatment to a sparse pattern and it
+outruns every approximate method the authors could find, at every length they tested.</p>
+</section>
+
+<section class="prose">
+<div class="eyebrow qeye" id="e-q10">Q10 · Significance</div>
+<h2 id="h-q10">Long context stopped being a memory problem</h2>
+<p class="qans" id="a-q10">It made sequence lengths that used to be impossible merely
+expensive — Path-X at 16K became solvable for the first time, GPT-2 could train at 4K faster
+than Megatron trained it at 1K, and within two years the kernel was the default path in every
+major framework.</p>
+<p id="p-q10">The deeper effect is on how systems papers are written. "Count the bytes, not the
+FLOPs" is now the standard opening move for accelerating a memory-bound operation, and the same
+recipe — fuse, tile to SRAM, keep the reduction online, recompute rather than store — reappears
+in KV-cache kernels, in linear attention, and in the paper's own successors.</p>
+</section>
+
+<section class="prose">
+<div class="eyebrow qeye" id="e-q11">Q11 · Limitations</div>
+<h2 id="h-q11">Where it costs you</h2>
+<p class="qans" id="a-q11">Every variant needs a hand-written CUDA kernel that does not
+transfer across GPU architectures, the technique is single-GPU only as published, and the
+approach helps exactly to the degree an operation is memory-bound — which attention at large
+batch or with a short sequence may not be.</p>
+<p id="p-q11">The authors are explicit about the first one: they want a compiler that takes a
+high-level description and emits an IO-aware kernel, in the way Halide did for image
+processing. Until then, each new attention variant is a rewrite by a specialist.</p>
+</section>
+
+<section class="prose">
+<div class="eyebrow qeye" id="e-q12">Q12 · Future work</div>
+<h2 id="h-q12">What actually happened next</h2>
+<p class="qans" id="a-q12">The paper asked for IO-aware everything and for multi-GPU versions;
+what arrived was FlashAttention-2 (better work partitioning, ~2× again) and FlashAttention-3
+(Hopper asynchrony and FP8), plus the paged-KV kernels that made long-context serving
+practical.</p>
+<p id="p-q12">The through-line is that each successor optimises a <em>different</em> level of
+the same hierarchy: v1 fixed HBM traffic, v2 fixed how work was split across warps, v3 fixed
+overlap between memory movement and tensor cores. The IO-aware lens kept producing bottlenecks
+after the original one was gone.</p>
+</section>
+
+<section class="prose">
+<div class="eyebrow qeye" id="e-q13">Q13 · Open resources</div>
+<h2 id="h-q13">What you can run</h2>
+<p class="qans" id="a-q13">The kernel is open source
+(<a href="https://github.com/Dao-AILab/flash-attention">Dao-AILab/flash-attention</a>) and, more
+usefully, it is already inside PyTorch — <code>scaled_dot_product_attention</code> dispatches to
+it, which is exactly how our probes call it.</p>
+<p class="byline" id="colophon">Probes on this page: one NVIDIA A100-PCIE-40GB, PyTorch SDPA
+pinned per backend, bf16, batch 1 × 16 heads × d 64. Paper-badged figures come from the paper's
+own tables and figures.</p>
+</section>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+const DATA = JSON.parse(document.getElementById('viz-data').textContent);
+const $ = id => document.getElementById(id);
+const NS='http://www.w3.org/2000/svg';
+function el(n,a={},p){const e=document.createElementNS(NS,n);
+  for(const[k,v]of Object.entries(a))e.setAttribute(k,v);if(p)p.appendChild(e);return e;}
+const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const tip=$('tooltip');
+function showTip(ev,html){tip.innerHTML=html;tip.style.opacity=1;
+  tip.style.left=(ev.clientX+14)+'px';tip.style.top=(ev.clientY-10)+'px';}
+function hideTip(){tip.style.opacity=0;}
+const KOQ=()=>window.__pageLang==='ko';
+function svgIn(box,W,H,label){box.innerHTML='';
+  const s=el('svg',{viewBox:`0 0 ${W} ${H}`,role:'img','aria-label':label||''},null);
+  box.appendChild(s);return s;}
+function T(svg,x,y,s,o={}){const e=el('text',{x,y,'text-anchor':o.a||'middle',
+  style:`font-size:${o.fs||10}px;font-weight:${o.w||400}`,
+  ...(o.mono?{'font-family':'JetBrains Mono,monospace'}:{}),
+  fill:o.fill||css('--ink-3')},svg);e.textContent=s;return e;}
+function rng(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;
+  let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;
+  return((t^t>>>14)>>>0)/4294967296;};}
+const gauss=r=>{let u=0,v=0;while(!u)u=r();while(!v)v=r();
+  return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);};
+
+/* ---------- Q1: the hierarchy, to scale ---------- */
+function drawHier(){
+  const box=$('v-hier');if(!box)return;
+  const W=790,H=300;const svg=svgIn(box,W,H,'GPU memory hierarchy drawn to scale');
+  const ink=css('--ink'),ink2=css('--ink-2'),ink3=css('--ink-3'),
+        d=css('--draft'),dS=css('--draft-soft'),t=css('--target'),tS=css('--target-soft'),
+        line=css('--line'),lineS=css('--line-soft');
+  // --- capacity, actually to scale ---
+  T(svg,30,22,KOQ()?'용량 — 실제 비율로':'capacity — actually to scale',{a:'start',fs:11,fill:ink2,w:700});
+  const hx=30,hy=34,hw=470,hh=104;
+  el('rect',{x:hx,y:hy,width:hw,height:hh,rx:5,fill:tS,stroke:t,'stroke-width':1.5},svg);
+  T(svg,hx+hw/2,hy+hh/2+5,'HBM · 40 GB',{fs:15,fill:t,w:700});
+  // 20 MB is 1/2048 of 40 GB → area 1/2048 of the rectangle
+  const dot=Math.sqrt(hw*hh/2048);
+  el('rect',{x:hx+22,y:hy+hh-22-dot,width:dot,height:dot,rx:1,fill:d,stroke:ink,'stroke-width':.8},svg);
+  el('line',{x1:hx+22+dot,y1:hy+hh-22-dot,x2:hx+hw+62,y2:hy+18,stroke:ink3,'stroke-width':1,
+    'stroke-dasharray':'3 3'},svg);
+  el('rect',{x:hx+hw+62,y:hy+4,width:170,height:44,rx:6,fill:dS,stroke:d,'stroke-width':1.5},svg);
+  T(svg,hx+hw+147,hy+22,'SRAM · 20 MB',{fs:12,fill:d,w:700});
+  T(svg,hx+hw+147,hy+38,KOQ()?'저 작은 사각형을 확대한 것':'the little square, magnified',{fs:8.5,fill:ink3});
+  T(svg,hx+hw+147,hy+70,KOQ()?'커널이 계산할 수 있는 유일한 장소':'the only place a kernel can compute',
+    {fs:9.5,fill:ink3});
+  // --- bandwidth as distance covered in 1 ms ---
+  const by=170;
+  T(svg,30,by-10,KOQ()?'대역폭 — 1 ms 동안 옮길 수 있는 양':'bandwidth — how much moves in 1 ms',
+    {a:'start',fs:11,fill:ink2,w:700});
+  const bw=560, per=bw/19;
+  [[KOQ()?'SRAM 19 TB/s':'SRAM 19 TB/s',19,d],[KOQ()?'HBM 1.5 TB/s':'HBM 1.5 TB/s',1.5,t]].forEach((r,i)=>{
+    const y=by+6+i*30;
+    T(svg,118,y+13,r[0],{a:'end',fs:10,fill:ink2,w:600});
+    el('rect',{x:130,y,width:bw,height:17,rx:8,fill:lineS},svg);
+    el('rect',{x:130,y,width:r[1]*per,height:17,rx:8,fill:r[2]},svg);
+    T(svg,130+r[1]*per+10,y+13,r[1]+' GB',{a:'start',fs:11,fill:r[2],mono:true,w:600});});
+  // --- the bridge: the thing attention wants to store ---
+  const cy=250;
+  el('rect',{x:30,y:cy,width:W-60,height:38,rx:7,fill:'none',stroke:line,'stroke-width':1.2},svg);
+  T(svg,W/2,cy+16,KOQ()
+    ?'GPT-2 medium 한 layer의 N×N 점수 행렬 = 2.1 GB'
+    :'the N×N score matrix for one GPT-2-medium layer = 2.1 GB',{fs:11.5,fill:ink,w:700});
+  T(svg,W/2,cy+31,KOQ()
+    ?'SRAM보다 107배 크다 → HBM에 살아야 하고, 건드릴 때마다 왕복 비용을 낸다'
+    :'107× too big for SRAM → it must live in HBM, and every touch costs a round trip',
+    {fs:9.5,fill:t,w:600});
+}
+
+/* ---------- Q2: the matrix nobody wants, and the tile that avoids it ---------- */
+const MX={G:16,Tc:0,Tr:0,t:0,timer:null};
+MX.Tc=8; MX.Tr=8;                 // 8x8 tiles over a 16x16-cell grid (2 cells per tile)
+function mxTotal(){return MX.Tc*MX.Tr;}
+function drawMatrix(){
+  const box=$('v-matrix');if(!box)return;
+  const W=790,H=412;const svg=svgIn(box,W,H,'the N by N score matrix and the tile that replaces it');
+  const ink=css('--ink'),ink2=css('--ink-2'),ink3=css('--ink-3'),
+        d=css('--draft'),dS=css('--draft-soft'),t=css('--target'),tS=css('--target-soft'),
+        line=css('--line'),lineS=css('--line-soft');
+  const p=MX.t/mxTotal();
+  const G=MX.G, cell=13, gw=G*cell;
+  // ---------- left: standard ----------
+  const lx=64, gy=52;
+  T(svg,lx+gw/2,26,KOQ()?'표준 attention':'standard attention',{fs:11.5,fill:t,w:700});
+  T(svg,lx+gw/2,40,KOQ()?'N×N 전체가 HBM에 실제로 존재한다':'the whole N×N really exists, in HBM',
+    {fs:9,fill:ink3});
+  for(let r=0;r<G;r++)for(let c=0;c<G;c++)
+    el('rect',{x:lx+c*cell,y:gy+r*cell,width:cell-1,height:cell-1,rx:1.5,fill:tS,
+      stroke:t,'stroke-width':.5,opacity:.95},svg);
+  el('rect',{x:lx-3,y:gy-3,width:gw+6,height:gw+6,rx:4,fill:'none',stroke:t,'stroke-width':1.6},svg);
+  T(svg,lx+gw/2,gy+gw+18,KOQ()?'쓰고 · 읽고 · 쓰고 · 읽고':'written · read · written · read',
+    {fs:9.5,fill:t,w:600});
+  // ---------- right: flash ----------
+  const rx=430;
+  T(svg,rx+gw/2,26,'FlashAttention',{fs:11.5,fill:d,w:700});
+  T(svg,rx+gw/2,40,KOQ()?'같은 격자 — 한 번에 한 타일만 존재한다':'same grid — one tile exists at a time',
+    {fs:9,fill:ink3});
+  for(let r=0;r<G;r++)for(let c=0;c<G;c++)
+    el('rect',{x:rx+c*cell,y:gy+r*cell,width:cell-1,height:cell-1,rx:1.5,fill:'none',
+      stroke:lineS,'stroke-width':.5},svg);
+  el('rect',{x:rx-3,y:gy-3,width:gw+6,height:gw+6,rx:4,fill:'none',stroke:line,'stroke-width':1.4},svg);
+  const per=G/MX.Tc;                       // cells per tile side
+  if(MX.t>0){
+    const done=MX.t;                        // tiles finished
+    for(let k=0;k<done;k++){
+      const jc=Math.floor(k/MX.Tr), ir=k%MX.Tr;   // outer loop over K/V columns
+      el('rect',{x:rx+jc*per*cell,y:gy+ir*per*cell,width:per*cell-1,height:per*cell-1,rx:2,
+        fill:dS,stroke:'none',opacity:.5},svg);}
+  }
+  if(MX.t<mxTotal()){
+    const jc=Math.floor(MX.t/MX.Tr), ir=MX.t%MX.Tr;
+    el('rect',{x:rx+jc*per*cell,y:gy+ir*per*cell,width:per*cell-1,height:per*cell-1,rx:2,
+      fill:d,stroke:ink,'stroke-width':1.4},svg);
+    T(svg,rx+gw+16,gy+ir*per*cell+per*cell/2+4,KOQ()?'지금 SRAM 안':'in SRAM now',
+      {a:'start',fs:9,fill:d,w:600});
+  }
+  T(svg,rx+gw/2,gy+gw+18,MX.t>=mxTotal()
+    ?(KOQ()?'끝났다 — 이 격자는 HBM에 한 번도 쓰이지 않았다':'done — this grid was never written to HBM')
+    :(KOQ()?`타일 ${MX.t}/${mxTotal()} · 흐린 칸은 이미 지나갔고 버려졌다`
+           :`tile ${MX.t}/${mxTotal()} · faded cells were computed and discarded`),
+    {fs:9.5,fill:d,w:600});
+  // ---------- byte meters ----------
+  const my=gy+gw+40, mw=520, mx0=180;
+  const STD=40.3, FA=4.4;
+  [[KOQ()?'표준: HBM 왕복':'standard: HBM traffic',STD*Math.max(p,0.0001),STD,t],
+   [KOQ()?'Flash: HBM 왕복':'flash: HBM traffic',FA*Math.max(p,0.0001),STD,d]].forEach((r,i)=>{
+    void 0;
+    const y=my+i*30;
+    T(svg,mx0-14,y+13,r[0],{a:'end',fs:10,fill:ink2,w:600});
+    el('rect',{x:mx0,y,width:mw,height:17,rx:8,fill:lineS},svg);
+    el('rect',{x:mx0,y,width:Math.max(mw*r[1]/r[2],2),height:17,rx:8,fill:r[3]},svg);
+    T(svg,mx0+mw+12,y+13,r[1].toFixed(1)+' GB',{a:'start',fs:11,fill:r[3],mono:true,w:600});});
+  T(svg,mx0+mw/2,my+72,KOQ()
+    ?'같은 계산 · 같은 출력 · GPT-2 medium 기준 논문 실측 (40.3 GB vs 4.4 GB)'
+    :'same computation · same output · paper’s measured totals for GPT-2 medium (40.3 GB vs 4.4 GB)',
+    {fs:9.5,fill:ink3});
+  $('mx-p').textContent=Math.round(p*100)+'%';
+  $('f2-cap').textContent=KOQ()
+    ?'왼쪽 격자가 이 논문이 없애려는 물건이다. GPT-2 medium 한 layer에서 저것 하나가 HBM을 네 번 건너다니며 40.3 GB를 만든다. 오른쪽은 같은 계산인데, 어느 순간에도 진한 타일 하나만 실재하고 나머지는 계산된 적조차 없거나 이미 버려졌다. 계량기 두 개가 갈라지는 폭이 곧 5.7배의 속도 차이다.'
+    :'The left grid is the thing this paper is trying to delete: for one GPT-2-medium layer it crosses HBM four times and costs 40.3 GB. The right side is the same computation, but at no moment does more than the solid tile exist — the rest has either not been computed yet or has already been thrown away. The gap between the two meters is where the 5.7× comes from.';
+}
+(function(){
+  if(!$('mx-step'))return;
+  const stop=()=>{clearInterval(MX.timer);MX.timer=null;
+    $('mx-t2').textContent=KOQ()?'재생':'play';};
+  $('mx-step').onclick=()=>{stop();if(MX.t<mxTotal())MX.t++;drawMatrix();};
+  $('mx-end').onclick=()=>{stop();MX.t=mxTotal();drawMatrix();};
+  $('mx-reset').onclick=()=>{stop();MX.t=0;drawMatrix();};
+  $('mx-play').onclick=()=>{
+    if(MX.timer){stop();return;}
+    $('mx-t2').textContent=KOQ()?'정지':'stop';
+    MX.timer=setInterval(()=>{if(MX.t>=mxTotal())stop();else{MX.t++;drawMatrix();}},110);};
+})();
+
+/* ---------- Q5.1: the row is coupled — watch it ---------- */
+const CP={base:[1.1,-0.4,0.6,-1.2, 0.2,1.4,-0.7,0.9, -0.3,0.5,-1.1,0.4]};
+function drawCouple(){
+  const box=$('v-couple');if(!box)return;
+  const adj=+($('s-cp')?$('s-cp').value:0.4);
+  $('v-cp').textContent=adj.toFixed(1);
+  const sArr=CP.base.slice(); sArr[11]=adj;
+  const m=Math.max(...sArr), e=sArr.map(v=>Math.exp(v-m)), l=e.reduce((x,y)=>x+y,0);
+  const w=e.map(v=>v/l);
+  const base=CP.base.slice(); base[11]=0.4;
+  const m0=Math.max(...base), e0=base.map(v=>Math.exp(v-m0)), l0=e0.reduce((x,y)=>x+y,0);
+  const w0=e0.map(v=>v/l0);
+  const W=790,H=250,n=12,cw=54,x0=76;
+  const svg=svgIn(box,W,H,'softmax couples the whole row');
+  const ink=css('--ink'),ink2=css('--ink-2'),ink3=css('--ink-3'),
+        d=css('--draft'),t=css('--target'),lineS=css('--line-soft');
+  T(svg,x0-14,34,KOQ()?'점수 s':'scores s',{a:'end',fs:10.5,fill:ink2,w:600});
+  for(let i=0;i<n;i++){
+    const x=x0+i*cw, hot=i===11;
+    el('rect',{x,y:18,width:cw-6,height:26,rx:4,fill:hot?css('--target-soft'):'none',
+      stroke:hot?t:ink3,'stroke-width':hot?1.6:1},svg);
+    T(svg,x+(cw-6)/2,36,sArr[i].toFixed(2),{fs:9.5,fill:hot?t:ink3,mono:true});}
+  T(svg,x0+11*cw+(cw-6)/2,58,KOQ()?'↑ 이것만 움직인다':'↑ only this one moves',{fs:9,fill:t,w:600});
+  const by=96,bh=82;
+  T(svg,x0,by-8,KOQ()?'softmax 가중치':'softmax weights',{a:'start',fs:10.5,fill:ink2,w:600});
+  T(svg,x0+n*cw,by-8,KOQ()?'점선 = 슬라이더를 움직이기 전':'dashed = before you dragged',
+    {a:'end',fs:9,fill:ink3});
+  const wmax=Math.max(...w,...w0)*1.1;
+  el('line',{x1:x0,x2:x0+n*cw,y1:by+bh,y2:by+bh,stroke:lineS,'stroke-width':1},svg);
+  for(let i=0;i<n;i++){
+    const x=x0+i*cw, h=bh*w[i]/wmax, h0=bh*w0[i]/wmax;
+    el('rect',{x,y:by+bh-h0,width:cw-6,height:h0,rx:2,fill:'none',stroke:ink3,
+      'stroke-width':1,'stroke-dasharray':'2 2'},svg);
+    el('rect',{x:x+3,y:by+bh-h,width:cw-12,height:h,rx:2,fill:i===11?t:d,opacity:.9},svg);
+    if(i<4||i===11)T(svg,x+(cw-6)/2,by+bh+13,w[i].toFixed(3),{fs:8.5,fill:i===11?t:d,mono:true});}
+  const dy=by+bh+34;
+  el('rect',{x:x0-14,y:dy,width:W-x0-40,height:46,rx:7,fill:css('--code-bg')},svg);
+  T(svg,x0,dy+19,KOQ()
+    ?`분모 ℓ = Σ e^(sᵢ − max) = ${l.toFixed(3)}   ·   max = ${m.toFixed(2)}`
+    :`denominator ℓ = Σ e^(sᵢ − max) = ${l.toFixed(3)}   ·   max = ${m.toFixed(2)}`,
+    {a:'start',fs:11,fill:ink,mono:true});
+  const drift=Math.abs(w[0]-w0[0])/w0[0]*100;
+  T(svg,x0,dy+36,KOQ()
+    ?`key 0의 점수는 ${CP.base[0].toFixed(2)}에서 한 번도 바뀌지 않았는데, 그 가중치는 ${(w0[0]).toFixed(3)} → ${(w[0]).toFixed(3)} (${drift.toFixed(0)}% 이동)`
+    :`key 0's score never moved from ${CP.base[0].toFixed(2)}, yet its weight went ${(w0[0]).toFixed(3)} → ${(w[0]).toFixed(3)} (${drift.toFixed(0)}% shift)`,
+    {a:'start',fs:9.5,fill:t,w:600});
+  if($('cp-read'))$('cp-read').textContent=KOQ()
+    ?`key 0 가중치 ${w[0].toFixed(3)}` : `key 0 weight ${w[0].toFixed(3)}`;
+  $('f3-cap').textContent=KOQ()
+    ?'슬라이더 하나가 열두 개 막대를 전부 움직인다. 마지막 블록의 점수가 커지면 max와 분모가 커지고, 이미 계산해둔 앞쪽 가중치가 전부 틀린 값이 된다. 뒤를 보기 전에는 앞을 확정할 수 없다는 것 — tiling이 여기서 막힌다. 다음 절이 이 문제를 푸는 방법이다.'
+    :'One slider moves all twelve bars. A larger score in the last block raises the max and the denominator, so every weight computed earlier becomes wrong. You cannot finalise the front of the row before seeing the back — this is exactly where tiling stalls, and the next section is how it gets unstuck.';
+}
+(function(){const e=$('s-cp');if(e)e.addEventListener('input',drawCouple);})();
+
+/* ---------- Q5.2: HERO — online softmax ---------- */
+const OS={N:12,B:4,D:4};
+let osState=null,osSeed=5,osTimer=null;
+function osInit(){
+  const r=rng(osSeed);
+  const q=Array.from({length:OS.D},()=>gauss(r));
+  const K=Array.from({length:OS.N},()=>Array.from({length:OS.D},()=>gauss(r)));
+  const V=Array.from({length:OS.N},()=>Array.from({length:OS.D},()=>gauss(r)));
+  const s=K.map(k=>k.reduce((a,x,i)=>a+x*q[i],0)/Math.sqrt(OS.D));
+  const mAll=Math.max(...s), eAll=s.map(x=>Math.exp(x-mAll)), lAll=eAll.reduce((a,b)=>a+b,0);
+  const oTrue=Array.from({length:OS.D},(_,c)=>eAll.reduce((a,e,i)=>a+e*V[i][c],0)/lAll);
+  return {q,K,V,s,oTrue,j:0,m:-Infinity,l:0,O:new Array(OS.D).fill(0),last:null};
+}
+function osStep(){
+  const S=osState;if(S.j>=OS.N/OS.B)return;
+  const j=S.j, lo=j*OS.B, hi=lo+OS.B;
+  const blk=S.s.slice(lo,hi), mb=Math.max(...blk);
+  const P=blk.map(x=>Math.exp(x-mb)), lb=P.reduce((a,b)=>a+b,0);
+  const mNew=Math.max(S.m,mb), cOld=Math.exp(S.m-mNew), cNew=Math.exp(mb-mNew);
+  const lNew=cOld*S.l+cNew*lb;
+  const pv=Array.from({length:OS.D},(_,c)=>P.reduce((a,p,i)=>a+p*S.V[lo+i][c],0));
+  const ONew=Array.from({length:OS.D},(_,c)=>(S.l*cOld*S.O[c]+cNew*pv[c])/lNew);
+  S.last={j,blk,mb,mOld:S.m,mNew,cOld,cNew,lOld:S.l,lb,lNew};
+  S.m=mNew;S.l=lNew;S.O=ONew;S.j++;
+  osRender();
+}
+function osErr(){return Math.max(...osState.O.map((v,i)=>Math.abs(v-osState.oTrue[i])));}
+function osRender(){
+  const S=osState;$('os-j').textContent=S.j;
+  const box=$('v-online');const W=790,H=318,cw=52,x0=64;
+  const svg=svgIn(box,W,H,'online softmax state');
+  const ink=css('--ink'),ink2=css('--ink-2'),ink3=css('--ink-3'),
+        d=css('--draft'),dS=css('--draft-soft'),t=css('--target'),tS=css('--target-soft'),
+        line=css('--line'),lineS=css('--line-soft');
+  T(svg,x0-12,32,KOQ()?'key 12개':'12 keys',{a:'end',fs:10.5,fill:ink2,w:600});
+  for(let i=0;i<OS.N;i++){
+    const bj=Math.floor(i/OS.B), done=bj<S.j, cur=bj===S.j;
+    const x=x0+i*cw+bj*8;
+    el('rect',{x,y:18,width:cw-6,height:28,rx:4,
+      fill:done?dS:(cur?tS:'none'),stroke:done?d:(cur?t:line),'stroke-width':done||cur?1.5:1},svg);
+    T(svg,x+(cw-6)/2,36,S.s[i].toFixed(2),{fs:9.5,fill:done||cur?ink:ink3,mono:true});
+  }
+  for(let b=0;b<OS.N/OS.B;b++){
+    const x=x0+b*OS.B*cw+b*8;
+    T(svg,x+(OS.B*cw-6)/2,60,KOQ()?`블록 ${b}`:`block ${b}`,
+      {fs:9,fill:b<S.j?d:(b===S.j?t:ink3),w:600});}
+  const sy=176;
+  el('rect',{x:30,y:sy,width:W-60,height:64,rx:8,fill:'none',stroke:lineS,'stroke-width':1.2},svg);
+  T(svg,44,sy+18,KOQ()?'커널이 들고 있는 전부':'the entire working set',{a:'start',fs:9.5,fill:ink3});
+  const cells=[
+    {k:'m',v:S.m===-Infinity?'−∞':S.m.toFixed(3),n:KOQ()?'지금까지의 최댓값':'running max'},
+    {k:'ℓ',v:S.l.toFixed(3),n:KOQ()?'지금까지의 지수 합':'running sum of exp'},
+    {k:'O',v:'['+S.O.map(v=>v.toFixed(2)).join(', ')+']',n:KOQ()?'지금까지의 출력':'running output'},
+  ];
+  let cx=52;
+  cells.forEach(c=>{
+    T(svg,cx,sy+44,c.k,{a:'start',fs:13,fill:d,mono:true,w:600});
+    T(svg,cx+18,sy+44,'= '+c.v,{a:'start',fs:12,fill:ink,mono:true});
+    T(svg,cx,sy+58,c.n,{a:'start',fs:8.5,fill:ink3});
+    cx+= c.k==='O'?300:150;});
+  // --- weight bars: what the row currently believes, against the truth ---
+  const by=96, bh=54, bw=cw-8;
+  const wCur=S.s.map((sv,i)=>Math.floor(i/OS.B)<S.j?Math.exp(sv-S.m)/S.l:0);
+  const wTrue=(()=>{const mm=Math.max(...S.s),e=S.s.map(v=>Math.exp(v-mm)),l=e.reduce((a,b)=>a+b,0);
+    return e.map(v=>v/l);})();
+  const wMax=Math.max(...wTrue,...wCur)*1.12||1;
+  T(svg,x0,by-16,KOQ()?'이 행이 지금 믿고 있는 가중치':'the weights this row currently believes',
+    {a:'start',fs:10,fill:ink2,w:600});
+  T(svg,x0+OS.N*cw+16,by-16,KOQ()?'점선 = 진짜 softmax':'dashed outline = the true softmax',
+    {a:'end',fs:9,fill:ink3});
+  el('line',{x1:x0,x2:x0+OS.N*cw+16,y1:by+bh,y2:by+bh,stroke:lineS,'stroke-width':1},svg);
+  for(let i=0;i<OS.N;i++){
+    const bj=Math.floor(i/OS.B), x=x0+i*cw+bj*8;
+    const hT=bh*wTrue[i]/wMax, hC=bh*wCur[i]/wMax;
+    el('rect',{x,y:by+bh-hT,width:bw,height:hT,rx:2,fill:'none',stroke:ink3,
+      'stroke-width':1,'stroke-dasharray':'2 2'},svg);
+    if(wCur[i]>0)el('rect',{x:x+3,y:by+bh-hC,width:bw-6,height:hC,rx:2,
+      fill:bj===S.j-1?t:d,opacity:.92},svg);}
+  if(S.last&&S.last.cOld<0.999&&S.j>1)
+    T(svg,x0+(S.last.j*OS.B)*cw-10,by+bh+14,
+      KOQ()?`← 앞 막대 전부 ×${S.last.cOld.toFixed(2)}`:`← every earlier bar just shrank ×${S.last.cOld.toFixed(2)}`,
+      {a:'end',fs:9.5,fill:t,w:700});
+  const ey=252,ew=W-190-96;
+  const err=osErr(), emax=Math.max(...S.oTrue.map(Math.abs))||1;
+  T(svg,176,ey+14,KOQ()?'전체 행 softmax와의 거리':'distance to full-row softmax',{a:'end',fs:10,fill:ink2,w:600});
+  el('rect',{x:190,y:ey,width:ew,height:16,rx:8,fill:lineS},svg);
+  const frac=S.j===0?1:Math.min(1,err/emax);
+  el('rect',{x:190,y:ey,width:Math.max(ew*frac,3),height:16,rx:8,fill:S.j>=3?d:t},svg);
+  T(svg,190+Math.max(ew*frac,3)+10,ey+13,
+    S.j===0?(KOQ()?'시작 전':'not started'):err.toExponential(1),
+    {a:'start',fs:10.5,fill:S.j>=3?d:t,mono:true,w:600});
+  T(svg,W/2,H-12,S.j>=3
+    ?(KOQ()?'세 블록 뒤: 전체 행을 한 번에 본 softmax와 부동소수점 오차까지 동일하다'
+           :'after three blocks: identical to the full-row softmax, down to floating-point noise')
+    :(KOQ()?'중간 상태는 "틀린" 것이 아니라 아직 보정되지 않은 것이다'
+           :'the intermediate state is not wrong — it is un-corrected'),
+    {fs:10,fill:ink3});
+  const L=S.last, ko=KOQ();
+  if(!L){$('os-math').textContent=ko
+    ?'아직 블록을 하나도 읽지 않았다. m = −∞, ℓ = 0, O = 0에서 시작한다.'
+    :'No block loaded yet — we start from m = −∞, ℓ = 0, O = 0.';return;}
+  const lines=[];
+  lines.push((ko?`① 블록 ${L.j}의 점수: [`:`① block ${L.j} scores: [`)+
+    L.blk.map(v=>v.toFixed(2)).join(', ')+ (ko?`] → 블록 최댓값 ${L.mb.toFixed(3)}`:`] → block max ${L.mb.toFixed(3)}`));
+  lines.push(ko
+    ?`② 새 최댓값 m = max(${L.mOld===-Infinity?'−∞':L.mOld.toFixed(3)}, ${L.mb.toFixed(3)}) = ${L.mNew.toFixed(3)}  ⇒  이미 쌓아둔 것에 곱할 보정계수 e^(m_old − m_new) = ${L.cOld.toFixed(3)}`
+    :`② new running max m = max(${L.mOld===-Infinity?'−∞':L.mOld.toFixed(3)}, ${L.mb.toFixed(3)}) = ${L.mNew.toFixed(3)}  ⇒  correction for everything already accumulated: e^(m_old − m_new) = ${L.cOld.toFixed(3)}`);
+  lines.push(`③ ℓ ← ${L.cOld.toFixed(3)}×${L.lOld.toFixed(3)} + ${L.cNew.toFixed(3)}×${L.lb.toFixed(3)} = ${L.lNew.toFixed(3)}`);
+  lines.push(ko
+    ?`④ O ← (기존 O를 ${L.cOld.toFixed(3)}로 보정 + 이 블록의 기여) / ℓ  →  [${S.O.map(v=>v.toFixed(3)).join(', ')}]`
+    :`④ O ← (old O rescaled by ${L.cOld.toFixed(3)} + this block's contribution) / ℓ  →  [${S.O.map(v=>v.toFixed(3)).join(', ')}]`);
+  lines.push(ko
+    ?`⑤ 전체 행 softmax와의 최대 차이: ${osErr().toExponential(2)}`
+    :`⑤ max difference from the full-row softmax: ${osErr().toExponential(2)}`);
+  $('os-math').innerHTML=lines.join('<br>');
+}
+(function(){
+  if(!$('os-step'))return;
+  const stop=()=>{clearInterval(osTimer);osTimer=null;
+    $('os-t2').textContent=KOQ()?'자동':'auto';};
+  $('os-step').onclick=()=>{stop();osStep();};
+  $('os-reset').onclick=()=>{stop();osSeed=(osSeed*31+7)>>>0||5;osState=osInit();osRender();};
+  $('os-auto').onclick=()=>{
+    if(osTimer){stop();return;}
+    $('os-t2').textContent=KOQ()?'정지':'stop';
+    osTimer=setInterval(()=>{if(osState.j>=OS.N/OS.B)stop();else osStep();},900);};
+  window.__osRefresh=()=>osRender();
+})();
+
+/* ---------- Q5.3: tiling loop ---------- */
+const LOOP=[
+  {n:'① outer',en:'Load one block of K and V from HBM into SRAM. This block will be reused against every block of Q before it is dropped — which is why K/V is the outer loop.',
+   ko:'K와 V의 블록 하나를 HBM에서 SRAM으로 올린다. 이 블록은 버려지기 전에 Q의 모든 블록과 만난다 — K/V가 바깥 루프인 이유다.'},
+  {n:'② inner',en:'Load a block of Q, plus that block’s current O, ℓ and m — a few numbers per row, not a matrix.',
+   ko:'Q 블록 하나와 그 블록의 현재 O, ℓ, m을 올린다. 행렬이 아니라 행당 숫자 몇 개다.'},
+  {n:'③ on-chip',en:'Compute the score tile Sᵢⱼ = QᵢKⱼᵀ and its softmax statistics entirely in SRAM. This tile is the N×N matrix that standard attention would have written to HBM — here it never leaves the chip.',
+   ko:'점수 타일 Sᵢⱼ = QᵢKⱼᵀ와 softmax 통계를 전부 SRAM 안에서 계산한다. 표준 attention이라면 HBM에 썼을 N×N 행렬이 바로 이것인데, 여기서는 칩 밖으로 나가지 않는다.'},
+  {n:'④ update',en:'Rescale Oᵢ by the correction factor, add this tile’s contribution, write back Oᵢ, ℓᵢ, mᵢ — O is N×d, the statistics are N. Then take the next Q block.',
+   ko:'Oᵢ를 보정계수로 rescale하고 이 타일의 기여를 더한 뒤 Oᵢ, ℓᵢ, mᵢ를 되쓴다. O는 N×d, 통계는 N개다. 그다음 Q 블록으로 넘어간다.'},
+];
+let loopCur=0;
+function drawLoop(){
+  const box=$('v-loop');if(!box)return;
+  const pb=$('loop-phases');
+  [...pb.children].forEach((c,i)=>c.classList.toggle('on',i===loopCur));
+  const W=790,H=268;const svg=svgIn(box,W,H,'tiling loop');
+  const ink=css('--ink'),ink2=css('--ink-2'),ink3=css('--ink-3'),
+        d=css('--draft'),dS=css('--draft-soft'),t=css('--target'),tS=css('--target-soft'),
+        line=css('--line'),lineS=css('--line-soft');
+  T(svg,30,20,KOQ()?'HBM — 큰 행렬이 사는 곳':'HBM — where the big matrices live',{a:'start',fs:10.5,fill:t,w:600});
+  const mats=[{k:'Q',x:30},{k:'K',x:112},{k:'V',x:194},{k:'O',x:276}];
+  mats.forEach(m=>{
+    el('rect',{x:m.x,y:30,width:70,height:96,rx:5,fill:'none',stroke:t,'stroke-width':1.3},svg);
+    T(svg,m.x+35,46,m.k,{fs:12,fill:t,mono:true,w:600});
+    T(svg,m.x+35,60,'N × d',{fs:8.5,fill:ink3});
+    for(let b=0;b<4;b++){
+      const on=(m.k==='K'||m.k==='V')?(b===1&&loopCur>=0):((m.k==='Q'||m.k==='O')?(b===2&&loopCur>=1):false);
+      el('rect',{x:m.x+8,y:70+b*13,width:54,height:11,rx:2,
+        fill:on?(m.k==='K'||m.k==='V'?dS:tS):'none',stroke:on?d:lineS,'stroke-width':on?1.4:1},svg);}
+  });
+  el('path',{d:'M 366 78 l 40 0',stroke:ink3,'stroke-width':1.4},svg);
+  el('path',{d:'M 408 78 l -8 -4 v 8 z',fill:ink3},svg);
+  T(svg,386,68,KOQ()?'블록만':'blocks only',{fs:8.5,fill:ink3});
+  const sx=424,sw=336;
+  el('rect',{x:sx,y:30,width:sw,height:150,rx:8,fill:dS,stroke:d,'stroke-width':1.8},svg);
+  T(svg,sx+sw/2,50,KOQ()?'SRAM — 지금 여기 들어있는 것':'SRAM — what is resident right now',
+    {fs:11,fill:d,w:700});
+  const res=[
+    {k:'Kⱼ, Vⱼ',s:'B_c × d',from:0},
+    {k:'Qᵢ',s:'B_r × d',from:1},
+    {k:'Oᵢ, ℓᵢ, mᵢ',s:'B_r × d + 2B_r',from:1},
+    {k:'Sᵢⱼ',s:'B_r × B_c',from:2},
+  ];
+  res.forEach((r,i)=>{
+    const on=loopCur>=r.from, y=66+i*27;
+    el('rect',{x:sx+16,y,width:sw-32,height:22,rx:4,fill:on?css('--surface'):'none',
+      stroke:on?d:lineS,'stroke-width':on?1.3:1,opacity:on?1:.55},svg);
+    T(svg,sx+26,y+15,r.k,{a:'start',fs:10.5,fill:on?ink:ink3,mono:true,w:600});
+    T(svg,sx+sw-26,y+15,r.s,{a:'end',fs:9.5,fill:on?ink2:ink3,mono:true});});
+  T(svg,sx+sw/2,196,KOQ()?'네 개가 동시에 들어가야 한다 — 그래서 B_c = ⌈M/4d⌉'
+    :'four arrays must fit at once — hence B_c = ⌈M / 4d⌉',{fs:9.5,fill:ink3});
+  if(loopCur===3){
+    el('path',{d:'M 764 214 C 784 244, 300 252, 268 138',fill:'none',stroke:d,
+      'stroke-width':1.6,'stroke-dasharray':'5 4'},svg);
+    el('path',{d:'M 268 138 l 8 5 l -1 -9 z',fill:d},svg);
+    T(svg,516,262,KOQ()?'Oᵢ, ℓᵢ, mᵢ만 HBM으로 돌아간다 — Sᵢⱼ는 버려진다'
+      :'only Oᵢ, ℓᵢ, mᵢ go back to HBM — Sᵢⱼ is discarded',{fs:10,fill:d,w:600});}
+  $('loop-cap').textContent=KOQ()?LOOP[loopCur].ko:LOOP[loopCur].en;
+}
+(function(){
+  const pb=$('loop-phases');if(!pb)return;
+  LOOP.forEach((p,i)=>{const b=document.createElement('button');b.textContent=p.n;
+    b.onclick=()=>{loopCur=i;drawLoop();};pb.appendChild(b);});
+})();
+
+/* ---------- Q5.3: tile calculator with an SRAM budget meter ---------- */
+function drawTile(){
+  const box=$('v-tile');if(!box)return;
+  const M=+$('s-sram').value*1024, dd=+$('s-dim').value, N=+$('s-n').value;
+  $('v-sram').textContent=$('s-sram').value+' KB';
+  $('v-dim').textContent=dd; $('v-n').textContent=N;
+  const Bc=Math.max(1,Math.floor((M/4)/(dd*4))), Br=Math.min(Bc,dd);
+  const Tc=Math.ceil(N/Bc), Tr=Math.ceil(N/Br), passes=Tc*Tr;
+  const B=4;                                  // bytes per element (fp32)
+  const parts=[{k:'Kⱼ',b:Bc*dd*B},{k:'Vⱼ',b:Bc*dd*B},{k:'Qᵢ',b:Br*dd*B},{k:'Sᵢⱼ',b:Br*Bc*B}];
+  const used=parts.reduce((a,p)=>a+p.b,0);
+  const ko=KOQ();
+  $('tile-out').innerHTML = ko
+    ? `B_c = ⌈M / 4d⌉ = <b>${Bc}</b> &nbsp;·&nbsp; B_r = min(B_c, d) = <b>${Br}</b> &nbsp;·&nbsp; 타일 ${Tc}×${Tr} → 안쪽 루프 <b>${passes.toLocaleString()}</b>회`
+    : `B_c = ⌈M / 4d⌉ = <b>${Bc}</b> &nbsp;·&nbsp; B_r = min(B_c, d) = <b>${Br}</b> &nbsp;·&nbsp; ${Tc}×${Tr} tiles → inner loop <b>${passes.toLocaleString()}</b> times`;
+  const W=790,H=250;const svg=svgIn(box,W,H,'SRAM budget and tile grid');
+  const ink=css('--ink'),ink2=css('--ink-2'),ink3=css('--ink-3'),
+        d=css('--draft'),t=css('--target'),lineS=css('--line-soft'),line=css('--line');
+  // --- SRAM budget: the four arrays filling the chip ---
+  T(svg,30,20,ko?'SRAM 예산 — 이 넷이 동시에 들어가야 한다':'the SRAM budget — these four must fit at once',
+    {a:'start',fs:11,fill:ink2,w:700});
+  const mx=30,mw=W-60,mh=34,cap=M;
+  el('rect',{x:mx,y:30,width:mw,height:mh,rx:6,fill:'none',stroke:line,'stroke-width':1.4},svg);
+  let cx=mx; const shades=[1,.78,.56,.34];
+  parts.forEach((p,i)=>{
+    const w=mw*Math.min(p.b/cap,1);
+    el('rect',{x:cx,y:30,width:Math.max(w-1.5,1),height:mh,rx:3,fill:d,opacity:shades[i]},svg);
+    if(w>52){const dark=shades[i]>=.7;
+      T(svg,cx+w/2,45,p.k,{fs:10.5,fill:dark?css('--surface'):ink,mono:true,w:700});
+      T(svg,cx+w/2,58,(p.b/1024).toFixed(0)+' KB',{fs:8.5,fill:dark?css('--surface'):ink2,mono:true});}
+    cx+=w;});
+  T(svg,mx+mw,22,`${(used/1024).toFixed(0)} / ${(cap/1024).toFixed(0)} KB`,
+    {a:'end',fs:10.5,fill:used>cap?t:d,mono:true,w:600});
+  T(svg,mx,80,ko
+    ?'d를 키우면 B_c가 줄어든다 — 예산이 고정이라 타일이 좁아지는 것 말고 방법이 없다'
+    :'raise d and B_c drops — the budget is fixed, so the tile has no choice but to get narrower',
+    {a:'start',fs:9.5,fill:ink3});
+  // --- the grid the tile sweeps ---
+  const gx=200,gy=104,gw=390,gh=118;
+  el('rect',{x:gx,y:gy,width:gw,height:gh,rx:4,fill:'none',stroke:t,'stroke-width':1.4},svg);
+  T(svg,gx+gw/2,gy-8,ko?`점수 행렬 ${N}×${N} — 실재하지 않는다`
+    :`the ${N}×${N} score matrix — never materialised`,{fs:9.5,fill:t});
+  const showC=Math.min(Tc,26), showR=Math.min(Tr,14);
+  for(let c=1;c<showC;c++)el('line',{x1:gx+gw*c/showC,x2:gx+gw*c/showC,y1:gy,y2:gy+gh,
+    stroke:lineS,'stroke-width':.7},svg);
+  for(let r=1;r<showR;r++)el('line',{x1:gx,x2:gx+gw,y1:gy+gh*r/showR,y2:gy+gh*r/showR,
+    stroke:lineS,'stroke-width':.7},svg);
+  el('rect',{x:gx,y:gy,width:gw/showC,height:gh/showR,rx:2,fill:d,stroke:ink,'stroke-width':1.2},svg);
+  T(svg,gx-14,gy+18,ko?'타일 하나':'one tile',{a:'end',fs:10,fill:d,w:600});
+  T(svg,gx-14,gy+32,`${Br} × ${Bc}`,{a:'end',fs:10.5,fill:ink,mono:true});
+  T(svg,gx-14,gy+48,ko?`= ${(Br*Bc*B/1024).toFixed(0)} KB`:`= ${(Br*Bc*B/1024).toFixed(0)} KB`,
+    {a:'end',fs:9,fill:ink3,mono:true});
+  T(svg,gx+gw+14,gy+18,ko?`${Tc}×${Tr} 타일`:`${Tc}×${Tr} tiles`,{a:'start',fs:10,fill:ink2,w:600});
+  T(svg,gx+gw+14,gy+34,ko?`= ${passes.toLocaleString()}회 통과`:`= ${passes.toLocaleString()} passes`,
+    {a:'start',fs:9.5,fill:ink3});
+  if(Tc>showC||Tr>showR)T(svg,gx+gw/2,gy+gh+16,ko?'격자는 축약해 그렸다':'grid drawn abbreviated',
+    {fs:8.5,fill:ink3});
+}
+(function(){
+  ['s-sram','s-dim','s-n'].forEach(id=>{const e=$(id);if(e)e.addEventListener('input',drawTile);});
+})();
+
+/* ---------- Q5.4: recomputation, with our measured backward bill ---------- */
+function drawRecomp(){
+  const box=$('v-recomp');if(!box)return;
+  const rows=(DATA&&DATA.sweep)||[];
+  const pick=(arm)=>rows.find(r=>r.arm===arm&&r.seqlen===4096);
+  const nv=pick('naive'), fa=pick('flash');
+  const haveP = nv&&fa&&nv.fwd_bwd&&fa.fwd_bwd&&nv.fwd_bwd.attn_mb;
+  const W=790,H=286;const svg=svgIn(box,W,H,'store versus recompute');
+  const ink=css('--ink'),ink2=css('--ink-2'),ink3=css('--ink-3'),
+        d=css('--draft'),dS=css('--draft-soft'),t=css('--target'),tS=css('--target-soft'),
+        lineS=css('--line-soft');
+  const ko=KOQ();
+  // --- what each one keeps, drawn to scale ---
+  T(svg,30,20,ko?'forward가 backward를 위해 남겨두는 것 — 실제 비율'
+    :'what the forward pass keeps for the backward pass — to scale',{a:'start',fs:11,fill:ink2,w:700});
+  const mbN = haveP?nv.fwd_bwd.attn_mb:2064, mbF = haveP?fa.fwd_bwd.attn_mb:64.5;
+  const areaW=520, unit=areaW/Math.sqrt(mbN);
+  const wN=Math.sqrt(mbN)*unit, wF=Math.sqrt(mbF)*unit;
+  const y0=34;
+  el('rect',{x:30,y:y0,width:wN,height:96,rx:4,fill:tS,stroke:t,'stroke-width':1.5},svg);
+  T(svg,30+wN/2,y0+44,ko?'표준: N×N attention 행렬':'standard: the N×N attention matrix',
+    {fs:11,fill:t,w:700});
+  T(svg,30+wN/2,y0+62,`${mbN.toFixed(0)} MB`,{fs:13,fill:t,mono:true,w:700});
+  const fx=30+wN+28;
+  el('rect',{x:fx,y:y0+96-Math.max(wF*96/wN,10),width:Math.max(wF,26),
+    height:Math.max(wF*96/wN,10),rx:3,fill:dS,stroke:d,'stroke-width':1.5},svg);
+  const flx=fx+Math.max(wF,26)+12;
+  T(svg,flx,y0+66,ko?'Flash: O 와 (m, ℓ)':'flash: O plus (m, ℓ)',{a:'start',fs:11,fill:d,w:700});
+  T(svg,flx,y0+82,`${mbF.toFixed(1)} MB`,{a:'start',fs:12,fill:d,mono:true,w:700});
+  T(svg,flx,y0+98,ko?`${(mbN/mbF).toFixed(0)}배 작다`:`${(mbN/mbF).toFixed(0)}× smaller`,
+    {a:'start',fs:10,fill:ink3,w:600});
+  T(svg,30,y0+118,ko?`N = 4096 · batch 1 · head 16 · d 64 · bf16 — 우리 A100 실측`
+    :`N = 4096 · batch 1 · 16 heads · d 64 · bf16 — measured on our A100`,
+    {a:'start',fs:9,fill:ink3});
+  // --- and the clock, which went the other way ---
+  const cy=186;
+  T(svg,30,cy,ko?'그런데 산술은 더 한다 — forward + backward 실행 시간'
+    :'and yet it does more arithmetic — forward + backward runtime',{a:'start',fs:11,fill:ink2,w:700});
+  const msN=haveP?nv.fwd_bwd.ms:9.31, msF=haveP?fa.fwd_bwd.ms:1.58;
+  const bw=520;
+  [[ko?'표준':'standard',msN,t],[ko?'Flash (S를 다시 계산)':'flash (recomputes S)',msF,d]]
+   .forEach((r,i)=>{
+    const y=cy+16+i*30;
+    T(svg,190,y+13,r[0],{a:'end',fs:10,fill:ink2,w:600});
+    el('rect',{x:200,y,width:bw,height:17,rx:8,fill:lineS},svg);
+    el('rect',{x:200,y,width:Math.max(bw*r[1]/msN,3),height:17,rx:8,fill:r[2]},svg);
+    T(svg,200+Math.max(bw*r[1]/msN,3)+10,y+13,r[1].toFixed(2)+' ms',
+      {a:'start',fs:11,fill:r[2],mono:true,w:600});});
+  T(svg,200,cy+92,ko
+    ?`S를 버렸다가 다시 만드는 쪽이 ${(msN/msF).toFixed(1)}배 빠르다 — 아낀 것이 FLOPs가 아니라 왕복이기 때문이다`
+    :`throwing S away and rebuilding it is ${(msN/msF).toFixed(1)}× faster — what was saved is a round trip, not FLOPs`,
+    {a:'start',fs:9.5,fill:ink3});
+}
+
+/* ---------- Q8: paper trade-off ---------- */
+function drawTradeoff(){
+  const box=$('v-tradeoff');if(!box)return;
+  const W=790,H=210;const svg=svgIn(box,W,H,'flops traffic runtime');
+  const ink=css('--ink'),ink2=css('--ink-2'),ink3=css('--ink-3'),d=css('--draft'),t=css('--target'),
+        lineS=css('--line-soft');
+  const groups=[
+    {k:'GFLOPs',std:66.6,fa:75.2,fmt:v=>v.toFixed(1),up:true},
+    {k:KOQ()?'HBM 왕복 (GB)':'HBM traffic (GB)',std:40.3,fa:4.4,fmt:v=>v.toFixed(1)},
+    {k:KOQ()?'실행 시간 (ms)':'runtime (ms)',std:41.7,fa:7.3,fmt:v=>v.toFixed(1)},
+  ];
+  const gw=(W-60)/3;
+  groups.forEach((g,i)=>{
+    const gx=30+i*gw, mx=Math.max(g.std,g.fa)*1.25, bw=64;
+    T(svg,gx+gw/2-10,20,g.k,{fs:10.5,fill:ink2,w:600});
+    [[g.std,t,KOQ()?'표준':'standard',0],[g.fa,d,'Flash',1]].forEach(([v,c,lab,j])=>{
+      const h=(H-84)*v/mx, x=gx+30+j*(bw+16);
+      el('rect',{x,y:H-52-h,width:bw,height:h,rx:4,fill:c},svg);
+      T(svg,x+bw/2,H-58-h,g.fmt(v),{fs:11,fill:c,mono:true,w:600});
+      T(svg,x+bw/2,H-36,lab,{fs:9.5,fill:ink3});});
+    const ratio=g.up?`+${((g.fa/g.std-1)*100).toFixed(0)}%`:`÷${(g.std/g.fa).toFixed(1)}`;
+    T(svg,gx+gw/2-10,H-16,ratio,{fs:12,fill:g.up?t:d,w:700,mono:true});
+    if(i<2)el('line',{x1:gx+gw-14,x2:gx+gw-14,y1:14,y2:H-30,stroke:lineS,'stroke-width':1},svg);});
+}
+
+/* ---------- Q8: training bars ---------- */
+function drawTrain(){
+  const box=$('v-train');if(!box)return;
+  const W=790,H=190;const svg=svgIn(box,W,H,'training speed');
+  const ink=css('--ink'),ink2=css('--ink-2'),ink3=css('--ink-3'),d=css('--draft'),t=css('--target');
+  const rows=[
+    {k:'BERT-large '+(KOQ()?'(MLPerf 1.1 기록 대비)':'(vs NVIDIA MLPerf 1.1 record)'),
+     base:20.0,ours:17.4,unit:KOQ()?'분':'min',note:'15% faster'},
+    {k:'GPT-2 small '+(KOQ()?'(HuggingFace 대비)':'(vs HuggingFace)'),
+     base:9.5,ours:2.7,unit:KOQ()?'일':'days',note:'3.5×'},
+    {k:'GPT-2 medium '+(KOQ()?'(HuggingFace 대비)':'(vs HuggingFace)'),
+     base:21.0,ours:6.9,unit:KOQ()?'일':'days',note:'3.0×'},
+  ];
+  const ML=290,BW=330;
+  rows.forEach((r,i)=>{
+    const y=30+i*52, mx=r.base*1.15;
+    T(svg,ML-14,y+14,r.k,{a:'end',fs:10,fill:ink2});
+    el('rect',{x:ML,y:y,width:BW*r.base/mx,height:18,rx:4,fill:t,opacity:.5},svg);
+    T(svg,ML+BW*r.base/mx+8,y+14,r.base+' '+r.unit,{a:'start',fs:9.5,fill:ink3,mono:true});
+    el('rect',{x:ML,y:y+22,width:BW*r.ours/mx,height:18,rx:4,fill:d},svg);
+    T(svg,ML+BW*r.ours/mx+8,y+36,r.ours+' '+r.unit+' · '+r.note,
+      {a:'start',fs:9.5,fill:d,mono:true,w:600});});
+  T(svg,ML,H-8,KOQ()?'같은 모델 · 같은 최종 품질 · attention kernel만 교체'
+    :'same model, same final quality — only the attention kernel changed',{a:'start',fs:9.5,fill:ink3});
+}
+
+/* ---------- Q8: probe charts ---------- */
+function probeRows(){
+  const s=DATA&&DATA.sweep;return Array.isArray(s)?s:null;
+}
+function drawProbes(){
+  const rows=probeRows();
+  const hide=id=>{const f=$(id)&&$(id).closest('.fig');if(f)f.style.display='none';};
+  if(!rows){['f9-title','f10-title','f11-title'].forEach(hide);return;}
+  const d=css('--draft'),t=css('--target'),ink2=css('--ink-2'),ink3=css('--ink-3');
+  const arms=[['naive',t,KOQ()?'표준 (S를 실제로 만듦)':'naive (materialises S)'],
+              ['flash',d,'FlashAttention'],
+              ['mem_efficient',ink3,'mem-efficient SDPA']];
+  const lens=[...new Set(rows.map(r=>r.seqlen))].sort((a,b)=>a-b);
+  const get=(arm,n,key,field)=>{const r=rows.find(x=>x.arm===arm&&x.seqlen===n);
+    return r&&r[key]&&r[key][field]!=null?r[key][field]:null;};
+  const oom=(arm,n,key)=>{const r=rows.find(x=>x.arm===arm&&x.seqlen===n);
+    return !!(r&&r[key]&&r[key].oom);};
+  const cfg=DATA.config||{};
+  function lineChart(box,key,field,ylab,logy,capId,subId){
+    const W=790,H=300,M={l:64,r:150,t:22,b:44};
+    const svg=svgIn($(box),W,H,ylab);
+    const vals=[];arms.forEach(([a])=>lens.forEach(n=>{const v=get(a,n,key,field);if(v)vals.push(v);}));
+    if(!vals.length)return;
+    const lo=Math.min(...vals),hi=Math.max(...vals);
+    const yl=v=>logy?Math.log10(Math.max(v,lo*0.6)):v;
+    const y0=logy?Math.log10(lo*0.6):0, y1=logy?Math.log10(hi*1.6):hi*1.1;
+    const X=i=>M.l+(W-M.l-M.r)*i/(lens.length-1);
+    const Y=v=>H-M.b-(H-M.t-M.b)*(yl(v)-y0)/(y1-y0);
+    const ticks=logy?[1,10,100,1000,10000,100000].filter(v=>v>=lo*0.6&&v<=hi*1.6)
+                    :[0,hi*0.25,hi*0.5,hi*0.75,hi].map(v=>+v.toFixed(1));
+    ticks.forEach(v=>{el('line',{x1:M.l,x2:W-M.r,y1:Y(v),y2:Y(v),class:'gridline'},svg);
+      T(svg,M.l-8,Y(v)+4,v>=1000?(v/1000)+'k':v,{a:'end',fs:11});});
+    lens.forEach((n,i)=>T(svg,X(i),H-M.b+20,n>=1024?(n/1024)+'K':n,{fs:10.5}));
+    T(svg,(M.l+W-M.r)/2,H-8,KOQ()?'시퀀스 길이 N':'sequence length N',{fs:10.5,fill:ink2});
+    T(svg,M.l-48,16,ylab,{a:'start',fs:10.5,fill:ink3});
+    const labs=[];
+    arms.forEach(([a,c,label])=>{
+      const pts=lens.map((n,i)=>({i,v:get(a,n,key,field)})).filter(p=>p.v);
+      if(!pts.length)return;
+      let dd='';pts.forEach((p,k)=>{dd+=(k?' L':'M')+X(p.i)+' '+Y(p.v);});
+      el('path',{d:dd,fill:'none',stroke:c,'stroke-width':2},svg);
+      pts.forEach(p=>{el('circle',{cx:X(p.i),cy:Y(p.v),r:4,fill:c},svg);
+        const hit=el('circle',{cx:X(p.i),cy:Y(p.v),r:12,fill:'transparent'},svg);
+        hit.addEventListener('mousemove',ev=>showTip(ev,
+          `<b>${label}</b><br>N=${lens[p.i]} · ${p.v.toLocaleString()} ${field==='ms'?'ms':'MB'}`));
+        hit.addEventListener('mouseleave',hideTip);});
+      const last=pts[pts.length-1];
+      labs.push({y:Y(last.v),c,k:label});
+      lens.forEach((n,i)=>{if(oom(a,n,key)){
+        T(svg,X(i),Y(hi)-6,'OOM',{fs:10,fill:c,w:700});
+        el('circle',{cx:X(i),cy:Y(hi)+6,r:4,fill:'none',stroke:c,'stroke-width':1.6},svg);}});
+    });
+    labs.sort((a,b)=>a.y-b.y);
+    for(let i=1;i<labs.length;i++)if(labs[i].y-labs[i-1].y<14)labs[i].y=labs[i-1].y+14;
+    labs.forEach(l=>{const e=el('text',{x:W-M.r+8,y:l.y+4,fill:l.c,
+      style:'font-size:11px;font-weight:600'},svg);e.textContent=l.k;});
+  }
+  lineChart('v-mem','fwd','attn_mb',KOQ()?'MB (log)':'MB (log)',true);
+  lineChart('v-lat','fwd','ms',KOQ()?'ms (log)':'ms (log)',true);
+  const memNaive=get('naive',lens[lens.length-1],'fwd','attn_mb'),
+        memFlash=get('flash',lens[lens.length-1],'fwd','attn_mb');
+  $('f9-sub').textContent=KOQ()
+    ?`attention 하나가 쓰는 최대 메모리 (입력 tensor 제외). batch ${cfg.batch}, heads ${cfg.heads}, d ${cfg.dim}, bf16.`
+    :`Peak memory used by one attention call, above the input tensors. batch ${cfg.batch}, heads ${cfg.heads}, d ${cfg.dim}, bf16.`;
+  $('f9-cap').textContent=KOQ()
+    ?'표준 구현은 N²에 비례해 올라가다 결국 카드를 넘어서고, Flash는 선형이다. 논문의 "메모리가 시퀀스 길이에 선형"이 이 그림이다.'
+    :'The naive path climbs as N² until it runs off the card; flash is linear. This is the paper’s "memory linear in sequence length", measured.';
+  $('f10-sub').textContent=KOQ()
+    ?'같은 sweep의 forward 지연. 두 축 모두 log.'
+    :'Forward latency from the same sweep. Both axes log.';
+  $('f10-cap').textContent=KOQ()
+    ?'FLOPs는 두 방식이 같은데 시간이 다르다. 차이는 전부 메모리 왕복에서 온다 — 이 페이지의 나머지가 설명하려던 그 차이다.'
+    :'Both paths do the same FLOPs; only the traffic differs, and the clock follows the traffic — which is the whole point of the paper.';
+  const ex=DATA.exactness;
+  if(ex){
+    const W=790,H=132;const svg=svgIn($('v-exact'),W,H,'exactness');
+    const rowsx=[[KOQ()?'FlashAttention (bf16)':'FlashAttention (bf16)',ex.flash,d],
+                 [KOQ()?'표준 attention (bf16)':'naive attention (bf16)',ex.naive_bf16,t]];
+    T(svg,30,22,KOQ()?`float32로 계산한 같은 attention을 기준으로, N=${ex.seqlen}`
+      :`Against the same attention computed in float32, N=${ex.seqlen}`,{a:'start',fs:10.5,fill:ink2,w:600});
+    rowsx.forEach((r,i)=>{
+      const y=46+i*38;
+      T(svg,250,y+14,r[0],{a:'end',fs:10.5,fill:ink2,w:600});
+      T(svg,268,y+14,`max |Δ| = ${r[1].max_abs.toExponential(2)}`,{a:'start',fs:11,fill:r[2],mono:true,w:600});
+      T(svg,520,y+14,`relative ‖Δ‖ = ${r[1].rel_fro.toExponential(2)}`,{a:'start',fs:11,fill:ink3,mono:true});});
+    const ratio=(ex.naive_bf16.max_abs/ex.flash.max_abs);
+    $('f11-cap').textContent=KOQ()
+      ?`우리가 잰 결과는 주장보다 한 발 더 나갔다. FlashAttention의 오차가 표준 bf16 구현보다 ${ratio.toFixed(1)}배 더 작다. 이유는 근사를 덜 해서가 아니라 커널이 누적을 fp32 레지스터에서 하기 때문이다. 표준 경로는 거대한 중간 행렬을 bf16으로 HBM에 왕복시키면서 정밀도를 흘린다. 남은 오차는 양쪽 다 근사가 아니라 저정밀도 산술에서 온다.`
+      :`What we measured goes one step further than the claim: FlashAttention's error is ${ratio.toFixed(1)}× SMALLER than the standard bf16 implementation's. Not because it approximates less — because the kernel accumulates in fp32 registers, while the standard path round-trips a huge intermediate matrix through bf16 in HBM and loses precision doing it. What remains on both sides is low-precision arithmetic, not approximation.`;
+  } else hide('f11-title');
+}
+
+/* ---------- i18n ---------- */
+const KO={
+ 'byline':`<em>FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness</em> — Dao, Fu, Ermon, Rudra &amp; Ré, NeurIPS 2022 (<a href="https://arxiv.org/abs/2205.14135">arXiv:2205.14135</a>). 위에서 아래로 읽으면 된다. 13개의 읽기 질문에 각각 볼드 한 문장으로 답한다. 그 사이사이에 동작 원리를 그림으로 그렸다. A100 한 장의 probe가 실제 값을 채운다.`,
+ 'e-q1':'Q1 · 배경','h-q1':'GPU는 메모리 기계다',
+ 'a-q1':'요즘 GPU는 계산할 숫자를 가져오는 것보다 계산 자체를 훨씬 빨리 한다. 그래서 대부분의 Transformer 연산은 FLOPs가 아니라 <em>메모리 계층 사이로 옮기는 바이트</em>에 묶여 있다. 그리고 그 계층들은 속도와 용량 모두 세 자릿수씩 차이가 난다.',
+ 'p-q1':'이 논문이 딛고 선 사실이다. 다른 무엇보다 먼저 실제 비율로 봐둘 값어치가 있다. 온칩 SRAM은 HBM보다 열 배쯤 빠르고 이천 배쯤 작다. working set을 SRAM에 붙잡아두는 알고리즘은 이긴다. HBM으로 흘리는 알고리즘은 값을 치른다.',
+ 'f1-title':'GPU 메모리 계층, 실제 비율로','f1-sub':'논문이 인용한 A100 수치. 막대 길이는 대역폭, 상자 면적은 용량이다.',
+ 'f1-cap':'중요한 비율은 이것이다. SRAM은 HBM 대역폭의 약 13배인데 용량은 0.05%다. 그러니 GPU 커널의 설계 질문은 "FLOPs를 얼마나 줄일까"가 아니라 "데이터가 위에 올라와 있는 동안 얼마나 많은 일을 끝낼 수 있을까"다.',
+ 'e-q2':'Q2 · 문제','h-q2':'attention은 아무도 원하지 않는 거대한 행렬을 쓴다',
+ 'a-q2':'표준 attention은 N×N 점수 행렬을 계산해 HBM에 쓴다. softmax를 하려고 다시 읽고 또 쓴 뒤, V와 곱하려고 한 번 더 읽는다. 정작 답인 N×d 출력은 그렇지 않은데, 메모리 트래픽만 시퀀스 길이의 제곱으로 자란다.',
+ 'p-q2':'softmax도 masking도 dropout도 거대한 배열 위의 값싼 산술이다. GPU는 그 배열을 왔다 갔다 나르는 데 시간을 쓴다. 아래에서 왕복을 따라가 보라. 숫자는 GPT-2 medium의 attention layer 하나에 대한 논문의 실측이다.',
+ 'f2-title':'없애려는 그 행렬, 그리고 그것을 대신하는 타일 <span class="badge paper">논문 Fig. 1–2</span>',
+ 'f2-sub':'왼쪽은 표준 attention이 실제로 만들어내는 N×N 격자, 오른쪽은 같은 격자를 타일 하나로 훑는 FlashAttention이다. 아래 계량기는 GPT-2 medium 한 layer의 논문 실측치로 맞춰져 있다.',
+ 'mx-t1':'타일 하나 전진','mx-t2':'재생','mx-t3':'끝까지','mx-t4':'reset','mx-t5':'진행률',
+ 'e-q3':'Q3 · 기존 한계','h-q3':'10년치 근사 연구가 틀린 숫자를 최적화했다',
+ 'a-q3':'sparse·low-rank attention은 FLOPs를 거의 선형까지 줄였지만 대부분 벽시계 속도를 얻지 못했고 표준 attention을 밀어내지도 못했다. 기계가 값을 치르고 있던 것은 메모리 트래픽인데 산술을 공격했기 때문이다.',
+ 'p-q3':'이 문장이 논문 전체가 회전하는 관측이다. 기술적이라기보다 방법론적인 관측이다. 분야가 대리 지표에 정착해 있었던 것이다. 같은 계산을 흘리지 않도록 다시 스케줄한 것이, 점근적으로 산술을 덜 하는 근사들을 이긴다. FLOPs를 세고 있었을 때만 놀라운 결과다.',
+ 'e-q4':'Q4 · 목표','h-q4':'정확한 attention을, 준2차 트래픽으로',
+ 'a-q4':'같은 attention 출력을 — 수학적으로 한 치도 다르지 않게, 근사 없이 — 계산하되 N×N 행렬을 HBM에 아예 쓰지 않는다. 시퀀스 길이에 선형인 메모리만 쓴다.',
+ 'p-q4':'길을 막는 장애물이 둘이다. 논문의 나머지는 그 둘을 치우는 과정이다. 첫째, softmax는 무엇이든 정규화하기 전에 행 전체를 필요로 한다. 둘째, backward pass는 우리가 저장하지 않겠다고 한 바로 그 행렬을 원한다.',
+ 'e-q5a':'Q5 · 방법 — 1/4 · tiling이 불가능해 보이는 이유','h-couple':'softmax는 행을 묶어버린다',
+ 'p-couple':'행렬 곱은 블록으로 쪼개고 마지막에 부분합을 더하면 된다. tiling이 표준 관행인 이유다. softmax는 그 패턴을 깬다. 모든 출력이 행 전체에 대한 합에 의존한다. 게다가 그 행에는 아직 올리지도 않은 항목이 포함되기 때문이다. 전부 보기 전에는 정규화할 수 없는데, 전부 보는 것이야말로 우리가 피하려는 일이다.',
+ 'f3-title':'출력 한 행이 필요로 하는 것','f3-sub':'query 하나, key N개. 각 출력은 분모가 행 전체를 훑는 비율이다.',
+ 'f3-cap':'분모가 문제다. 뒤쪽 블록에 지금까지 본 것보다 큰 점수가 들어 있으면 수치 안정성을 위한 max도, 합도 바뀐다. 그러면 지금까지 계산한 모든 가중치가 틀린 값 위에서 계산된 것이 된다.',
+ 'e-q5b':'Q5 · 방법 — 2/4 · 핵심 수','h-online':'Online softmax: 틀린 채로 두었다가 정확히 보정한다',
+ 'a-q5':'행마다 running 통계 두 개 — 지금까지의 최댓값과 지수합 — 을 들고 다니다가, 더 큰 최댓값을 가진 블록이 오면 이미 쌓아둔 것 전부에 e^(m_old − m_new) 하나를 곱해 보정한다. 결과는 전체 softmax의 근사가 아니라 그것과 동일하다.',
+ 'p-online':'이것이 아이디어의 전부다. 실제로 일어나는 걸 보고 나면 믿기 쉬워진다. 아래에서 query 한 행이 key를 네 개씩 만난다. 매 스텝이 자기 산술을 인쇄한다. 새 블록의 점수, 새 최댓값, 이미 쌓인 것에 곱해질 보정계수, 그리고 running 출력. 아래 막대는 running 답과 전체 행 softmax의 답 사이 거리다.',
+ 'f4-title':'행 하나를, 블록 하나씩 <span class="badge ours">브라우저에서 실행</span>',
+ 'f4-sub':'key 12개를 4개씩 3블록, d = 4, 전부 실제 숫자다. 한 행에 대한 Algorithm 1의 9–12줄이다.',
+ 'os-t1':'다음 K/V 블록 올리기','os-t2':'자동','os-t3':'새 seed','os-t4':'블록',
+ 'f4-cap':'존재하지 않는 것에 주목하라. 가중치 12개짜리 행은 어디에도 없다. 어느 순간이든 커널이 들고 있는 것은 점수 블록 하나, 스칼라 둘, running 출력뿐이다. 이것이 working set 전부이고 N과 함께 자라지 않는다. 정확성은 보정계수에서 온다. e^(m_old − m_new)로 rescale하는 것은 처음부터 진짜 최댓값을 알고 있었던 것과 대수적으로 같다.',
+ 'q1-l':'넘어가기 전에',
+ 'q1-q':'앞의 무엇보다 큰 최댓값을 가진 블록까지 넘겨보고 보정계수가 1 아래로 떨어지는 걸 보라. 그 rescale을 건너뛰면 running 합은 어떻게 되는가. 그리고 그것이 왜 정밀도 문제가 아니라 정확성 버그인가?',
+ 'e-q5c':'Q5 · 방법 — 3/4 · 루프와 타일','h-loop':'커널, 그리고 도는 동안 SRAM에 있는 것',
+ 'p-loop':'그 한 행을 행렬 전체로 키우면 Algorithm 1이다. K와 V의 블록을 도는 바깥 루프, Q의 블록을 도는 안쪽 루프, 그리고 제자리에서 갱신되는 O, ℓ, m. 블록 크기는 손으로 튜닝한 값이 아니라 제약 하나에서 떨어져 나온다. Q, K, V와 점수 타일이 SRAM에 동시에 들어가야 한다는 것.',
+ 'f5-title':'tiling 루프 한 바퀴','f5-sub':'박자를 하나씩 넘겨보라. 오른쪽 패널이 그 순간의 SRAM 점유다. 나머지는 전부 HBM에 가만히 있다.',
+ 'f6-title':'블록 크기는 어디서 오나',
+ 'f6-sub':'Algorithm 1의 1번 줄: B<sub>c</sub> = ⌈M / 4d⌉, B<sub>r</sub> = min(⌈M / 4d⌉, d). 하드웨어와 모델이 실제로 주는 두 손잡이를 움직여보라.',
+ 'tile-t1':'SM당 SRAM','tile-t2':'head 차원 d','tile-t3':'시퀀스 길이 N',
+ 'f6-cap':'공식은 그냥 회계다. 블록 하나짜리 배열 네 개가 SRAM에 동시에 살아야 한다. 그 결과가 논문의 IO 복잡도다. SRAM이 크면 타일이 적고 커진다. 그러면 데이터를 훑는 횟수가 줄어든다. 트래픽이 N²이 아니라 N²d²/M로 도는 이유다.',
+ 'e-q5d':'Q5 · 방법 — 4/4 · backward pass','h-recomp':'기억하는 것보다 다시 계산하는 게 싸다',
+ 'p-recomp':'backward pass는 S와 P를 필요로 한다. 우리가 저장하지 않겠다고 한 바로 그 행렬이다. FlashAttention은 출력 O와 통계 (m, ℓ)만, 행당 숫자 몇 개만 남긴다. 그리고 gradient가 필요할 때 점수 타일을 온칩에서 다시 만든다. 표준 backward보다 산술을 더 하고도 먼저 끝난다. 논문의 주장을 설계 결정 하나로 진술한 셈이다.',
+ 'f7-title':'S를 되찾는 두 가지 방법','f7-sub':'같은 gradient, 같은 결과 — 다른 청구서.',
+ 'f7-cap':'이것이 단순한 gradient checkpointing과 다른 이유이기도 하다. checkpointing은 속도를 내주고 메모리를 산다. 여기서는 재계산이 <em>곧</em> 속도다. 그것이 피하는 대상이 matmul이 아니라 HBM 왕복이기 때문이다.',
+ 'e-q6':'Q6 · 핵심 아이디어','h-core':'IO-awareness를 일급 목표로',
+ 'a-q6':'SRAM과 HBM 사이의 읽기·쓰기를 최소화 대상으로 삼는다. 그러면 알고리즘도, 블록 크기도, 심지어 재계산하기로 한 결정까지 예산 하나에서 따라 나온다. 그렇게 나온 트래픽이 상수배까지 최적임을 증명할 수 있다.',
+ 'p-core':'복잡도로 말하면 표준 attention은 Θ(Nd + N²) 워드를 옮기고 FlashAttention은 Θ(N²d²M⁻¹)을 옮긴다. A100 수치(d = 64, M = 192 KB)로 그 비율이 대략 9배다. 그리고 논문은 어떤 SRAM 크기에서도 정확한 attention 알고리즘이 점근적으로 더 잘할 수 없음을 증명한다. 영리한 구현이 아니라 바닥이라는 뜻이다.',
+ 'e-q7':'Q7 · 검증','h-q7':'논문은 스스로를 어떻게 검증하나',
+ 'a-q7':'세 층이다. attention 연산 하나만 놓고 재는 microbenchmark(시퀀스 길이에 따른 시간과 메모리), BERT와 GPT-2의 end-to-end 학습 속도를 MLPerf·Megatron 기록과 비교, 그리고 긴 시퀀스가 감당 가능해졌기 때문에만 도달할 수 있는 품질 결과.',
+ 'p-q7':'출력이 정확하므로 품질은 긴 문맥이 열어주는 방식으로만 바뀔 수 있다. 품질 주장이 전부 "같은 모델, 더 긴 시퀀스"인 이유다. 여기 있는 <span class="badge ours">probe</span> 그림들은 A100 한 장에서 우리가 돌린 것으로, 독자가 믿고 넘어가지 않아도 되게 두 가지를 직접 잰다. 메모리가 정말 선형인지, 그리고 답이 정말 같은지.',
+ 'e-q8':'Q8 · 결과','h-res':'논문이 잰 것, 그리고 우리가 잰 것',
+ 'a-q8':'GPT-2 medium의 attention에서 논문은 산술을 13% 더 하는 대신 HBM 트래픽을 9배 줄이고 5.7배 빨라진다. 메모리는 시퀀스 길이에 선형이다. 우리 A100 probe가 두 곡선의 모양을 재현한다.',
+ 'f8-title':'이 한 줄이 논증 전체다 <span class="badge paper">논문 Fig. 2 좌</span>',
+ 'f8-sub':'A100에서 GPT-2 medium의 attention layer 하나, 세 가지 양.',
+ 'f8-cap':'왼쪽에서 오른쪽으로 읽어라. FLOPs는 <em>올라갔고</em>, 트래픽은 9배 줄었다. 그리고 시계는 트래픽을 따라갔다. FLOPs가 실행 시간을 예측한다는 이야기는 이 한 줄을 설명해내야 한다.',
+ 'f9-title':'시퀀스 길이에 따른 메모리 <span class="badge ours">probe · A100</span>',
+ 'f10-title':'시퀀스 길이에 따른 지연 <span class="badge ours">probe · A100</span>',
+ 'f11-title':'정말로 같은 답인가? <span class="badge ours">probe · A100</span>',
+ 'f11-sub':'이 논문을 모든 근사 attention과 갈라놓는 주장이다. 믿는 대신 확인했다.',
+ 'f12-title':'end-to-end 학습 <span class="badge paper">논문 Table 1–2</span>',
+ 'f12-sub':'같은 모델, 같은 초기화, 같은 최종 품질 — attention kernel만 바뀌었다.',
+ 'f12-cap':'BERT 수치의 비교 대상이 NVIDIA 자신의 MLPerf 1.1 기록이라는 점이 정직한 부분이다. 순진한 baseline이 아니라 당대 최고로 튜닝된 구현과 겨뤘다.',
+ 'e-q9':'Q9 · 비교','h-q9':'정확한 것들과, 근사한 것들과',
+ 'a-q9':'정확한 baseline(PyTorch, Megatron)에는 그냥 이긴다. 흔한 길이에서 최대 3배다. 근사 방법들에 대해서는 산술을 점근적으로 더 하고도 대략 1K 토큰 아래에서 이긴다. 그 위로는 Linformer 같은 것들이 결국 빨라진다는 것이 정직한 답이다.',
+ 'p-q9':'그 교차점은 논문이 솔직한 대목이자, 자기 block-sparse 변형이 겨냥한 이음매이기도 하다. 같은 IO-aware 처방을 sparse 패턴에 적용하면 저자들이 찾을 수 있는 모든 근사 방법을, 시험한 모든 길이에서 앞선다.',
+ 'e-q10':'Q10 · 의의','h-q10':'긴 문맥이 메모리 문제이기를 그만두었다',
+ 'a-q10':'불가능하던 시퀀스 길이를 그저 비싼 것으로 바꿔놓았다. 16K짜리 Path-X가 처음으로 풀렸다. GPT-2를 4K 문맥으로 학습시키는 것이 Megatron이 1K로 학습시키는 것보다 빨라졌으며, 2년 안에 이 커널은 모든 주요 프레임워크의 기본 경로가 되었다.',
+ 'p-q10':'더 깊은 영향은 시스템 논문을 쓰는 방식에 있다. "FLOPs 말고 바이트를 세라"는 이제 memory-bound 연산을 가속할 때의 표준 첫 수다. 같은 레시피 — fuse하고, SRAM에 맞춰 tiling하고, reduction을 online으로 유지하고, 저장 대신 재계산 — 가 KV-cache 커널에도, linear attention에도, 이 논문 자신의 후속작에도 다시 나타난다.',
+ 'e-q11':'Q11 · 한계','h-q11':'무엇을 대가로 치르나',
+ 'a-q11':'변형마다 손으로 쓴 CUDA 커널이 필요하고 그것은 GPU 아키텍처를 넘어 이식되지 않는다. 발표된 형태는 단일 GPU 전용이다. 그리고 이 기법은 연산이 memory-bound인 만큼만 도움이 된다. batch가 크거나 시퀀스가 짧은 attention은 그렇지 않을 수 있다.',
+ 'p-q11':'저자들은 첫 번째 한계를 분명히 말한다. 고수준 기술을 받아 IO-aware 커널을 내보내는 컴파일러를 원한다고, 이미지 처리에서 Halide가 했던 것처럼. 그때까지는 새 attention 변형마다 전문가의 재작성이 필요하다.',
+ 'e-q12':'Q12 · 향후 과제','h-q12':'실제로 다음에 일어난 일',
+ 'a-q12':'논문은 모든 것의 IO-aware화와 multi-GPU 버전을 요청했고, 도착한 것은 FlashAttention-2(작업 분할 개선, 다시 약 2배)와 FlashAttention-3(Hopper의 비동기성과 FP8), 그리고 긴 문맥 서빙을 실용화한 paged-KV 커널들이었다.',
+ 'p-q12':'관통하는 선은 후속작마다 같은 계층의 <em>다른</em> 층위를 최적화했다는 것이다. v1은 HBM 트래픽을, v2는 warp 사이의 작업 분할을, v3은 메모리 이동과 tensor core의 겹침을 고쳤다. IO-aware 렌즈는 원래의 병목이 사라진 뒤에도 계속 병목을 찾아냈다.',
+ 'e-q13':'Q13 · 자원 공개','h-q13':'직접 돌릴 수 있는 것',
+ 'a-q13':'커널은 오픈소스이고(<a href="https://github.com/Dao-AILab/flash-attention">Dao-AILab/flash-attention</a>), 더 유용하게는 이미 PyTorch 안에 들어 있다. <code>scaled_dot_product_attention</code>이 여기로 dispatch되며, 우리 probe도 정확히 그렇게 호출한다.',
+ 'colophon':'이 페이지의 probe: NVIDIA A100-PCIE-40GB 한 장, backend별로 고정한 PyTorch SDPA, bf16, batch 1 × head 16 × d 64. paper 표시가 붙은 그림은 논문 자신의 표와 그림에서 왔다.',
+};
+const ENC=new Map();
+function redrawAll(){
+  drawHier();drawMatrix();drawCouple();osRender();drawLoop();drawTile();drawRecomp();
+  drawTradeoff();drawTrain();drawProbes();
+}
+function applyLang(){
+  for(const[k,v]of Object.entries(KO)){
+    const e=$(k);if(!e)continue;
+    if(!ENC.has(k))ENC.set(k,e.innerHTML);
+    e.innerHTML=KOQ()?v:ENC.get(k);}
+  $('lang-en').classList.toggle('on',!KOQ());
+  $('lang-ko').classList.toggle('on',KOQ());
+  redrawAll();
+}
+function setLang(l){window.__pageLang=l;try{localStorage.setItem('replica-lang',l);}catch(e){}
+  applyLang();}
+$('lang-en').onclick=()=>setLang('en');
+$('lang-ko').onclick=()=>setLang('ko');
+try{window.__pageLang=localStorage.getItem('replica-lang')||'en';}catch(e){window.__pageLang='en';}
+osState=osInit();
+applyLang();
+</script>
+
+</body>
+</html>
