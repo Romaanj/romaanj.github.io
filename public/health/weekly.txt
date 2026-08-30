@@ -1,1 +1,1 @@
-last-weekly: 2026-08-24 exit=0 review=yes
+last-weekly: 2026-08-31 exit=0 review=yes
