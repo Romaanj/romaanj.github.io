@@ -34,6 +34,10 @@ const news: { when: string; en: string; ko: string; href?: string }[] = [
   },
 ];
 
+// Keep each person's name on one line: spaces inside a name become non-breaking.
+const nb = (name: string) => name.replaceAll(' ', ' ');
+const nbList = (names: string) => names.split(', ').map(nb).join(', ');
+
 type Pub = {
   title: string;
   authors: { n: string; me?: boolean }[];
@@ -117,7 +121,8 @@ const education = [
   {
     org: 'Sungkyunkwan University',
     role: 'B.S.–M.S. Combined, Graduate School of Electrical and Computer Engineering',
-    extra: 'Intelligent & Resource-efficient Image processing & Systems design (IRIS) Lab | Prof. Jong Hwan Ko',
+    extra: 'Intelligent & Resource-efficient Image processing & Systems design (IRIS) Lab',
+    advisor: 'Jong Hwan Ko',
     meta: '2025 – present',
   },
   {
@@ -203,7 +208,7 @@ const awards = [
             <span class="lang-en">
               M.S. Student @ <a href="https://iris.skku.edu/" target="_blank" rel="noopener">IRIS Lab</a>,
               Sungkyunkwan University, advised by
-              <a href="https://iris.skku.edu/authors/admin/" target="_blank" rel="noopener">Prof. Jong Hwan Ko</a>
+              <a href="https://iris.skku.edu/authors/admin/" target="_blank" rel="noopener">{nb('Prof. Jong Hwan Ko')}</a>
             </span>
             <span class="lang-ko">
               성균관대학교 <a href="https://iris.skku.edu/" target="_blank" rel="noopener">IRIS Lab</a>
@@ -267,7 +272,7 @@ const awards = [
             <p class="pub-authors">
               {pub.authors.map((a, i) => (
                 <>
-                  {a.me ? <strong>{a.n}</strong> : a.n}{i < pub.authors.length - 1 ? ', ' : ''}
+                  {a.me ? <strong>{nb(a.n)}</strong> : nb(a.n)}{i < pub.authors.length - 1 ? ', ' : ''}
                 </>
               ))}
               {pub.collab && <span class="pub-collab"> · {pub.collab}</span>}
@@ -299,6 +304,7 @@ const awards = [
             <h3 class="cv-title">{e.org}</h3>
             <p class="cv-role">{e.role}</p>
             {e.extra && <p class="cv-role">{e.extra}</p>}
+            {e.advisor && <p class="cv-advisor">Advisor: {nbList(e.advisor)}</p>}
             <p class="cv-meta">{e.meta}</p>
           </li>
         ))}
@@ -320,7 +326,7 @@ const awards = [
               )}
             </h3>
             <p class="cv-role">{e.role}</p>
-            {e.advisor && <p class="cv-advisor">Advisor: {e.advisor}</p>}
+            {e.advisor && <p class="cv-advisor">Advisor: {nbList(e.advisor)}</p>}
             <p class="cv-meta">{e.meta}</p>
           </li>
         ))}
