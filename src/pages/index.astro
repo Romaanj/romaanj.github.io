@@ -10,6 +10,12 @@ const photoFile = ['profile.jpg', 'profile.jpeg', 'profile.png', 'profile.webp']
 
 const news: { when: string; en: string; ko: string; href?: string }[] = [
   {
+    when: 'Sep 2026',
+    en: 'Three papers accepted to the NeurIPS 2026 DiffuLM Workshop (2 orals, 1 poster), including my first-author paper QWaF as an oral!',
+    ko: 'NeurIPS 2026 DiffuLM Workshop에 논문 3편이 채택되었습니다 (Oral 2편, Poster 1편). 제가 1저자인 QWaF는 Oral 발표로 선정되었습니다!',
+    href: 'https://7amin.github.io/diffulm-neurips2026/',
+  },
+  {
     when: 'Mar 2026',
     en: 'Starting my M.S. @ IRIS Lab, SKKU!',
     ko: '성균관대학교 IRIS Lab에서 석사과정을 시작합니다!',
@@ -36,6 +42,31 @@ type Pub = {
   links: { label: string; url: string }[];
 };
 const pubs: Pub[] = [
+  {
+    title: 'QWaF: Ultra-Low-Bit KV-Cache Quantization for Block-Diffusion Language Models',
+    authors: [{ n: 'Junwon Lee', me: true }, { n: 'Jae-sun Seo' }, { n: 'Jong Hwan Ko' }],
+    venue: 'NeurIPS 2026 DiffuLM Workshop · Oral',
+    tags: ['#DiffusionLLM', '#KVCache', '#Quantization'],
+    links: [{ label: 'workshop', url: 'https://7amin.github.io/diffulm-neurips2026/' }],
+  },
+  {
+    title: 'SPIRA: Sparse Pre-RoPE Informed Routing Attention for Diffusion Language Models',
+    authors: [
+      { n: 'Chaehyeon Min' }, { n: 'Seokho Han' }, { n: 'Junwon Lee', me: true }, { n: 'Jong Hwan Ko' },
+    ],
+    venue: 'NeurIPS 2026 DiffuLM Workshop · Oral',
+    tags: ['#DiffusionLLM', '#SparseAttention'],
+    links: [{ label: 'workshop', url: 'https://7amin.github.io/diffulm-neurips2026/' }],
+  },
+  {
+    title: 'TwinQuant: Decoding-Aware Dual-Centred Quantization for Diffusion Language Models',
+    authors: [
+      { n: 'Seokho Han' }, { n: 'Chaehyeon Min' }, { n: 'Junwon Lee', me: true }, { n: 'Jong Hwan Ko' },
+    ],
+    venue: 'NeurIPS 2026 DiffuLM Workshop · Poster',
+    tags: ['#DiffusionLLM', '#Quantization'],
+    links: [{ label: 'workshop', url: 'https://7amin.github.io/diffulm-neurips2026/' }],
+  },
   {
     title: 'RUSH: Recursive and Scalable 3D Coarse to Fine Path Planning',
     authors: [
