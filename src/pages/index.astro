@@ -290,21 +290,6 @@ const awards = [
     </div>
   </section>
 
-  <section class="section-tight" id="awards">
-    <div class="container narrow">
-      <h2 class="sec-h">Awards &amp; Honors</h2>
-      <ul class="cv-list">
-        {awards.map((a) => (
-          <li>
-            <h3 class="cv-title">{a.name}</h3>
-            {a.extra && <p class="cv-role">{a.extra}</p>}
-            <p class="cv-meta">{a.meta}</p>
-          </li>
-        ))}
-      </ul>
-    </div>
-  </section>
-
   <section class="section-tight" id="education">
     <div class="container narrow">
       <h2 class="sec-h">Education</h2>
@@ -321,7 +306,7 @@ const awards = [
     </div>
   </section>
 
-  <section class="section-tight page-end" id="experience">
+  <section class="section-tight" id="experience">
     <div class="container narrow">
       <h2 class="sec-h">Experience</h2>
       <ul class="cv-list">
@@ -337,6 +322,21 @@ const awards = [
             <p class="cv-role">{e.role}</p>
             {e.advisor && <p class="cv-advisor">Advisor: {e.advisor}</p>}
             <p class="cv-meta">{e.meta}</p>
+          </li>
+        ))}
+      </ul>
+    </div>
+  </section>
+
+  <section class="section-tight page-end" id="awards">
+    <div class="container narrow">
+      <h2 class="sec-h">Awards &amp; Honors</h2>
+      <ul class="cv-list">
+        {awards.map((a) => (
+          <li>
+            <h3 class="cv-title">{a.name}</h3>
+            {a.extra && <p class="cv-role">{a.extra}</p>}
+            <p class="cv-meta">{a.meta}</p>
           </li>
         ))}
       </ul>

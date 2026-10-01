@@ -1,13 +1,14 @@
 ---
-// Home is a one-page profile: the first four items jump to its sections.
+// Home is a one-page profile: every item but Notes jumps to one of its sections.
 // Study / Paper Review / Talks / Project sit behind the single Notes hub.
 // Research tab hidden for now (owner request 2026-07-20) — restore by re-adding:
 // { href: '/research/', label: 'Research', match: ['/research/'] },
 const nav: { href: string; label: string; match?: string[] }[] = [
   { href: '/#news', label: 'News' },
   { href: '/#publications', label: 'Publications' },
-  { href: '/#awards', label: 'Awards' },
+  { href: '/#education', label: 'Education' },
   { href: '/#experience', label: 'Experience' },
+  { href: '/#awards', label: 'Awards' },
   {
     href: '/notes/',
     label: 'Notes',
