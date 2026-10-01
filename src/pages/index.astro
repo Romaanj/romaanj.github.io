@@ -43,8 +43,7 @@ type Pub = {
   authors: { n: string; me?: boolean }[];
   collab?: string; // external collaboration, shown muted after the author list
   venue: { em: string; rest: string }; // em is bolded; rest is appended as-is
-  award?: string; // e.g. 'Oral' — accent badge after the venue
-  tags: string[];
+  award?: string; // e.g. 'Oral presentation' — accent text after the venue
   links: { label: string; url: string }[];
 };
 const pubs: Pub[] = [
@@ -52,9 +51,8 @@ const pubs: Pub[] = [
     title: 'QWaF: Ultra-Low-Bit KV-Cache Quantization for Block-Diffusion Language Models',
     authors: [{ n: 'Junwon Lee', me: true }, { n: 'Jae-sun Seo' }, { n: 'Jong Hwan Ko' }],
     collab: 'in collaboration with Cornell Tech',
-    venue: { em: 'NeurIPS 2026 Workshop', rest: ' on Diffusion Language Models (DiffuLM)' },
-    award: 'Oral',
-    tags: ['#DiffusionLLM', '#KVCache', '#Quantization'],
+    venue: { em: 'NeurIPS 2026', rest: ' Workshop on Diffusion Language Models (DiffuLM)' },
+    award: 'Oral presentation',
     links: [],
   },
   {
@@ -62,9 +60,8 @@ const pubs: Pub[] = [
     authors: [
       { n: 'Chaehyeon Min' }, { n: 'Seokho Han' }, { n: 'Junwon Lee', me: true }, { n: 'Jong Hwan Ko' },
     ],
-    venue: { em: 'NeurIPS 2026 Workshop', rest: ' on Diffusion Language Models (DiffuLM)' },
-    award: 'Oral',
-    tags: ['#DiffusionLLM', '#SparseAttention'],
+    venue: { em: 'NeurIPS 2026', rest: ' Workshop on Diffusion Language Models (DiffuLM)' },
+    award: 'Oral presentation',
     links: [],
   },
   {
@@ -72,8 +69,7 @@ const pubs: Pub[] = [
     authors: [
       { n: 'Seokho Han' }, { n: 'Chaehyeon Min' }, { n: 'Junwon Lee', me: true }, { n: 'Jong Hwan Ko' },
     ],
-    venue: { em: 'NeurIPS 2026 Workshop', rest: ' on Diffusion Language Models (DiffuLM)' },
-    tags: ['#DiffusionLLM', '#Quantization'],
+    venue: { em: 'NeurIPS 2026', rest: ' Workshop on Diffusion Language Models (DiffuLM)' },
     links: [],
   },
   {
@@ -84,8 +80,7 @@ const pubs: Pub[] = [
       { n: 'Hyeonwoo Yu' },
     ],
     venue: { em: 'IEEE Robotics and Automation Letters (RA-L)', rest: ', 2026' },
-    tags: ['#Diffusion', '#PathPlanning'],
-    links: [{ label: 'paper', url: 'https://ieeexplore.ieee.org/abstract/document/11347481' }],
+    links: [{ label: 'Paper', url: 'https://ieeexplore.ieee.org/abstract/document/11347481' }],
   },
 
 ];
@@ -278,14 +273,17 @@ const awards = [
               {pub.collab && <span class="pub-collab"> · {pub.collab}</span>}
             </p>
             <p class="pub-venue">
-              <strong>{pub.venue.em}</strong>{pub.venue.rest}
-              {pub.award && <span class="tag accent pub-award">{pub.award}</span>}
+              <strong>{pub.venue.em}</strong><em>{pub.venue.rest}</em>{pub.award && (
+                <>, <span class="pub-award">{pub.award}</span></>
+              )}
             </p>
-            <p class="pub-tags">{pub.tags.join('  ')}</p>
             {pub.links.length > 0 && (
-              <p class="pub-chips">
-                {pub.links.map((l) => (
-                  <a class="pub-chip" href={l.url} target="_blank" rel="noopener">{l.label}</a>
+              <p class="pub-links">
+                {pub.links.map((l, i) => (
+                  <>
+                    {i > 0 && <span class="pub-link-sep">|</span>}
+                    <a href={l.url} target="_blank" rel="noopener">{l.label}</a>
+                  </>
                 ))}
               </p>
             )}
@@ -432,36 +430,36 @@ const awards = [
   .news-link:hover { text-decoration: underline; }
 
   .pub-list { list-style: none; margin: 0; padding: 0; }
-  .pub-list li { padding: 0.55rem 0 1.3rem; }
-  .pub-title { font-size: 1.22rem; margin-bottom: 0.3rem; }
-  .pub-authors { margin: 0 0 0.1rem; font-size: 0.94rem; color: var(--text); }
-  .pub-authors strong { font-weight: 700; }
-  .pub-collab { font-size: 0.88rem; color: var(--text-tertiary); }
-  .pub-venue { margin: 0 0 0.15rem; font-size: 0.9rem; color: var(--text-secondary); }
-  .pub-venue strong { font-weight: 600; color: var(--text); }
-  .pub-award { margin-left: 0.5em; font-weight: 700; letter-spacing: 0.02em; }
-  .pub-tags { margin: 0 0 0.55rem; font-size: 0.9rem; font-style: italic; color: var(--text-secondary); white-space: pre; }
-  .pub-chips { margin: 0; display: flex; gap: 0.5rem; flex-wrap: wrap; }
-  .pub-chip {
-    font-size: 0.8rem;
-    font-weight: 600;
-    padding: 0.3em 1.1em;
-    border-radius: 999px;
-    background: var(--surface-dark);
-    color: var(--text-on-dark);
-    transition: background 0.15s;
+  /* every line in near-black; hierarchy from weight and italics, not gray shades */
+  .pub-list li { padding: 0.5rem 0 1rem; }
+  .pub-title,
+  .cv-title {
+    font-family: var(--font-sans);
+    font-size: 1.02rem;
+    font-weight: 700;
+    line-height: 1.4;
+    letter-spacing: -0.005em;
+    margin-bottom: 0.2rem;
   }
-  .pub-chip:hover { background: var(--accent-strong); color: #fff; }
+  .pub-authors { margin: 0 0 0.1rem; font-size: 0.95rem; color: var(--text); }
+  .pub-authors strong { font-weight: 700; }
+  .pub-collab { color: var(--text-secondary); }
+  .pub-venue { margin: 0; font-size: 0.95rem; color: var(--text); }
+  .pub-venue strong { font-weight: 700; }
+  .pub-award { font-weight: 700; font-style: italic; color: var(--accent-strong); }
+  .pub-links { margin: 0.15rem 0 0; font-size: 0.93rem; }
+  .pub-links a { color: var(--accent-strong); font-weight: 500; }
+  .pub-links a:hover { text-decoration: underline; }
+  .pub-link-sep { color: var(--line-strong); margin: 0 0.4em; }
 
-  /* cv-style lists (Awards / Education / Experience) */
+  /* cv-style lists (Education / Experience / Awards) — same treatment as publications */
   .cv-list { list-style: none; margin: 0; padding: 0; }
-  .cv-list li { padding: 0.45rem 0 0.95rem; }
-  .cv-title { font-size: 1.06rem; margin-bottom: 0.2rem; }
+  .cv-list li { padding: 0.5rem 0 1rem; }
   .cv-org-link { color: inherit; }
   .cv-org-link:hover { color: var(--accent-strong); }
-  .cv-role { margin: 0 0 0.1rem; font-size: 0.93rem; color: var(--text-secondary); line-height: 1.55; }
-  .cv-advisor { margin: 0 0 0.1rem; font-size: 0.88rem; color: var(--text-tertiary); }
-  .cv-meta { margin: 0; font-size: 0.86rem; color: var(--text-tertiary); }
+  .cv-role,
+  .cv-advisor { margin: 0 0 0.1rem; font-size: 0.95rem; color: var(--text); line-height: 1.55; }
+  .cv-meta { margin: 0; font-size: 0.95rem; color: var(--text); font-style: italic; }
 
   .page-end { padding-bottom: clamp(3rem, 7vw, 5rem); }
 
