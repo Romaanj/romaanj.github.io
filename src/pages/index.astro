@@ -11,8 +11,8 @@ const photoFile = ['profile.jpg', 'profile.jpeg', 'profile.png', 'profile.webp']
 const news: { when: string; en: string; ko: string; href?: string }[] = [
   {
     when: 'Sep 2026',
-    en: 'Three papers accepted to the NeurIPS 2026 DiffuLM Workshop (2 orals, 1 poster), including my first-author paper QWaF as an oral!',
-    ko: 'NeurIPS 2026 DiffuLM Workshop에 논문 3편이 채택되었습니다 (Oral 2편, Poster 1편). 제가 1저자인 QWaF는 Oral 발표로 선정되었습니다!',
+    en: 'Three papers accepted to the NeurIPS 2026 DiffuLM Workshop (2 orals, 1 poster)!',
+    ko: 'NeurIPS 2026 DiffuLM Workshop에 논문 3편(Oral 2편, Poster 1편)이 채택되었습니다!',
     href: 'https://7amin.github.io/diffulm-neurips2026/',
   },
   {
@@ -37,7 +37,9 @@ const news: { when: string; en: string; ko: string; href?: string }[] = [
 type Pub = {
   title: string;
   authors: { n: string; me?: boolean }[];
-  venue: string;
+  collab?: string; // external collaboration, shown muted after the author list
+  venue: { em: string; rest: string }; // em is bolded; rest is appended as-is
+  award?: string; // e.g. 'Oral' — accent badge after the venue
   tags: string[];
   links: { label: string; url: string }[];
 };
@@ -45,27 +47,30 @@ const pubs: Pub[] = [
   {
     title: 'QWaF: Ultra-Low-Bit KV-Cache Quantization for Block-Diffusion Language Models',
     authors: [{ n: 'Junwon Lee', me: true }, { n: 'Jae-sun Seo' }, { n: 'Jong Hwan Ko' }],
-    venue: 'NeurIPS 2026 DiffuLM Workshop · Oral',
+    collab: 'in collaboration with Cornell Tech',
+    venue: { em: 'NeurIPS 2026 Workshop', rest: ' on Diffusion Language Models (DiffuLM)' },
+    award: 'Oral',
     tags: ['#DiffusionLLM', '#KVCache', '#Quantization'],
-    links: [{ label: 'workshop', url: 'https://7amin.github.io/diffulm-neurips2026/' }],
+    links: [],
   },
   {
     title: 'SPIRA: Sparse Pre-RoPE Informed Routing Attention for Diffusion Language Models',
     authors: [
       { n: 'Chaehyeon Min' }, { n: 'Seokho Han' }, { n: 'Junwon Lee', me: true }, { n: 'Jong Hwan Ko' },
     ],
-    venue: 'NeurIPS 2026 DiffuLM Workshop · Oral',
+    venue: { em: 'NeurIPS 2026 Workshop', rest: ' on Diffusion Language Models (DiffuLM)' },
+    award: 'Oral',
     tags: ['#DiffusionLLM', '#SparseAttention'],
-    links: [{ label: 'workshop', url: 'https://7amin.github.io/diffulm-neurips2026/' }],
+    links: [],
   },
   {
     title: 'TwinQuant: Decoding-Aware Dual-Centred Quantization for Diffusion Language Models',
     authors: [
       { n: 'Seokho Han' }, { n: 'Chaehyeon Min' }, { n: 'Junwon Lee', me: true }, { n: 'Jong Hwan Ko' },
     ],
-    venue: 'NeurIPS 2026 DiffuLM Workshop · Poster',
+    venue: { em: 'NeurIPS 2026 Workshop', rest: ' on Diffusion Language Models (DiffuLM)' },
     tags: ['#DiffusionLLM', '#Quantization'],
-    links: [{ label: 'workshop', url: 'https://7amin.github.io/diffulm-neurips2026/' }],
+    links: [],
   },
   {
     title: 'RUSH: Recursive and Scalable 3D Coarse to Fine Path Planning',
@@ -74,7 +79,7 @@ const pubs: Pub[] = [
       { n: 'Junwon Lee', me: true }, { n: 'Seongbo Ha' }, { n: 'Jong Hwan Ko' },
       { n: 'Hyeonwoo Yu' },
     ],
-    venue: 'IEEE Robotics and Automation Letters (RA-L), 2026',
+    venue: { em: 'IEEE Robotics and Automation Letters (RA-L)', rest: ', 2026' },
     tags: ['#Diffusion', '#PathPlanning'],
     links: [{ label: 'paper', url: 'https://ieeexplore.ieee.org/abstract/document/11347481' }],
   },
@@ -171,8 +176,12 @@ const explore = [
                   {a.me ? <strong>{a.n}</strong> : a.n}{i < pub.authors.length - 1 ? ', ' : ''}
                 </>
               ))}
+              {pub.collab && <span class="pub-collab"> · {pub.collab}</span>}
             </p>
-            <p class="pub-venue">{pub.venue}</p>
+            <p class="pub-venue">
+              <strong>{pub.venue.em}</strong>{pub.venue.rest}
+              {pub.award && <span class="tag accent pub-award">{pub.award}</span>}
+            </p>
             <p class="pub-tags">{pub.tags.join('  ')}</p>
             {pub.links.length > 0 && (
               <p class="pub-chips">
@@ -286,7 +295,10 @@ const explore = [
   .pub-title { font-size: 1.22rem; margin-bottom: 0.3rem; }
   .pub-authors { margin: 0 0 0.1rem; font-size: 0.94rem; color: var(--text); }
   .pub-authors strong { font-weight: 700; }
-  .pub-venue { margin: 0 0 0.15rem; font-size: 0.9rem; color: var(--text-tertiary); }
+  .pub-collab { font-size: 0.88rem; color: var(--text-tertiary); }
+  .pub-venue { margin: 0 0 0.15rem; font-size: 0.9rem; color: var(--text-secondary); }
+  .pub-venue strong { font-weight: 600; color: var(--text); }
+  .pub-award { margin-left: 0.5em; font-weight: 700; letter-spacing: 0.02em; }
   .pub-tags { margin: 0 0 0.55rem; font-size: 0.9rem; font-style: italic; color: var(--text-secondary); white-space: pre; }
   .pub-chips { margin: 0; display: flex; gap: 0.5rem; flex-wrap: wrap; }
   .pub-chip {
