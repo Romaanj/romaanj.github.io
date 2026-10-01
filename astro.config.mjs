@@ -7,6 +7,10 @@ import rehypeKatex from 'rehype-katex';
 // https://astro.build/config
 export default defineConfig({
   site: 'https://romaanj.github.io',
+  // About was folded into the one-page home (2026-10-01); keep old links working.
+  redirects: {
+    '/about': '/',
+  },
   integrations: [
     mdx(),
     // /research/ is hidden from nav for now — keep it out of the sitemap too

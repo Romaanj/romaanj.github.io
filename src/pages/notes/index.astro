@@ -1,0 +1,84 @@
+---
+import Base from '../../layouts/Base.astro';
+import LangToggle from '../../components/LangToggle.astro';
+
+// Secondary sections, kept off the one-page home and reached through the Notes nav item.
+const areas = [
+  {
+    href: '/study/',
+    label: 'Study',
+    en: 'Interactive tear-downs of model architectures, quantization pipelines, and GPU internals.',
+    ko: '모델 아키텍처, quantization 파이프라인, GPU 내부 구조를 인터랙티브하게 뜯어본 노트.',
+  },
+  {
+    href: '/reviews/',
+    label: 'Paper Review',
+    en: 'Reviews of efficient-AI papers — architecture, compression, KV cache, on-device — linked as a reading vault.',
+    ko: '아키텍처, 경량화, KV cache, on-device AI 논문 리뷰를 서로 연결해 둔 읽기 기록.',
+  },
+  {
+    href: '/talks/',
+    label: 'Talks',
+    en: 'Great AI talks and keynotes with my Korean subtitles.',
+    ko: '좋은 AI 발표와 키노트에 한국어 자막을 붙인 모음.',
+  },
+  {
+    href: '/projects/',
+    label: 'Projects',
+    en: 'Side projects built out of curiosity.',
+    ko: '호기심으로 만든 사이드 프로젝트.',
+  },
+];
+---
+
+<Base
+  title="Notes — Junwon Lee"
+  description="Junwon Lee's notes: interactive study notes, paper reviews, Korean-subtitled AI talks, and side projects."
+>
+  <section class="section hero">
+    <div class="container narrow">
+      <div class="hero-top">
+        <p class="eyebrow">Notes</p>
+        <LangToggle />
+      </div>
+      <h1>
+        <span class="lang-en">Things I make while learning</span>
+        <span class="lang-ko">공부하며 만든 것들</span>
+      </h1>
+      <p class="lede">
+        <span class="lang-en">
+          Study notes, paper reviews, subtitled talks, and side projects.
+        </span>
+        <span class="lang-ko">
+          스터디 노트, 논문 리뷰, 자막을 붙인 발표 영상, 사이드 프로젝트를 모아 두었습니다.
+        </span>
+      </p>
+      <div class="card-grid notes-grid">
+        {areas.map((a) => (
+          <a class="card" href={a.href}>
+            <h3>{a.label}</h3>
+            <p>
+              <span class="lang-en">{a.en}</span>
+              <span class="lang-ko">{a.ko}</span>
+            </p>
+          </a>
+        ))}
+      </div>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .narrow { max-width: 780px; }
+  .hero-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+  .lede { margin-top: 1.2rem; }
+  .notes-grid {
+    margin-top: 2.2rem;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  }
+</style>

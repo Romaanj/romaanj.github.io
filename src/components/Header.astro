@@ -1,15 +1,21 @@
 ---
-const nav = [
-  { href: '/about/', label: 'About me' },
-  // Research tab hidden for now (owner request 2026-07-20) — restore by re-adding:
-  // { href: '/research/', label: 'Research' },
-  { href: '/study/', label: 'Study' },
-  { href: '/reviews/', label: 'Paper Review' },
-  { href: '/talks/', label: 'Talks' },
-  { href: '/projects/', label: 'Project' },
+// Home is a one-page profile: the first four items jump to its sections.
+// Study / Paper Review / Talks / Project sit behind the single Notes hub.
+// Research tab hidden for now (owner request 2026-07-20) — restore by re-adding:
+// { href: '/research/', label: 'Research', match: ['/research/'] },
+const nav: { href: string; label: string; match?: string[] }[] = [
+  { href: '/#news', label: 'News' },
+  { href: '/#publications', label: 'Publications' },
+  { href: '/#awards', label: 'Awards' },
+  { href: '/#experience', label: 'Experience' },
+  {
+    href: '/notes/',
+    label: 'Notes',
+    match: ['/notes/', '/study/', '/reviews/', '/talks/', '/projects/', '/scaling-book/'],
+  },
 ];
 const path = Astro.url.pathname;
-const isActive = (href: string) => path === href || (href !== '/' && path.startsWith(href));
+const isActive = (item: (typeof nav)[number]) => (item.match ?? []).some((p) => path.startsWith(p));
 ---
 
 <header class="site-header">
@@ -20,7 +26,7 @@ const isActive = (href: string) => path === href || (href !== '/' && path.starts
     </button>
     <nav class="site-nav">
       {nav.map((item) => (
-        <a href={item.href} class:list={['nav-link', { active: isActive(item.href) }]}>
+        <a href={item.href} class:list={['nav-link', { active: isActive(item) }]}>
           {item.label}
         </a>
       ))}
@@ -106,4 +112,11 @@ const isActive = (href: string) => path === href || (href !== '/' && path.starts
     const open = nav?.classList.toggle('open');
     toggle.setAttribute('aria-expanded', String(!!open));
   });
+  // in-page anchors don't reload the page, so close the mobile menu ourselves
+  nav?.querySelectorAll('a').forEach((a) =>
+    a.addEventListener('click', () => {
+      nav.classList.remove('open');
+      toggle?.setAttribute('aria-expanded', 'false');
+    })
+  );
 </script>

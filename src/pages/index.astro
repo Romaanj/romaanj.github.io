@@ -86,15 +86,109 @@ const pubs: Pub[] = [
 
 ];
 
-const explore = [
-  { href: '/study/', label: 'Study' },
-  { href: '/reviews/', label: 'Paper Review' },
-  { href: '/talks/', label: 'Talks' },
-  { href: '/projects/', label: 'Project' },
+const experience = [
+  {
+    org: 'IRIS Lab, Sungkyunkwan University',
+    url: 'https://iris.skku.edu/',
+    role: 'Research Intern — Multi-Modal LLM, Video Compression, Diffusion Quantization, Path Planning',
+    advisor: 'Jong Hwan Ko',
+    meta: 'Suwon, Korea | Jun 2024 – Sep 2025',
+  },
+  {
+    org: 'DAVIAN Lab, KAIST',
+    url: 'https://davian.kaist.ac.kr/',
+    role: 'Research Intern — 3D AI research',
+    advisor: 'Jaegul Choo, Taewoong Kang',
+    meta: 'Seongnam, Korea | Dec 2023 – Mar 2024',
+  },
+  {
+    org: 'Whatcon',
+    role: 'Blockchain Engineer — smart contract & mainnet development',
+    meta: 'Seoul, Korea | Sep 2023 – Jan 2024',
+  },
+  {
+    org: 'Republic of Korea Army',
+    role: 'Sergeant, TOD Operator (military service)',
+    meta: 'Sep 2021 – Mar 2023',
+  },
+];
+
+const education = [
+  {
+    org: 'Sungkyunkwan University',
+    role: 'B.S.–M.S. Combined, Graduate School of Electrical and Computer Engineering',
+    extra: 'Intelligent & Resource-efficient Image processing & Systems design (IRIS) Lab | Prof. Jong Hwan Ko',
+    meta: '2025 – present',
+  },
+  {
+    org: 'Sungkyunkwan University',
+    role: 'B.S. in Electronic and Electrical Engineering (Magna Cum Laude)',
+    meta: '2020 – 2026',
+  },
+];
+
+const awards = [
+  {
+    name: 'First Prize - 2026 SKKU NPU Challenge',
+    extra: 'Accelerated long-context decoding of Llama-3.2-3B on Tenstorrent Eagle-N NPU',
+    meta: 'Sungkyunkwan University | Aug 2026',
+  },
+  {
+    name: 'BK21 Scholarship',
+    extra: 'Outstanding graduate students in ECE ($10k/year)',
+    meta: 'BrainKorea21 | 2026-2027',
+  },
+  {
+    name: 'Samsung Outstanding Poster Award',
+    extra: 'Top-voted project, Industry–Academia Collaboration Exchange',
+    meta: 'Samsung Electronics | Oct 2025',
+  },
+  {
+    name: 'Best Project Award — SKKU Capstone Design Project',
+    extra: 'FPGA-accelerated image super-resolution (FSRCNN) for hardware-software co-acceleration',
+    meta: 'Sungkyunkwan University | Jun 2025',
+  },
+  {
+    name: "Dean's List — College of Information and Communication Engineering",
+    meta: 'Sungkyunkwan University | Fall 2023, Fall 2024',
+  },
+  {
+    name: 'Excellence Prize — 2023 Metaverse Developer Competition',
+    extra: "Personalized NFT metaverse gallery 'BID:AM'",
+    meta: 'Ministry of Science and ICT, Republic of Korea | Oct 2023',
+  },
+  {
+    name: 'Encouragement Prize — 2023 Blockchain Challenge for Solving Difficult Problems',
+    meta: 'Ministry of Science and ICT, Republic of Korea | Aug 2023',
+  },
 ];
 ---
 
-<Base title="Junwon Lee — Efficient AI Research">
+<Base
+  title="Junwon Lee — Efficient AI Research"
+  description="Junwon Lee — B.S.–M.S. combined student at IRIS Lab, Sungkyunkwan University. Training-free acceleration of diffusion LLMs, KV-cache compression, quantization, and efficient inference systems."
+  jsonLd={{
+    '@context': 'https://schema.org',
+    '@type': 'Person',
+    name: 'Junwon Lee',
+    alternateName: '이준원',
+    url: 'https://romaanj.github.io/',
+    email: 'jwlee1218@g.skku.edu',
+    affiliation: {
+      '@type': 'Organization',
+      name: 'IRIS Lab, Sungkyunkwan University',
+      url: 'https://iris.skku.edu/',
+    },
+    alumniOf: 'Sungkyunkwan University',
+    award: awards.map((a) => a.name),
+    sameAs: [
+      'https://github.com/Romaanj',
+      'https://www.linkedin.com/in/junwon-lee-961383204/',
+      'https://iris.skku.edu/authors/m29_junwon_lee/',
+    ],
+    knowsAbout: ['diffusion LLMs', 'KV-cache compression', 'quantization', 'efficient inference'],
+  }}
+>
   <section class="section profile">
     <div class="container narrow">
       <div class="profile-top">
@@ -108,11 +202,13 @@ const explore = [
           <p class="role">
             <span class="lang-en">
               M.S. Student @ <a href="https://iris.skku.edu/" target="_blank" rel="noopener">IRIS Lab</a>,
-              Sungkyunkwan University
+              Sungkyunkwan University, advised by
+              <a href="https://iris.skku.edu/authors/admin/" target="_blank" rel="noopener">Prof. Jong Hwan Ko</a>
             </span>
             <span class="lang-ko">
               성균관대학교 <a href="https://iris.skku.edu/" target="_blank" rel="noopener">IRIS Lab</a>
-              석사과정
+              석사과정 · 지도교수
+              <a href="https://iris.skku.edu/authors/admin/" target="_blank" rel="noopener">고종환</a>
             </span>
           </p>
           <p class="interests">
@@ -133,8 +229,6 @@ const explore = [
             <a href="https://github.com/Romaanj" target="_blank" rel="noopener">GitHub</a>
             <span class="sep">·</span>
             <a href="https://www.linkedin.com/in/junwon-lee-961383204/" target="_blank" rel="noopener">LinkedIn</a>
-            <span class="sep">·</span>
-            <a href="/about/">About</a>
           </p>
           <div class="id-toggle"><LangToggle /></div>
         </div>
@@ -142,9 +236,9 @@ const explore = [
     </div>
   </section>
 
-  <section class="section-tight">
+  <section class="section-tight" id="news">
     <div class="container narrow">
-      <h2 class="news-h">News</h2>
+      <h2 class="sec-h">News</h2>
       <ul class="news-list">
         {news.map((n) => (
           <li>
@@ -163,9 +257,9 @@ const explore = [
     </div>
   </section>
 
-  <section class="section-tight">
+  <section class="section-tight" id="publications">
     <div class="container narrow">
-      <h2 class="news-h">Publications</h2>
+      <h2 class="sec-h">Publications</h2>
       <ul class="pub-list">
         {pubs.map((pub) => (
           <li>
@@ -196,17 +290,56 @@ const explore = [
     </div>
   </section>
 
-  <section class="section-tight explore-band">
+  <section class="section-tight" id="awards">
     <div class="container narrow">
-      <p class="explore-row">
-        <span class="explore-label">
-          <span class="lang-en">Explore</span>
-          <span class="lang-ko">둘러보기</span>
-        </span>
-        {explore.map((e) => (
-          <a class="arrow-link" href={e.href}>{e.label}</a>
+      <h2 class="sec-h">Awards &amp; Honors</h2>
+      <ul class="cv-list">
+        {awards.map((a) => (
+          <li>
+            <h3 class="cv-title">{a.name}</h3>
+            {a.extra && <p class="cv-role">{a.extra}</p>}
+            <p class="cv-meta">{a.meta}</p>
+          </li>
         ))}
-      </p>
+      </ul>
+    </div>
+  </section>
+
+  <section class="section-tight" id="education">
+    <div class="container narrow">
+      <h2 class="sec-h">Education</h2>
+      <ul class="cv-list">
+        {education.map((e) => (
+          <li>
+            <h3 class="cv-title">{e.org}</h3>
+            <p class="cv-role">{e.role}</p>
+            {e.extra && <p class="cv-role">{e.extra}</p>}
+            <p class="cv-meta">{e.meta}</p>
+          </li>
+        ))}
+      </ul>
+    </div>
+  </section>
+
+  <section class="section-tight page-end" id="experience">
+    <div class="container narrow">
+      <h2 class="sec-h">Experience</h2>
+      <ul class="cv-list">
+        {experience.map((e) => (
+          <li>
+            <h3 class="cv-title">
+              {e.url ? (
+                <a class="cv-org-link" href={e.url} target="_blank" rel="noopener">{e.org}</a>
+              ) : (
+                e.org
+              )}
+            </h3>
+            <p class="cv-role">{e.role}</p>
+            {e.advisor && <p class="cv-advisor">Advisor: {e.advisor}</p>}
+            <p class="cv-meta">{e.meta}</p>
+          </li>
+        ))}
+      </ul>
     </div>
   </section>
 </Base>
@@ -258,7 +391,9 @@ const explore = [
   .id-links a:hover { text-decoration: underline; }
   .sep { color: var(--line-strong); margin: 0 0.45em; }
 
-  .news-h {
+  section[id] { scroll-margin-top: 72px; } /* clear the sticky header on /#anchor jumps */
+  .section-tight { padding: clamp(1.3rem, 2.6vw, 1.9rem) 0; } /* one-page CV rhythm (global: 2–3rem) */
+  .sec-h {
     font-size: 1.45rem;
     padding-bottom: 0.5rem;
     border-bottom: 1px solid var(--line);
@@ -312,23 +447,17 @@ const explore = [
   }
   .pub-chip:hover { background: var(--accent-strong); color: #fff; }
 
-  .explore-band { padding-bottom: clamp(3rem, 7vw, 5rem); }
-  .explore-row {
-    display: flex;
-    align-items: center;
-    gap: 1.3rem;
-    flex-wrap: wrap;
-    margin: 0;
-    padding-top: 1.4rem;
-    border-top: 1px solid var(--line);
-  }
-  .explore-label {
-    font-size: 0.78rem;
-    font-weight: 600;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--text-tertiary);
-  }
+  /* cv-style lists (Awards / Education / Experience) */
+  .cv-list { list-style: none; margin: 0; padding: 0; }
+  .cv-list li { padding: 0.45rem 0 0.95rem; }
+  .cv-title { font-size: 1.06rem; margin-bottom: 0.2rem; }
+  .cv-org-link { color: inherit; }
+  .cv-org-link:hover { color: var(--accent-strong); }
+  .cv-role { margin: 0 0 0.1rem; font-size: 0.93rem; color: var(--text-secondary); line-height: 1.55; }
+  .cv-advisor { margin: 0 0 0.1rem; font-size: 0.88rem; color: var(--text-tertiary); }
+  .cv-meta { margin: 0; font-size: 0.86rem; color: var(--text-tertiary); }
+
+  .page-end { padding-bottom: clamp(3rem, 7vw, 5rem); }
 
   @media (max-width: 620px) {
     .profile-top { flex-direction: column; align-items: center; text-align: center; }
