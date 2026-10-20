@@ -23,12 +23,26 @@ src/
   components/               # Header / Footer
   styles/global.css         # design system (do not fork per-page styles into it)
   pages/                    # routes; interactive study pages are plain .astro files here
+  data/cv.json              # home page: profile, news, publications, education, experience, awards
   content/                  # markdown collections (see below)
     reviews/  study/  projects/
   content.config.ts         # collection schemas (zod)
 scripts/
   publish_review.py         # sanitized review-stub generator (see "Review pipeline")
 ```
+
+## Home page data
+
+Everything on the home page that changes over time — profile, News, Publications, Education,
+Experience, Awards & Honors — lives in `src/data/cv.json`; `src/pages/index.astro` only renders it
+(its `CV` type documents the shape). Lists are shown in file order, newest first.
+
+- Profile `role` lines may carry `[text](url)` links.
+- A publication author with `"me": true` is bolded.
+- After replacing `public/profile.jpg`, bump `profile.photoVersion` so browsers drop the cached photo.
+
+The file is normally edited from **실적관** in Romaan Village, which commits it through the GitHub
+API; editing it by hand works the same way.
 
 ## Content model
 

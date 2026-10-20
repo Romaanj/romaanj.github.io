@@ -2,233 +2,112 @@
 import fs from 'node:fs';
 import Base from '../layouts/Base.astro';
 import LangToggle from '../components/LangToggle.astro';
+import data from '../data/cv.json';
 
 // Drop a square photo at public/profile.{jpg,jpeg,png,webp} and rebuild — it replaces the monogram.
+// Bump profile.photoVersion in cv.json when the photo changes, so browsers drop the cached one.
 const photoFile = ['profile.jpg', 'profile.jpeg', 'profile.png', 'profile.webp'].find((f) =>
   fs.existsSync(new URL('../../public/' + f, import.meta.url))
 );
 
-const news: { when: string; en: string; ko: string; href?: string }[] = [
-  {
-    when: 'Sep 2026',
-    en: 'Three papers accepted to the NeurIPS 2026 DiffuLM Workshop (2 orals, 1 poster)!',
-    ko: 'NeurIPS 2026 DiffuLM Workshop에 논문 3편(Oral 2편, Poster 1편)이 채택되었습니다!',
-    href: 'https://7amin.github.io/diffulm-neurips2026/',
-  },
-  {
-    when: 'Mar 2026',
-    en: 'Starting my M.S. @ IRIS Lab, SKKU!',
-    ko: '성균관대학교 IRIS Lab에서 석사과정을 시작합니다!',
-    href: 'https://iris.skku.edu/',
-  },
-  {
-    when: 'Feb 2026',
-    en: 'Graduated from Sungkyunkwan University — B.S. in Electronic and Electrical Engineering, magna cum laude.',
-    ko: '성균관대학교 전자전기공학부 졸업 (magna cum laude).',
-  },
-  {
-    when: 'Dec 2025',
-    en: 'RUSH accepted to RA-L 2026!',
-    ko: 'RUSH가 RA-L 2026에 게재 승인되었습니다!',
-    href: 'https://ieeexplore.ieee.org/abstract/document/11347481',
-  },
-];
+// Everything on this page that changes over time lives in src/data/cv.json.
+// It is edited from 실적관 (Romaan Village), or by hand; keep its shape in step with these types.
+type Bi = { en: string; ko: string };
+type CV = {
+  profile: {
+    name: string;
+    nameKo: string;
+    email: string;
+    role: Bi; // [text](url) makes a link
+    interests: Bi;
+    links: { label: string; url: string }[];
+    photoVersion: number;
+    seo: {
+      title: string;
+      description: string;
+      affiliation: { name: string; url: string };
+      alumniOf: string;
+      knowsAbout: string[];
+      sameAs: string[]; // profiles beyond `links`
+    };
+  };
+  news: { when: string; en: string; ko: string; href?: string }[];
+  publications: {
+    title: string;
+    authors: { n: string; me?: boolean }[];
+    collab?: string; // external collaboration, shown muted after the author list
+    venue: { em: string; rest: string }; // em is bolded; rest is appended as-is
+    award?: string; // e.g. 'Oral presentation' — accent text after the venue
+    links: { label: string; url: string }[];
+  }[];
+  education: { org: string; role: string; extra?: string; advisor?: string; meta: string }[];
+  experience: { org: string; url?: string; role: string; advisor?: string; meta: string }[];
+  awards: { name: string; extra?: string; meta: string }[];
+};
+const { profile, news, publications: pubs, education, experience, awards } = data as CV;
 
 // Keep each person's name on one line: spaces inside a name become non-breaking.
-const nb = (name: string) => name.replaceAll(' ', ' ');
+const nb = (name: string) => name.replaceAll(' ', '\u00a0');
 const nbList = (names: string) => names.split(', ').map(nb).join(', ');
 
-type Pub = {
-  title: string;
-  authors: { n: string; me?: boolean }[];
-  collab?: string; // external collaboration, shown muted after the author list
-  venue: { em: string; rest: string }; // em is bolded; rest is appended as-is
-  award?: string; // e.g. 'Oral presentation' — accent text after the venue
-  links: { label: string; url: string }[];
-};
-const pubs: Pub[] = [
-  {
-    title: 'QWaF: Ultra-Low-Bit KV-Cache Quantization for Block-Diffusion Language Models',
-    authors: [{ n: 'Junwon Lee', me: true }, { n: 'Jae-sun Seo' }, { n: 'Jong Hwan Ko' }],
-    collab: 'in collaboration with Cornell Tech',
-    venue: { em: 'NeurIPS 2026', rest: ' Workshop on Diffusion Language Models (DiffuLM)' },
-    award: 'Oral presentation',
-    links: [],
-  },
-  {
-    title: 'SPIRA: Sparse Pre-RoPE Informed Routing Attention for Diffusion Language Models',
-    authors: [
-      { n: 'Chaehyeon Min' }, { n: 'Seokho Han' }, { n: 'Junwon Lee', me: true }, { n: 'Jong Hwan Ko' },
-    ],
-    venue: { em: 'NeurIPS 2026', rest: ' Workshop on Diffusion Language Models (DiffuLM)' },
-    award: 'Oral presentation',
-    links: [],
-  },
-  {
-    title: 'TwinQuant: Decoding-Aware Dual-Centred Quantization for Diffusion Language Models',
-    authors: [
-      { n: 'Seokho Han' }, { n: 'Chaehyeon Min' }, { n: 'Junwon Lee', me: true }, { n: 'Jong Hwan Ko' },
-    ],
-    venue: { em: 'NeurIPS 2026', rest: ' Workshop on Diffusion Language Models (DiffuLM)' },
-    links: [],
-  },
-  {
-    title: 'RUSH: Recursive and Scalable 3D Coarse to Fine Path Planning',
-    authors: [
-      { n: 'Hwajung Lee' }, { n: 'Daegeol Ko' }, { n: 'Jaehyuk Hur' },
-      { n: 'Junwon Lee', me: true }, { n: 'Seongbo Ha' }, { n: 'Jong Hwan Ko' },
-      { n: 'Hyeonwoo Yu' },
-    ],
-    venue: { em: 'IEEE Robotics and Automation Letters (RA-L)', rest: ', 2026' },
-    links: [{ label: 'Paper', url: 'https://ieeexplore.ieee.org/abstract/document/11347481' }],
-  },
-
-];
-
-const experience = [
-  {
-    org: 'IRIS Lab, Sungkyunkwan University',
-    url: 'https://iris.skku.edu/',
-    role: 'Research Intern — Multi-Modal LLM, Video Compression, Diffusion Quantization, Path Planning',
-    advisor: 'Jong Hwan Ko',
-    meta: 'Suwon, Korea | Jun 2024 – Sep 2025',
-  },
-  {
-    org: 'DAVIAN Lab, KAIST',
-    url: 'https://davian.kaist.ac.kr/',
-    role: 'Research Intern — 3D AI research',
-    advisor: 'Jaegul Choo, Taewoong Kang',
-    meta: 'Seongnam, Korea | Dec 2023 – Mar 2024',
-  },
-  {
-    org: 'Whatcon',
-    role: 'Blockchain Engineer — smart contract & mainnet development',
-    meta: 'Seoul, Korea | Sep 2023 – Jan 2024',
-  },
-  {
-    org: 'Republic of Korea Army',
-    role: 'Sergeant, TOD Operator (military service)',
-    meta: 'Sep 2021 – Mar 2023',
-  },
-];
-
-const education = [
-  {
-    org: 'Sungkyunkwan University',
-    role: 'B.S.–M.S. Combined, Graduate School of Electrical and Computer Engineering',
-    extra: 'Intelligent & Resource-efficient Image processing & Systems design (IRIS) Lab',
-    advisor: 'Jong Hwan Ko',
-    meta: '2025 – present',
-  },
-  {
-    org: 'Sungkyunkwan University',
-    role: 'B.S. in Electronic and Electrical Engineering (Magna Cum Laude)',
-    meta: '2020 – 2026',
-  },
-];
-
-const awards = [
-  {
-    name: 'First Prize - 2026 SKKU NPU Challenge',
-    extra: 'Accelerated long-context decoding of Llama-3.2-3B on Tenstorrent Eagle-N NPU',
-    meta: 'Sungkyunkwan University | Aug 2026',
-  },
-  {
-    name: 'BK21 Scholarship',
-    extra: 'Outstanding graduate students in ECE ($10k/year)',
-    meta: 'BrainKorea21 | 2026-2027',
-  },
-  {
-    name: 'Samsung Outstanding Poster Award',
-    extra: 'Top-voted project, Industry–Academia Collaboration Exchange',
-    meta: 'Samsung Electronics | Oct 2025',
-  },
-  {
-    name: 'Best Project Award — SKKU Capstone Design Project',
-    extra: 'FPGA-accelerated image super-resolution (FSRCNN) for hardware-software co-acceleration',
-    meta: 'Sungkyunkwan University | Jun 2025',
-  },
-  {
-    name: "Dean's List — College of Information and Communication Engineering",
-    meta: 'Sungkyunkwan University | Fall 2023, Fall 2024',
-  },
-  {
-    name: 'Excellence Prize — 2023 Metaverse Developer Competition',
-    extra: "Personalized NFT metaverse gallery 'BID:AM'",
-    meta: 'Ministry of Science and ICT, Republic of Korea | Oct 2023',
-  },
-  {
-    name: 'Encouragement Prize — 2023 Blockchain Challenge for Solving Difficult Problems',
-    meta: 'Ministry of Science and ICT, Republic of Korea | Aug 2023',
-  },
-];
+// Profile lines may carry [text](url) links. Link text is a name, so it never breaks.
+const parts = (s: string) =>
+  s
+    .split(/(\[[^\]]+\]\([^)\s]+\))/)
+    .filter(Boolean)
+    .map((part) => {
+      const m = part.match(/^\[([^\]]+)\]\(([^)\s]+)\)$/);
+      return m ? { text: nb(m[1]), url: m[2] } : { text: part };
+    });
+const initials = profile.name.split(/\s+/).map((w) => w[0]).join('');
 ---
 
 <Base
-  title="Junwon Lee — Efficient AI Research"
-  description="Junwon Lee — B.S.–M.S. combined student at IRIS Lab, Sungkyunkwan University. Training-free acceleration of diffusion LLMs, KV-cache compression, quantization, and efficient inference systems."
+  title={profile.seo.title}
+  description={profile.seo.description}
   jsonLd={{
     '@context': 'https://schema.org',
     '@type': 'Person',
-    name: 'Junwon Lee',
-    alternateName: '이준원',
+    name: profile.name,
+    alternateName: profile.nameKo,
     url: 'https://romaanj.github.io/',
-    email: 'jwlee1218@g.skku.edu',
-    affiliation: {
-      '@type': 'Organization',
-      name: 'IRIS Lab, Sungkyunkwan University',
-      url: 'https://iris.skku.edu/',
-    },
-    alumniOf: 'Sungkyunkwan University',
+    email: profile.email,
+    affiliation: { '@type': 'Organization', ...profile.seo.affiliation },
+    alumniOf: profile.seo.alumniOf,
     award: awards.map((a) => a.name),
-    sameAs: [
-      'https://github.com/Romaanj',
-      'https://www.linkedin.com/in/junwon-lee-961383204/',
-      'https://iris.skku.edu/authors/m29_junwon_lee/',
-    ],
-    knowsAbout: ['diffusion LLMs', 'KV-cache compression', 'quantization', 'efficient inference'],
+    sameAs: [...profile.links.map((l) => l.url), ...profile.seo.sameAs],
+    knowsAbout: profile.seo.knowsAbout,
   }}
 >
   <section class="section profile">
     <div class="container narrow">
       <div class="profile-top">
         {photoFile ? (
-          <img class="portrait" src={'/' + photoFile + '?v=2'} alt="Junwon Lee" width="198" height="264" />
+          <img class="portrait" src={'/' + photoFile + '?v=' + profile.photoVersion} alt={profile.name} width="198" height="264" />
         ) : (
-          <div class="portrait monogram" aria-hidden="true">JL</div>
+          <div class="portrait monogram" aria-hidden="true">{initials}</div>
         )}
         <div class="id-block">
-          <h1>Junwon Lee <span class="name-ko">이준원</span></h1>
+          <h1>{profile.name} <span class="name-ko">{profile.nameKo}</span></h1>
           <p class="role">
-            <span class="lang-en">
-              M.S. Student @ <a href="https://iris.skku.edu/" target="_blank" rel="noopener">IRIS Lab</a>,
-              Sungkyunkwan University, advised by
-              <a href="https://iris.skku.edu/authors/admin/" target="_blank" rel="noopener">{nb('Prof. Jong Hwan Ko')}</a>
-            </span>
-            <span class="lang-ko">
-              성균관대학교 <a href="https://iris.skku.edu/" target="_blank" rel="noopener">IRIS Lab</a>
-              석사과정 · 지도교수
-              <a href="https://iris.skku.edu/authors/admin/" target="_blank" rel="noopener">고종환</a>
-            </span>
+            {(['en', 'ko'] as const).map((lang) => (
+              <span class={'lang-' + lang}>
+                {parts(profile.role[lang]).map((p) => (p.url ? <a href={p.url} target="_blank" rel="noopener">{p.text}</a> : p.text))}
+              </span>
+            ))}
           </p>
           <p class="interests">
-            <span class="lang-en">
-              <strong>Research interest:</strong> efficient AI inference — diffusion LLMs,
-              KV-cache compression &amp; quantization, hybrid attention, and hardware-software
-              co-optimization.
-            </span>
-            <span class="lang-ko">
-              <strong>연구 관심사:</strong> 효율적인 AI 추론 — diffusion LLM,
-              KV-cache 압축·quantization, hybrid attention, 그리고 hardware-software
-              co-optimization.
-            </span>
+            <span class="lang-en"><strong>Research interest:</strong> {profile.interests.en}</span>
+            <span class="lang-ko"><strong>연구 관심사:</strong> {profile.interests.ko}</span>
           </p>
           <p class="id-links">
-            <a href="mailto:jwlee1218@g.skku.edu">jwlee1218@g.skku.edu</a>
-            <span class="sep">·</span>
-            <a href="https://github.com/Romaanj" target="_blank" rel="noopener">GitHub</a>
-            <span class="sep">·</span>
-            <a href="https://www.linkedin.com/in/junwon-lee-961383204/" target="_blank" rel="noopener">LinkedIn</a>
+            <a href={'mailto:' + profile.email}>{profile.email}</a>
+            {profile.links.map((l) => (
+              <>
+                <span class="sep">·</span>
+                <a href={l.url} target="_blank" rel="noopener">{l.label}</a>
+              </>
+            ))}
           </p>
           <div class="id-toggle"><LangToggle /></div>
         </div>
